@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{title}}</title>
+    <link rel="stylesheet" type="text/css" href="/static/custom.css" />
+    {{extra_head}}
+</head>
+
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="container">
+      <div class="navbar-container">
+        <!-- Logo/Brand -->
+        <div class="navbar-brand">
+          <a href="/" class="navbar-logo">MiniWeb</a>
+        </div>
+
+        <!-- Hamburger Menu Button (mobile) -->
+        <button class="navbar-toggle" id="navbarToggle" aria-label="Toggle navigation">
+          <span class="navbar-toggle-icon"></span>
+          <span class="navbar-toggle-icon"></span>
+          <span class="navbar-toggle-icon"></span>
+        </button>
+
+        <!-- Navigation Links -->
+        <div class="navbar-menu" id="navbarMenu">
+          <ul class="navbar-nav">
+            <li class="nav-item">
+              <a href="/" class="nav-link" data-page="/">Home</a>
+            </li>
+            <li class="nav-item">
+              <a href="/info" class="nav-link" data-page="/info">Info</a>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <div class="container">
+    <main>
+      {{page_content}}
+    </main>
+
+    <footer>
+      <p>Powered by MiniWeb | OpenBSD ❤️</p>
+    </footer>
+  </div>
+
+<!-- JavaScript per il menu hamburger e active link -->
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // ===== HAMBURGER MENU =====
+      const toggleButton = document.getElementById('navbarToggle');
+      const navbarMenu = document.getElementById('navbarMenu');
+      
+      if (toggleButton && navbarMenu) {
+        toggleButton.addEventListener('click', function() {
+          const isExpanded = this.getAttribute('aria-expanded') === 'true';
+          this.setAttribute('aria-expanded', !isExpanded);
+          navbarMenu.classList.toggle('show');
+          
+          // Animazione hamburger a X
+          const spans = this.querySelectorAll('.navbar-toggle-icon');
+          spans.forEach((span, index) => {
+            span.classList.toggle('active');
+          });
+        });
+        
+        // Chiudi il menu quando si clicca su un link (solo mobile)
+        const navLinks = document.querySelectorAll('.nav-link');
+        navLinks.forEach(link => {
+          link.addEventListener('click', function() {
+            if (window.innerWidth <= 768) {
+              toggleButton.setAttribute('aria-expanded', 'false');
+              navbarMenu.classList.remove('show');
+              
+              // Reset hamburger
+              const spans = toggleButton.querySelectorAll('.navbar-toggle-icon');
+              spans.forEach(span => {
+                span.classList.remove('active');
+              });
+            }
+          });
+        });
+      }
+      
+      // ===== ACTIVE LINK HIGHLIGHTING =====
+      function setActiveLink() {
+        const currentPath = window.location.pathname;
+        const navLinks = document.querySelectorAll('.nav-link');
+        
+        navLinks.forEach(link => {
+          link.classList.remove('active');
+          const linkPath = link.getAttribute('data-page') || link.getAttribute('href');
+          
+          // Match esatto del path
+          if (linkPath === currentPath) {
+            link.classList.add('active');
+          }
+        });
+      }
+      
+      // Imposta il link attivo al caricamento della pagina
+      setActiveLink();
+    });
+</script>
+  
+  {{extra_js}}
+
+</body>
+</html>

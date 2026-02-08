@@ -1,0 +1,10 @@
+ <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64">
+  <rect width="64" height="64" fill="#0b1a2b"/>
+  <text x="50%" y="50%"
+        fill="#ffffff"
+        font-family="sans-serif"
+        font-size="35"
+        font-weight="bold"
+        text-anchor="middle"
+        dominant-baseline="central">Mw</text>
+</svg>
