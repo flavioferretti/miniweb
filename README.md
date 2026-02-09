@@ -189,6 +189,326 @@ miniweb/
 }
 ```
 
+# Man Pages API - Documentazione Aggiornata (System/Packages)
+
+## Cambio Architettura
+
+Le manpage sono ora separate in **due aree**:
+- **system** - `/usr/share/man` (OpenBSD base system)
+- **packages** - `/usr/local/man` (pacchetti installati)
+
+## Nuova Struttura API
+
+### GET /api/man
+Lista entrambe le aree con le loro sezioni.
+
+**Risposta:**
+```json
+{
+  "system": {
+    "name": "OpenBSD Base System",
+    "path": "/usr/share/man",
+    "sections": [
+      {"id": "1", "name": "User Commands"},
+      {"id": "2", "name": "System Calls"},
+      {"id": "3", "name": "Library Functions"},
+      {"id": "3p", "name": "POSIX Library"},
+      {"id": "4", "name": "Device Drivers"},
+      {"id": "5", "name": "File Formats"},
+      {"id": "7", "name": "Miscellaneous"},
+      {"id": "8", "name": "System Administration"}
+    ]
+  },
+  "packages": {
+    "name": "Installed Packages",
+    "path": "/usr/local/man",
+    "sections": [
+      {"id": "1", "name": "User Commands"},
+      {"id": "3", "name": "Library Functions"},
+      {"id": "5", "name": "File Formats"},
+      {"id": "7", "name": "Miscellaneous"},
+      {"id": "8", "name": "System Administration"}
+    ]
+  }
+}
+```
+
+### GET /api/man/system/1
+Lista tutte le pagine della sezione 1 del sistema base.
+
+**Risposta:**
+```json
+{
+  "area": "system",
+  "section": "1",
+  "pages": [
+    {"name": "cat", "desc": "concatenate and print files"},
+    {"name": "ls", "desc": "list directory contents"},
+    ...
+  ]
+}
+```
+
+### GET /api/man/packages/1
+Lista tutte le pagine della sezione 1 dei pacchetti installati (es. vim, git, etc).
+
+**Risposta:**
+```json
+{
+  "area": "packages",
+  "section": "1",
+  "pages": [
+    {"name": "git", "desc": "the stupid content tracker"},
+    {"name": "vim", "desc": "Vi IMproved, a programmer's text editor"},
+    ...
+  ]
+}
+```
+
+### GET /api/man/system/1/ls
+Metadata per la pagina ls(1) del sistema.
+
+**Risposta:**
+```json
+{
+  "area": "system",
+  "section": "1",
+  "name": "ls",
+  "formats": ["html", "md", "pdf"],
+  "links": {
+    "html": "/man/system/1/ls",
+    "md": "/man/system/1/ls.md",
+    "pdf": "/man/system/1/ls.pdf"
+  }
+}
+```
+
+### GET /api/man/packages/1/git
+Metadata per git(1) da /usr/local/man.
+
+**Risposta:**
+```json
+{
+  "area": "packages",
+  "section": "1",
+  "name": "git",
+  "formats": ["html", "md", "pdf"],
+  "links": {
+    "html": "/man/packages/1/git",
+    "md": "/man/packages/1/git.md",
+    "pdf": "/man/packages/1/git.pdf"
+  }
+}
+```
+
+## Rendering Endpoints
+
+### GET /man/system/1/ls
+Renderizza ls(1) dal sistema base in HTML.
+
+### GET /man/packages/1/git
+Renderizza git(1) dai pacchetti in HTML.
+
+### GET /man/system/1/ls.md
+Renderizza ls(1) in Markdown.
+
+### GET /man/packages/1/vim.pdf
+Renderizza vim(1) in PDF.
+
+## Search API (Inalterata)
+
+### GET /api/man/search?q=network
+Cerca "network" in tutte le manpage (system + packages).
+
+**Risposta:**
+```json
+{
+  "results": [
+    {"name": "ifconfig", "section": "8", "desc": "configure network interface parameters"},
+    {"name": "netstat", "section": "1", "desc": "show network status"},
+    ...
+  ]
+}
+```
+
+## Tabella Endpoint Completa
+
+| Endpoint | Descrizione | Esempio |
+|----------|-------------|---------|
+| `GET /api/man` | Lista aree e sezioni | → JSON con system/packages |
+| `GET /api/man/{area}/{section}` | Lista pagine in area/sezione | `/api/man/system/1` |
+| `GET /api/man/{area}/{section}/{name}` | Metadata pagina | `/api/man/packages/1/git` |
+| `GET /api/man/search?q={query}` | Ricerca globale | `/api/man/search?q=vim` |
+| `GET /man/{area}/{section}/{name}` | Render HTML | `/man/system/1/ls` |
+| `GET /man/{area}/{section}/{name}.md` | Render Markdown | `/man/packages/1/git.md` |
+| `GET /man/{area}/{section}/{name}.pdf` | Render PDF | `/man/system/2/fork.pdf` |
+
+## Validazione Area
+
+Le aree valide sono **solo**:
+- `system`
+- `packages`
+
+Qualsiasi altro valore ritorna errore:
+```json
+{
+  "error": "Invalid area. Use 'system' or 'packages'"
+}
+```
+
+## Esempi d'Uso
+
+### Frontend: Lista sezioni per area
+```javascript
+fetch('/api/man')
+  .then(r => r.json())
+  .then(data => {
+    // System sections
+    data.system.sections.forEach(s => {
+      console.log(`System: ${s.id} - ${s.name}`);
+    });
+    
+    // Package sections
+    data.packages.sections.forEach(s => {
+      console.log(`Packages: ${s.id} - ${s.name}`);
+    });
+  });
+```
+
+### Frontend: Mostra comandi di sistema vs pacchetti
+```javascript
+// Comandi sistema base
+fetch('/api/man/system/1')
+  .then(r => r.json())
+  .then(data => {
+    document.getElementById('system-commands').innerHTML = 
+      data.pages.map(p => `<li>${p.name}: ${p.desc}</li>`).join('');
+  });
+
+// Comandi da pacchetti
+fetch('/api/man/packages/1')
+  .then(r => r.json())
+  .then(data => {
+    document.getElementById('package-commands').innerHTML = 
+      data.pages.map(p => `<li>${p.name}: ${p.desc}</li>`).join('');
+  });
+```
+
+### Frontend: Visualizza manpage
+```html
+<!-- Iframe per ls di sistema -->
+<iframe src="/man/system/1/ls"></iframe>
+
+<!-- Iframe per git da packages -->
+<iframe src="/man/packages/1/git"></iframe>
+```
+
+## Modifiche ai File
+
+### man.h
+Aggiunto parametro `area` a tutte le funzioni:
+```c
+char* man_get_section_pages_json(const char *area, const char *section);
+char* man_get_page_metadata_json(const char *area, const char *section, const char *name);
+char* man_render_page(const char *area, const char *section, const char *name, const char *format);
+```
+
+### man.c
+- `man_get_sections_json()` - ritorna JSON con system/packages
+- `man_get_section_pages_json()` - usa `-M /usr/share/man` o `-M /usr/local/man`
+- `man_render_page()` - usa il path corretto in base all'area
+- `man_api_handler()` - parsing URL con area
+- `man_render_handler()` - parsing URL con area
+
+## Path Resolution
+
+### System Area
+```bash
+apropos -M /usr/share/man -s 1 ^
+man -M /usr/share/man -S 1 -T html ls
+```
+
+### Packages Area
+```bash
+apropos -M /usr/local/man -s 1 ^
+man -M /usr/local/man -S 1 -T html git
+```
+
+## Testing
+
+```bash
+# Lista aree
+curl http://localhost:9001/api/man | jq
+
+# Lista comandi sistema
+curl http://localhost:9001/api/man/system/1 | jq .pages
+
+# Lista comandi packages
+curl http://localhost:9001/api/man/packages/1 | jq .pages
+
+# Metadata ls (system)
+curl http://localhost:9001/api/man/system/1/ls | jq
+
+# Metadata git (packages)
+curl http://localhost:9001/api/man/packages/1/git | jq
+
+# Render ls HTML
+curl http://localhost:9001/man/system/1/ls > ls.html
+
+# Render git PDF
+curl http://localhost:9001/man/packages/1/git.pdf > git.pdf
+
+# Search
+curl "http://localhost:9001/api/man/search?q=network" | jq
+```
+
+## Benefici della Separazione
+
+1. **Chiarezza** - L'utente sa se sta guardando una manpage di sistema o di un pacchetto
+2. **Performance** - Query più veloci (meno pagine da scansionare)
+3. **Organizzazione** - Frontend può presentare due tab/sezioni distinte
+4. **Manutenibilità** - Più facile gestire aggiornamenti di sistema vs pacchetti
+
+## Frontend UI Suggerito
+
+```
+┌─────────────────────────────────────┐
+│  Man Pages                          │
+├─────────────────────────────────────┤
+│  [System]  [Packages]  [Search]     │ ← Tabs
+├─────────────────────────────────────┤
+│                                     │
+│  System - Section 1: User Commands  │
+│  ┌─────────────────────────────┐   │
+│  │ cat  - concatenate files    │   │
+│  │ ls   - list directory       │   │
+│  │ grep - search patterns      │   │
+│  └─────────────────────────────┘   │
+│                                     │
+│  Packages - Section 1: Commands     │
+│  ┌─────────────────────────────┐   │
+│  │ git  - version control      │   │
+│  │ vim  - text editor          │   │
+│  │ tmux - terminal multiplexer │   │
+│  └─────────────────────────────┘   │
+└─────────────────────────────────────┘
+```
+
+## Backward Compatibility
+
+**Breaking Change**: Gli URL vecchi NON funzionano più!
+
+- ❌ `/man/1/ls` → 404
+- ✅ `/man/system/1/ls` → OK
+
+Se vuoi mantenere backward compatibility, potresti aggiungere un fallback in `man_render_handler` che assume `system` se l'area non è specificata.
+
+## Note Implementative
+
+- La ricerca (`/api/man/search`) cerca ancora in **entrambe** le aree
+- Le sezioni in `packages` sono un subset di quelle in `system` (no section 2, 4, 9)
+- Alcuni pacchetti potrebbero installare man in sezioni custom (es. 3pm per Perl)
+
 ## 🔒 Security Features OpenBSD
 
 ### Pledge

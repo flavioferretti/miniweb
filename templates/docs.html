@@ -1,21 +1,153 @@
 <!-- templates/docs.html -->
 
 <div class="docs-portal">
-    <div class="title">Man Pages Explorer</div>
-    <div class="subtitle">Sfoglia la documentazione di sistema di OpenBSD</div>
+    <header class="docs-header">
+        <h1 class="title">📚 Man Pages Explorer</h1>
+        <p class="subtitle">Browse OpenBSD system documentation</p>
+    </header>
 
     <div class="search-container">
-        <input type="text" id="manSearch" placeholder="Cerca un comando (es. ls, pf.conf, pledge)..." autocomplete="off">
-        <div id="searchResults" class="search-results-dropdown"></div>
+        <input
+            type="text"
+            id="manSearch"
+            placeholder="🔍 Search commands, functions, configs... (e.g., ls, fork, pf.conf)"
+            autocomplete="off"
+        >
+        <div id="searchResults" class="search-results-dropdown hidden"></div>
     </div>
 
-    <div id="sectionsContainer" class="sections-grid">
-        <p class="loading-text">Caricamento sezioni in corso...</p>
+    <div id="sectionsContainer" class="sections-container">
+        <p class="loading-text">⏳ Loading sections...</p>
     </div>
 
     <div id="pagesViewer" class="pages-viewer hidden">
-        <button onclick="closeViewer()" class="btn-back">← Torna alle sezioni</button>
-        <h2 id="currentSectionTitle"></h2>
+        <button onclick="closeViewer()" class="btn-back">← Back to sections</button>
+        <h2 id="currentSectionTitle" class="viewer-title"></h2>
         <div id="pagesList" class="pages-list"></div>
     </div>
 </div>
+
+<style>
+    .docs-portal {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 2rem 1rem;
+    }
+
+    .docs-header {
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+
+    .docs-header .title {
+        margin: 0 0 0.5rem 0;
+        font-size: 2.5rem;
+        background: linear-gradient(135deg, var(--primary), #667eea);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+
+    .docs-header .subtitle {
+        margin: 0;
+        color: var(--text-muted);
+        font-size: 1.1rem;
+    }
+
+    .search-container {
+        position: relative;
+        max-width: 600px;
+        margin: 0 auto 2rem;
+    }
+
+    #manSearch {
+        width: 100%;
+        padding: 0.875rem 1rem;
+        font-size: 1rem;
+        border: 2px solid var(--border);
+        border-radius: 8px;
+        box-sizing: border-box;
+        transition: all 0.2s;
+    }
+
+    #manSearch:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+
+    .btn-back {
+        background-color: #cccccc;
+    }
+
+    .search-results-dropdown {
+        position: absolute;
+        top: calc(100% + 0.5rem);
+        left: 0;
+        right: 0;
+        color: #222233;
+        background-color: #cccccc;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        max-height: 400px;
+        overflow-y: auto;
+        z-index: 1000;
+    }
+
+    .sections-container {
+        animation: fadeIn 0.3s ease-in;
+    }
+
+    .pages-viewer {
+        animation: slideIn 0.3s ease-out;
+    }
+
+    .viewer-title {
+        margin: 0 0 1.5rem 0;
+        font-size: 1.75rem;
+        color: var(--text);
+    }
+
+    .pages-list {
+        display: grid;
+        gap: 0.75rem;
+    }
+
+    .loading-text {
+        text-align: center;
+        color: var(--text-muted);
+        padding: 3rem;
+        font-size: 1.1rem;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+
+    @keyframes slideIn {
+        from {
+            opacity: 0;
+            transform: translateX(-20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+
+    @media (max-width: 768px) {
+        .docs-portal {
+            padding: 1rem 0.5rem;
+        }
+
+        .docs-header .title {
+            font-size: 2rem;
+        }
+
+        .sections-grid-inner {
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)) !important;
+        }
+    }
+</style>
