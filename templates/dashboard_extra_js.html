@@ -1,4 +1,4 @@
-<!-- info_extra_js.html - Complete metrics dashboard with tabs -->
+<!-- dashboard_extra_js.html - Complete metrics dashboard with tabs -->
 <script>
     /**
      * Stato globale
@@ -353,16 +353,16 @@
      * TAB: Disk Usage
      */
     function renderDiskTab(data) {
-        return `
-            <div class="stat-card" style="grid-column: 1 / -1;">
-                <div class="stat-header">
-                    <h3>Storage Devices</h3>
-                    <span class="tag">${data.disks.length} mounted</span>
-                </div>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 16px; margin-top: 16px;">
-                    ${data.disks.map(d => `
-                        <div class="progress-wrapper" style="padding: 12px; border: 1px solid var(--border); border-radius: 8px;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+    return `
+        <div class="stat-card" style="grid-column: 1 / -1;">
+            <div class="stat-header">
+                <h3>Storage Devices</h3>
+                <span class="tag">${data.disks.length} mounted</span>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; margin-top: 16px;">
+                ${data.disks.map(d => `
+                    <div class="progress-wrapper" style="padding: 12px; border: 1px solid var(--border-color); border-radius: 8px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                                 <div>
                                     <div style="font-weight: bold; font-size: 0.9rem;">${d.mount}</div>
                                     <div style="color: var(--text-muted); font-size: 0.75rem; font-family: monospace;">${d.device}</div>

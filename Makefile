@@ -9,13 +9,15 @@ BUILDDIR=  build
 SRCS=      ${SRCDIR}/main.c \
            ${SRCDIR}/routes.c \
            ${SRCDIR}/template_engine.c \
-           ${SRCDIR}/metrics.c
+           ${SRCDIR}/metrics.c \
+           ${SRCDIR}/man.c
 
 # Object files (placed in build directory)
 OBJS=      ${BUILDDIR}/main.o \
            ${BUILDDIR}/routes.o \
            ${BUILDDIR}/template_engine.o \
-           ${BUILDDIR}/metrics.o
+           ${BUILDDIR}/metrics.o \
+           ${BUILDDIR}/man.o
 
 CC?=       cc
 
@@ -33,6 +35,9 @@ CFLAGS+=   -D_DEFAULT_SOURCE -I/usr/local/include
 # LDFLAGS: Linker options
 LDFLAGS+=  -Wl,-z,relro,-z,now -fno-plt -L/usr/local/lib
 LDADD=     -Wl,-rpath,/usr/local/lib -lmicrohttpd -lssl -lcrypto -lz
+
+# LDFLAGS+= -Wl,-z,relro,-z,now -fno-plt -L/usr/local/lib
+# LDADD = -Wl,-rpath,/usr/local/lib -lmicrohttpd -lsqlite3 -lssl -lcrypto -lz
 
 PREFIX?=   /usr/local
 BINDIR?=   ${PREFIX}/bin
@@ -65,6 +70,10 @@ clean:
 ${BUILDDIR}/main.o: ${SRCDIR}/main.c
 	@mkdir -p ${BUILDDIR}
 	${CC} ${CFLAGS} -c ${SRCDIR}/main.c -o $@
+
+${BUILDDIR}/man.o: ${SRCDIR}/main.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/man.c -o $@
 
 ${BUILDDIR}/metrics.o: ${SRCDIR}/metrics.c
 	@mkdir -p ${BUILDDIR}

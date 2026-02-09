@@ -1,0 +1,94 @@
+<!-- templates/docs_extra_js.html -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const sectionsContainer = document.getElementById('sectionsContainer');
+    const pagesViewer = document.getElementById('pagesViewer');
+    const pagesList = document.getElementById('pagesList');
+    const sectionTitle = document.getElementById('currentSectionTitle');
+    const searchInput = document.getElementById('manSearch');
+    const searchResults = document.getElementById('searchResults');
+
+    let debounceTimer;
+
+    // --- CARICAMENTO INIZIALE SEZIONI ---
+    fetch('/api/man')
+        .then(res => res.json())
+        .then(data => {
+            sectionsContainer.innerHTML = data.sections.map(s => `
+                <div class="section-card" onclick="loadSection('${s.id}', '${s.name}')">
+                    <h3>Sezione ${s.id}</h3>
+                    <p>${s.name}</p>
+                </div>
+            `).join('');
+        });
+
+    // --- NAVIGAZIONE SEZIONI ---
+    window.loadSection = function(id, name) {
+        sectionsContainer.classList.add('hidden');
+        pagesViewer.classList.remove('hidden');
+        sectionTitle.innerText = name;
+        pagesList.innerHTML = '<div class="loading">Caricamento in corso...</div>';
+
+        fetch(`/api/man/${id}`)
+            .then(res => res.json())
+            .then(data => {
+                pagesList.innerHTML = data.pages.map(p => {
+                    // PULIZIA DEL NOME:
+                    // 1. Prende solo la prima parte prima della virgola (se esiste)
+                    // 2. Rimuove eventuali spazi bianchi residui
+                    const cleanName = p.name.split(',')[0].trim();
+
+                    return `
+                        <div class="page-item">
+                            <strong>${cleanName}</strong>
+                            <div class="links">
+                                <a href="/man/${id}/${cleanName}" target="_blank">HTML</a>
+                                <a href="/man/${id}/${cleanName}.md" target="_blank">MD</a>
+                                <a href="/man/${id}/${cleanName}.pdf" target="_blank">PDF</a>
+                            </div>
+                            <small>${p.desc}</small>
+                        </div>
+                    `;
+                }).join('');
+            });
+    };
+    // --- LOGICA DI RICERCA ---
+    searchInput.addEventListener('input', function() {
+        clearTimeout(debounceTimer);
+        const query = this.value.trim();
+
+        if (query.length < 2) {
+            searchResults.classList.add('hidden');
+            return;
+        }
+
+        debounceTimer = setTimeout(() => {
+            fetch(`/api/man/search?q=${encodeURIComponent(query)}`)
+                .then(r => r.json())
+                .then(data => {
+                    // Accediamo a data.results come definito in man.c
+                    if (!data.results || data.results.length === 0) {
+                        searchResults.innerHTML = '<div class="search-item">Nessun risultato</div>';
+                    } else {
+                        searchResults.innerHTML = data.results.map(r => `
+                            <div class="search-item" onclick="window.open('/man/${r.section}/${r.name}', '_blank')">
+                                <span class="tag">${r.section}</span>
+                                <strong>${r.name}</strong> - ${r.desc}
+                            </div>
+                        `).join('');
+                    }
+                    searchResults.classList.remove('hidden');
+                });
+        }, 300);
+    });
+
+    window.closeViewer = function() {
+        pagesViewer.classList.add('hidden');
+        sectionsContainer.classList.remove('hidden');
+        searchResults.classList.add('hidden');
+        searchInput.value = '';
+    };
+});
+</script>
+
+

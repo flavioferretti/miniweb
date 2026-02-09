@@ -151,10 +151,43 @@ apply_openbsd_security(void)
 		fprintf(stderr, "Warning: Cannot unveil /usr/bin directory\n");
 	}
 
-	/* Lock unveil - no more paths can be added after this */
-	if (unveil(NULL, NULL) == -1) {
-		fprintf(stderr, "Warning: Cannot lock unveil\n");
-	}
+	// Accesso ai manuali
+	if (unveil("/usr/share/man", "r") == -1) {
+        fprintf(stderr, "Warning: Cannot unveil /usr/share/man directory\n");
+    }
+    if (unveil("/usr/local/man", "r") == -1) {
+        fprintf(stderr, "Warning: Cannot unveil /usr/local/man directory\n");
+    }
+
+    // Binari necessari per popen()
+    if (unveil("/usr/bin/mandoc", "x") == -1) {
+        fprintf(stderr, "Warning: Cannot unveil /usr/bin/mandoc\n");
+    }
+
+    if (unveil("/usr/bin/man", "x") == -1) {
+        fprintf(stderr, "Warning: Cannot unveil /usr/bin/man\n");
+    }
+
+    if (unveil("/usr/bin/less", "x") == -1) {
+        fprintf(stderr, "Warning: Cannot unveil /usr/bin/less\n");
+    }
+
+    if (unveil("/usr/bin/apropos", "x") == -1) {
+        fprintf(stderr, "Warning: Cannot unveil /usr/bin/apropos\n");
+    }
+    if (unveil("/bin/sh", "x") == -1) {
+        fprintf(stderr, "Warning: Cannot unveil /bin/sh\n");
+    } // Necessario per popen
+
+    // File di configurazione di apropos
+    if (unveil("/etc/man.conf", "r") == -1) {
+        fprintf(stderr, "Warning: Cannot unveil /etc/man.conf\n");
+    }
+
+    /* Lock unveil - no more paths can be added after this */
+    if (unveil(NULL, NULL) == -1) {
+        fprintf(stderr, "Warning: Cannot lock unveil\n");
+    }
 
 	/* Minimal pledge promises for web server with metrics
 	 *

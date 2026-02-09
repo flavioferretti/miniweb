@@ -1,0 +1,21 @@
+<!-- templates/docs.html -->
+
+<div class="docs-portal">
+    <div class="title">Man Pages Explorer</div>
+    <div class="subtitle">Sfoglia la documentazione di sistema di OpenBSD</div>
+
+    <div class="search-container">
+        <input type="text" id="manSearch" placeholder="Cerca un comando (es. ls, pf.conf, pledge)..." autocomplete="off">
+        <div id="searchResults" class="search-results-dropdown"></div>
+    </div>
+
+    <div id="sectionsContainer" class="sections-grid">
+        <p class="loading-text">Caricamento sezioni in corso...</p>
+    </div>
+
+    <div id="pagesViewer" class="pages-viewer hidden">
+        <button onclick="closeViewer()" class="btn-back">← Torna alle sezioni</button>
+        <h2 id="currentSectionTitle"></h2>
+        <div id="pagesList" class="pages-list"></div>
+    </div>
+</div>

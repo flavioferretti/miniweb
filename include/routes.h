@@ -26,12 +26,12 @@ route_handler_t route_match(const char *method, const char *path);
 void init_routes(void);
 
 /* Built-in handlers */
-int index_handler(void *cls, struct MHD_Connection *connection,
+int man_handler(void *cls, struct MHD_Connection *connection,
                   const char *url, const char *method,
                   const char *version, const char *upload_data,
                   size_t *upload_data_size, void **con_cls);
 
-int info_handler(void *cls, struct MHD_Connection *connection,
+int dashboard_handler(void *cls, struct MHD_Connection *connection,
                  const char *url, const char *method,
                  const char *version, const char *upload_data,
                  size_t *upload_data_size, void **con_cls);
@@ -59,5 +59,16 @@ char* get_memory_info(void);
 char* get_network_info(void);
 char* get_disk_info(void);
 char* get_uptime_info(void);
+
+/* Man pages handlers (from man.c) */
+int man_api_handler(void *cls, struct MHD_Connection *connection,
+                    const char *url, const char *method,
+                    const char *version, const char *upload_data,
+                    size_t *upload_data_size, void **con_cls);
+
+int man_render_handler(void *cls, struct MHD_Connection *connection,
+                       const char *url, const char *method,
+                       const char *version, const char *upload_data,
+                       size_t *upload_data_size, void **con_cls);
 
 #endif

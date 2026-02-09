@@ -1,19 +1,25 @@
-<!-- info_extra_head.html -->
+<!-- dashboard_extra_head.html -->
 <style>
   /* Estensioni al custom.css fornito */
   .dashboard-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 1.5rem;
-    margin-top: 1.5rem;
+    /* Usiamo 1fr per forzare le colonne a stare dentro il box */
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+    gap: 1.25rem;
+    margin: 1.5rem 0; /* Assicura spazio sopra e sotto */
+    width: 100%;      /* Forza la larghezza totale */
+    box-sizing: border-box;
   }
 
   .stat-card {
-    background-color: var(--code-bg);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    padding: 1.25rem;
-    transition: transform 0.2s ease;
+      background-color: var(--code-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 1.25rem;
+      /* Evita che il contenuto interno spinga i bordi verso l'esterno */
+      overflow: hidden;
+      word-wrap: break-word;
+      box-sizing: border-box;
   }
 
   .stat-header {
