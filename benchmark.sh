@@ -5,7 +5,7 @@
 
 set -e
 
-SERVER_URL="http://localhost:9001/"
+SERVER_URL="http://localhost:9001/static/test.txt"
 TEST_DURATION=20
 THREADS=4
 set -A CONNECTIONS 10 25 50 100 150 200 250 300 350

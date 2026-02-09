@@ -457,9 +457,9 @@ Contributi benvenuti! Per favore:
 
 ## 📧 Contatti
 
-- Issues: [GitHub Issues]
-- Email: [tua email]
-- Website: [tuo sito]
+- Issues: [GitTea Issues](https://gitea.my.zimaserver/flavio/miniweb_libmicrohttpd/issues)
+- Email: [flavio@flvbox.org]
+- Website: [https://gitea.my.zimaserver/flavio/miniweb_libmicrohttpd/]
 
 ---
 

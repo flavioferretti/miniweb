@@ -62,3 +62,60 @@
     margin-bottom: 5px;
   }
 </style>
+
+<style>
+    .tab-navigation {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 20px;
+        border-bottom: 2px solid var(--border);
+        padding-bottom: 0;
+        flex-wrap: wrap;
+    }
+
+    .tab-button {
+        padding: 10px 20px;
+        background: transparent;
+        border: none;
+        border-bottom: 3px solid transparent;
+        cursor: pointer;
+        font-size: 0.9rem;
+        font-weight: 500;
+        color: var(--text-muted);
+        transition: all 0.2s;
+        margin-bottom: -2px;
+    }
+
+    .tab-button:hover {
+        color: var(--text);
+        background: var(--bg-secondary);
+    }
+
+    .tab-button.active {
+        color: var(--primary);
+        border-bottom-color: var(--primary);
+    }
+
+    .dashboard-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 20px;
+    }
+
+    /* Variabili CSS di supporto (se non definite altrove) */
+    :root {
+        --border-light: rgba(0, 0, 0, 0.05);
+        --success: #10b981;
+    }
+
+    @media (max-width: 768px) {
+        .tab-navigation {
+            overflow-x: auto;
+            flex-wrap: nowrap;
+        }
+
+        .tab-button {
+            white-space: nowrap;
+        }
+    }
+</style>

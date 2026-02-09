@@ -1,4 +1,4 @@
-<!-- templates/info.html -->
+<!-- templates/info.html - Updated with tab navigation -->
 
 <div class="container">
   <header class="title">
@@ -6,13 +6,37 @@
     <div class="subtitle" id="host-info">Loading metrics...</div>
   </header>
 
-  <div class="dashboard-grid" id="dashboard">
-    </div>
+  <!-- Tab Navigation -->
+  <nav class="tab-navigation">
+    <button class="tab-button active" data-tab="overview" onclick="switchTab('overview')">
+      Overview
+    </button>
+    <button class="tab-button" data-tab="cpu" onclick="switchTab('cpu')">
+      CPU
+    </button>
+    <button class="tab-button" data-tab="memory" onclick="switchTab('memory')">
+      Memory
+    </button>
+    <button class="tab-button" data-tab="disk" onclick="switchTab('disk')">
+      Disk
+    </button>
+    <button class="tab-button" data-tab="network" onclick="switchTab('network')">
+      Network
+    </button>
+    <button class="tab-button" data-tab="processes" onclick="switchTab('processes')">
+      Processes
+    </button>
+  </nav>
 
+  <!-- Dashboard Content (dynamically rendered by JS) -->
+  <div class="dashboard-grid" id="dashboard">
+    <div class="stat-card">
+      <p style="color: var(--text-muted);">Loading metrics...</p>
+    </div>
+  </div>
+
+  <!-- Footer Info -->
   <div id="postamble">
     Last Update: <span id="last-update">-</span> | Uptime: <span id="uptime">-</span>
   </div>
 </div>
-
-
-

@@ -1,5 +1,11 @@
-<!-- info_extra_js.html -->
+<!-- info_extra_js.html - Complete metrics dashboard with tabs -->
 <script>
+    /**
+     * Stato globale
+     */
+    let currentTab = 'overview';
+    let metricsData = null;
+
     /**
      * Funzione principale per recuperare i dati dall'API
      */
@@ -9,24 +15,38 @@
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
             const data = await response.json();
-            renderDashboard(data);
+            metricsData = data;
 
-            // Aggiorna info meta se presenti nel layout
-            const lastUpdateEl = document.getElementById('last-update');
-            const uptimeEl = document.getElementById('uptime');
-            const hostInfoEl = document.getElementById('host-info');
+            // Aggiorna info meta
+            updateMetaInfo(data);
 
-            if (lastUpdateEl) lastUpdateEl.innerText = data.timestamp;
-            if (uptimeEl) uptimeEl.innerText = data.uptime;
-            if (hostInfoEl) hostInfoEl.innerText = `${data.hostname} (${data.os.type} ${data.os.release})`;
+            // Renderizza il tab corrente
+            renderCurrentTab();
 
         } catch (e) {
             console.error("Errore nel caricamento metriche:", e);
+            const container = document.getElementById('dashboard');
+            if (container) {
+                container.innerHTML = '<div class="stat-card"><p style="color: var(--danger);">Error loading metrics: ' + e.message + '</p></div>';
+            }
         }
     }
 
     /**
-     * Funzione per determinare il colore della progress bar
+     * Aggiorna le informazioni nell'header
+     */
+    function updateMetaInfo(data) {
+        const lastUpdateEl = document.getElementById('last-update');
+        const uptimeEl = document.getElementById('uptime');
+        const hostInfoEl = document.getElementById('host-info');
+
+        if (lastUpdateEl) lastUpdateEl.innerText = data.timestamp;
+        if (uptimeEl) uptimeEl.innerText = data.uptime;
+        if (hostInfoEl) hostInfoEl.innerText = `${data.hostname} (${data.os.type} ${data.os.release} ${data.os.machine})`;
+    }
+
+    /**
+     * Determina il colore della progress bar
      */
     function getProgressColor(percent) {
         if (percent > 85) return 'danger';
@@ -35,77 +55,122 @@
     }
 
     /**
-     * Rendering della dashboard nel container HTML
+     * Cambia tab attivo
      */
-    function renderDashboard(data) {
+    function switchTab(tabName) {
+        currentTab = tabName;
+
+        // Aggiorna UI dei tab buttons
+        document.querySelectorAll('.tab-button').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        const activeBtn = document.querySelector(`[data-tab="${tabName}"]`);
+        if (activeBtn) activeBtn.classList.add('active');
+
+        // Renderizza contenuto del tab
+        renderCurrentTab();
+    }
+
+    /**
+     * Renderizza il tab corrente
+     */
+    function renderCurrentTab() {
+        if (!metricsData) return;
+
         const container = document.getElementById('dashboard');
         if (!container) return;
 
-        // LOGICA MEMORIA: Inactive e Cache sono considerate memoria libera/disponibile
+        switch(currentTab) {
+            case 'overview':
+                container.innerHTML = renderOverviewTab(metricsData);
+                break;
+            case 'cpu':
+                container.innerHTML = renderCpuTab(metricsData);
+                break;
+            case 'memory':
+                container.innerHTML = renderMemoryTab(metricsData);
+                break;
+            case 'disk':
+                container.innerHTML = renderDiskTab(metricsData);
+                break;
+            case 'network':
+                container.innerHTML = renderNetworkTab(metricsData);
+                break;
+            case 'processes':
+                container.innerHTML = renderProcessesTab(metricsData);
+                break;
+        }
+    }
+
+    /**
+     * TAB: Overview (riepilogo generale)
+     */
+    function renderOverviewTab(data) {
+        const cpuUsage = 100 - data.cpu.idle;
         const availableMb = data.memory.free_mb + data.memory.inactive_mb + (data.memory.cache_mb || 0);
         const usedMb = data.memory.total_mb - availableMb;
         const ramPercent = Math.round((usedMb / data.memory.total_mb) * 100);
 
-        // LOGICA CPU
-        const cpuUsage = 100 - data.cpu.idle;
-        const cpuColorClass = getProgressColor(cpuUsage);
+        const swapPercent = data.memory.swap_total_mb > 0
+            ? Math.round((data.memory.swap_used_mb / data.memory.swap_total_mb) * 100)
+            : 0;
 
-        container.innerHTML = `
+        return `
             <div class="stat-card">
                 <div class="stat-header">
-                    <h3>Processor</h3>
-                    <span class="tag ${cpuColorClass}">${cpuUsage}%</span>
+                    <h3>CPU Usage</h3>
+                    <span class="tag ${getProgressColor(cpuUsage)}">${cpuUsage}%</span>
                 </div>
                 <div class="progress-wrapper">
-                    <div class="progress-label"><span>Usage</span><span>${cpuUsage}%</span></div>
                     <div class="progress-bg">
-                        <div class="progress-fill ${cpuColorClass}" style="width: ${cpuUsage}%"></div>
+                        <div class="progress-fill ${getProgressColor(cpuUsage)}" style="width: ${cpuUsage}%"></div>
                     </div>
                 </div>
-                <div class="" style="font-size: 0.8rem">
-                    Load: ${data.load["1min"]} ${data.load["5min"]} ${data.load["15min"]}
+                <div style="font-size: 0.8rem; margin-top: 8px;">
+                    Load Average: <strong>${data.load["1min"]}</strong> / ${data.load["5min"]} / ${data.load["15min"]}
                 </div>
             </div>
 
             <div class="stat-card">
-                <div class="stat-header"><h3>Memory</h3><span class="tag">${ramPercent}%</span></div>
+                <div class="stat-header">
+                    <h3>Memory</h3>
+                    <span class="tag ${getProgressColor(ramPercent)}">${ramPercent}%</span>
+                </div>
                 <div class="progress-wrapper">
-                    <div class="progress-label"><span>Used (Real)</span><span>${usedMb} MB / ${data.memory.total_mb} MB</span></div>
+                    <div class="progress-label"><span>RAM Used</span><span>${usedMb} / ${data.memory.total_mb} MB</span></div>
                     <div class="progress-bg">
                         <div class="progress-fill ${getProgressColor(ramPercent)}" style="width: ${ramPercent}%"></div>
                     </div>
                 </div>
-                <div class="text-muted" style="font-size: 0.75rem; margin-top: 5px;">
-                    Free: ${data.memory.free_mb}MB | Inactive/Cache: ${data.memory.inactive_mb + (data.memory.cache_mb || 0)}MB
+                ${data.memory.swap_total_mb > 0 ? `
+                <div class="progress-wrapper" style="margin-top: 12px;">
+                    <div class="progress-label"><span>Swap Used</span><span>${data.memory.swap_used_mb} / ${data.memory.swap_total_mb} MB</span></div>
+                    <div class="progress-bg">
+                        <div class="progress-fill ${getProgressColor(swapPercent)}" style="width: ${swapPercent}%"></div>
+                    </div>
                 </div>
-            </div>
-
-            <div class="stat-card" style="grid-row: span 2;">
-                <div class="stat-header"><h3>Storage (${data.disks.length})</h3></div>
-                <div class="disk-list" style="max-height: 450px; overflow-y: auto; padding-right: 10px;">
-                    ${data.disks.map(d => `
-                        <div class="progress-wrapper" style="margin-bottom: 0.8rem;">
-                            <div class="progress-label" style="font-size: 0.75rem;">
-                                <span title="${d.device}"><strong>${d.mount}</strong></span>
-                                <span>${d.percent}%</span>
-                            </div>
-                            <div class="progress-bg" style="height: 6px;">
-                                <div class="progress-fill ${getProgressColor(d.percent)}" style="width: ${d.percent}%"></div>
-                            </div>
-                            <div class="text-muted" style="font-size: 0.65rem;">${d.used_mb}MB / ${d.total_mb}MB</div>
-                        </div>
-                    `).join('')}
-                </div>
+                ` : ''}
             </div>
 
             <div class="stat-card">
-                <div class="stat-header"><h3>Interfaces</h3></div>
+                <div class="stat-header"><h3>System Info</h3></div>
+                <table style="width: 100%; font-size: 0.85rem;">
+                    <tr><td style="color: var(--text-muted);">Hostname</td><td><strong>${data.hostname}</strong></td></tr>
+                    <tr><td style="color: var(--text-muted);">OS</td><td>${data.os.type} ${data.os.release}</td></tr>
+                    <tr><td style="color: var(--text-muted);">Architecture</td><td>${data.os.machine}</td></tr>
+                    <tr><td style="color: var(--text-muted);">Uptime</td><td>${data.uptime}</td></tr>
+                    <tr><td style="color: var(--text-muted);">Processes</td><td>${data.process_stats.total} (${data.process_stats.running} running)</td></tr>
+                </table>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-header"><h3>Network Interfaces</h3></div>
                 <div style="display: flex; flex-direction: column; gap: 8px;">
-                    ${data.network.map(n => `
-                        <div>
-                            <span class="tag" style="margin-left:0; font-family: monospace;">${n.name}</span>
-                            <code style="font-size: 0.8rem;">${n.ip}</code>
-                            <span class="${n.status === 'up' ? 'done' : 'todo'}" style="font-size: 0.7rem;">[${n.status.toUpperCase()}]</span>
+                    ${data.network.slice(0, 5).map(n => `
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span class="tag" style="margin: 0; font-family: monospace; min-width: 60px;">${n.name}</span>
+                            <code style="font-size: 0.8rem; flex: 1;">${n.ip}</code>
+                            <span class="${n.status === 'up' ? 'done' : 'todo'}" style="font-size: 0.7rem;">${n.status.toUpperCase()}</span>
                         </div>
                     `).join('')}
                 </div>
@@ -113,10 +178,358 @@
         `;
     }
 
-    // Avvio al caricamento del DOM
+    /**
+     * TAB: CPU Details
+     */
+    function renderCpuTab(data) {
+        const cpuUsage = 100 - data.cpu.idle;
+
+        return `
+            <div class="stat-card" style="grid-column: 1 / -1;">
+                <div class="stat-header">
+                    <h3>CPU Usage Breakdown</h3>
+                    <span class="tag ${getProgressColor(cpuUsage)}">${cpuUsage}% Total</span>
+                </div>
+
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-top: 16px;">
+                    <div class="progress-wrapper">
+                        <div class="progress-label"><span>User</span><span>${data.cpu.user}%</span></div>
+                        <div class="progress-bg">
+                            <div class="progress-fill" style="width: ${data.cpu.user}%; background: var(--primary);"></div>
+                        </div>
+                    </div>
+
+                    <div class="progress-wrapper">
+                        <div class="progress-label"><span>System</span><span>${data.cpu.system}%</span></div>
+                        <div class="progress-bg">
+                            <div class="progress-fill warning" style="width: ${data.cpu.system}%"></div>
+                        </div>
+                    </div>
+
+                    <div class="progress-wrapper">
+                        <div class="progress-label"><span>Nice</span><span>${data.cpu.nice}%</span></div>
+                        <div class="progress-bg">
+                            <div class="progress-fill" style="width: ${data.cpu.nice}%"></div>
+                        </div>
+                    </div>
+
+                    <div class="progress-wrapper">
+                        <div class="progress-label"><span>Interrupt</span><span>${data.cpu.interrupt}%</span></div>
+                        <div class="progress-bg">
+                            <div class="progress-fill danger" style="width: ${data.cpu.interrupt}%"></div>
+                        </div>
+                    </div>
+
+                    <div class="progress-wrapper">
+                        <div class="progress-label"><span>Idle</span><span>${data.cpu.idle}%</span></div>
+                        <div class="progress-bg">
+                            <div class="progress-fill" style="width: ${data.cpu.idle}%; background: var(--success);"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-header"><h3>Load Average</h3></div>
+                <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 12px;">
+                    <div>
+                        <div style="color: var(--text-muted); font-size: 0.8rem;">1 minute</div>
+                        <div style="font-size: 1.5rem; font-weight: bold;">${data.load["1min"]}</div>
+                    </div>
+                    <div>
+                        <div style="color: var(--text-muted); font-size: 0.8rem;">5 minutes</div>
+                        <div style="font-size: 1.5rem; font-weight: bold;">${data.load["5min"]}</div>
+                    </div>
+                    <div>
+                        <div style="color: var(--text-muted); font-size: 0.8rem;">15 minutes</div>
+                        <div style="font-size: 1.5rem; font-weight: bold;">${data.load["15min"]}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-header"><h3>Top CPU Processes</h3></div>
+                <table style="width: 100%; font-size: 0.8rem; margin-top: 12px;">
+                    <thead>
+                        <tr style="border-bottom: 1px solid var(--border); text-align: left;">
+                            <th style="padding: 4px;">User</th>
+                            <th style="padding: 4px;">PID</th>
+                            <th style="padding: 4px;">CPU%</th>
+                            <th style="padding: 4px;">Command</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.top_cpu_processes.map(p => `
+                            <tr style="border-bottom: 1px solid var(--border-light);">
+                                <td style="padding: 4px; font-family: monospace;">${p.user}</td>
+                                <td style="padding: 4px; font-family: monospace;">${p.pid}</td>
+                                <td style="padding: 4px;"><span class="tag ${getProgressColor(p.cpu_percent)}">${p.cpu_percent}%</span></td>
+                                <td style="padding: 4px; font-family: monospace;">${p.command}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    /**
+     * TAB: Memory Details
+     */
+    function renderMemoryTab(data) {
+        const availableMb = data.memory.free_mb + data.memory.inactive_mb + (data.memory.cache_mb || 0);
+        const usedMb = data.memory.total_mb - availableMb;
+        const ramPercent = Math.round((usedMb / data.memory.total_mb) * 100);
+        const swapPercent = data.memory.swap_total_mb > 0
+            ? Math.round((data.memory.swap_used_mb / data.memory.swap_total_mb) * 100)
+            : 0;
+
+        return `
+            <div class="stat-card">
+                <div class="stat-header">
+                    <h3>RAM Usage</h3>
+                    <span class="tag ${getProgressColor(ramPercent)}">${ramPercent}%</span>
+                </div>
+                <div class="progress-wrapper">
+                    <div class="progress-label"><span>Used</span><span>${usedMb} MB</span></div>
+                    <div class="progress-bg">
+                        <div class="progress-fill ${getProgressColor(ramPercent)}" style="width: ${ramPercent}%"></div>
+                    </div>
+                </div>
+                <div style="margin-top: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.85rem;">
+                    <div><span style="color: var(--text-muted);">Total:</span> <strong>${data.memory.total_mb} MB</strong></div>
+                    <div><span style="color: var(--text-muted);">Free:</span> <strong>${data.memory.free_mb} MB</strong></div>
+                    <div><span style="color: var(--text-muted);">Active:</span> <strong>${data.memory.active_mb} MB</strong></div>
+                    <div><span style="color: var(--text-muted);">Inactive:</span> <strong>${data.memory.inactive_mb} MB</strong></div>
+                    <div><span style="color: var(--text-muted);">Wired:</span> <strong>${data.memory.wired_mb} MB</strong></div>
+                    <div><span style="color: var(--text-muted);">Cache:</span> <strong>${data.memory.cache_mb} MB</strong></div>
+                </div>
+            </div>
+
+            ${data.memory.swap_total_mb > 0 ? `
+            <div class="stat-card">
+                <div class="stat-header">
+                    <h3>Swap Usage</h3>
+                    <span class="tag ${getProgressColor(swapPercent)}">${swapPercent}%</span>
+                </div>
+                <div class="progress-wrapper">
+                    <div class="progress-label"><span>Used</span><span>${data.memory.swap_used_mb} / ${data.memory.swap_total_mb} MB</span></div>
+                    <div class="progress-bg">
+                        <div class="progress-fill ${getProgressColor(swapPercent)}" style="width: ${swapPercent}%"></div>
+                    </div>
+                </div>
+            </div>
+            ` : ''}
+
+            <div class="stat-card" style="grid-column: 1 / -1;">
+                <div class="stat-header"><h3>Top Memory Processes</h3></div>
+                <table style="width: 100%; font-size: 0.8rem; margin-top: 12px;">
+                    <thead>
+                        <tr style="border-bottom: 1px solid var(--border); text-align: left;">
+                            <th style="padding: 4px;">User</th>
+                            <th style="padding: 4px;">PID</th>
+                            <th style="padding: 4px;">Memory%</th>
+                            <th style="padding: 4px;">Memory MB</th>
+                            <th style="padding: 4px;">Command</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.top_memory_processes.map(p => `
+                            <tr style="border-bottom: 1px solid var(--border-light);">
+                                <td style="padding: 4px; font-family: monospace;">${p.user}</td>
+                                <td style="padding: 4px; font-family: monospace;">${p.pid}</td>
+                                <td style="padding: 4px;"><span class="tag ${getProgressColor(p.memory_percent)}">${p.memory_percent}%</span></td>
+                                <td style="padding: 4px;">${p.memory_mb} MB</td>
+                                <td style="padding: 4px; font-family: monospace;">${p.command}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    /**
+     * TAB: Disk Usage
+     */
+    function renderDiskTab(data) {
+        return `
+            <div class="stat-card" style="grid-column: 1 / -1;">
+                <div class="stat-header">
+                    <h3>Storage Devices</h3>
+                    <span class="tag">${data.disks.length} mounted</span>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 16px; margin-top: 16px;">
+                    ${data.disks.map(d => `
+                        <div class="progress-wrapper" style="padding: 12px; border: 1px solid var(--border); border-radius: 8px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <div>
+                                    <div style="font-weight: bold; font-size: 0.9rem;">${d.mount}</div>
+                                    <div style="color: var(--text-muted); font-size: 0.75rem; font-family: monospace;">${d.device}</div>
+                                </div>
+                                <span class="tag ${getProgressColor(d.percent)}">${d.percent}%</span>
+                            </div>
+                            <div class="progress-bg">
+                                <div class="progress-fill ${getProgressColor(d.percent)}" style="width: ${d.percent}%"></div>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-top: 6px; font-size: 0.75rem; color: var(--text-muted);">
+                                <span>Used: ${d.used_mb} MB</span>
+                                <span>Total: ${d.total_mb} MB</span>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * TAB: Network
+     */
+    function renderNetworkTab(data) {
+        return `
+            <div class="stat-card">
+                <div class="stat-header">
+                    <h3>Network Interfaces</h3>
+                    <span class="tag">${data.network.length} interfaces</span>
+                </div>
+                <table style="width: 100%; font-size: 0.85rem; margin-top: 12px;">
+                    <thead>
+                        <tr style="border-bottom: 1px solid var(--border); text-align: left;">
+                            <th style="padding: 6px;">Interface</th>
+                            <th style="padding: 6px;">IP Address</th>
+                            <th style="padding: 6px;">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.network.map(n => `
+                            <tr style="border-bottom: 1px solid var(--border-light);">
+                                <td style="padding: 6px;"><span class="tag" style="margin: 0; font-family: monospace;">${n.name}</span></td>
+                                <td style="padding: 6px; font-family: monospace;">${n.ip}</td>
+                                <td style="padding: 6px;"><span class="${n.status === 'up' ? 'done' : 'todo'}">${n.status.toUpperCase()}</span></td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="stat-card" style="grid-column: 1 / -1;">
+                <div class="stat-header">
+                    <h3>Listening Ports</h3>
+                    <span class="tag">${data.top_ports.length} ports</span>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; margin-top: 16px;">
+                    ${data.top_ports.map(p => `
+                        <div style="padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-family: monospace; font-weight: bold; font-size: 1rem;">:${p.port}</span>
+                                <span class="tag" style="margin: 0;">${p.protocol.toUpperCase()}</span>
+                            </div>
+                            <div style="margin-top: 6px; color: var(--text-muted);">
+                                State: <span class="${p.state === 'LISTEN' ? 'done' : 'todo'}">${p.state}</span>
+                            </div>
+                            <div style="color: var(--text-muted); font-size: 0.75rem;">
+                                Connections: ${p.connections}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * TAB: Processes
+     */
+    function renderProcessesTab(data) {
+        return `
+            <div class="stat-card" style="grid-column: 1 / -1;">
+                <div class="stat-header">
+                    <h3>Process Statistics</h3>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; margin-top: 16px;">
+                    <div style="text-align: center; padding: 16px; border: 1px solid var(--border); border-radius: 8px;">
+                        <div style="font-size: 2rem; font-weight: bold; color: var(--primary);">${data.process_stats.total}</div>
+                        <div style="color: var(--text-muted); font-size: 0.85rem;">Total</div>
+                    </div>
+                    <div style="text-align: center; padding: 16px; border: 1px solid var(--border); border-radius: 8px;">
+                        <div style="font-size: 2rem; font-weight: bold; color: var(--success);">${data.process_stats.running}</div>
+                        <div style="color: var(--text-muted); font-size: 0.85rem;">Running</div>
+                    </div>
+                    <div style="text-align: center; padding: 16px; border: 1px solid var(--border); border-radius: 8px;">
+                        <div style="font-size: 2rem; font-weight: bold; color: var(--text-muted);">${data.process_stats.sleeping}</div>
+                        <div style="color: var(--text-muted); font-size: 0.85rem;">Sleeping</div>
+                    </div>
+                    <div style="text-align: center; padding: 16px; border: 1px solid var(--border); border-radius: 8px;">
+                        <div style="font-size: 2rem; font-weight: bold; color: ${data.process_stats.zombie > 0 ? 'var(--danger)' : 'var(--success)'};">${data.process_stats.zombie}</div>
+                        <div style="color: var(--text-muted); font-size: 0.85rem;">Zombie</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stat-card" style="grid-column: 1 / -1;">
+                <div class="stat-header"><h3>Top CPU Processes</h3></div>
+                <table style="width: 100%; font-size: 0.8rem; margin-top: 12px;">
+                    <thead>
+                        <tr style="border-bottom: 1px solid var(--border); text-align: left;">
+                            <th style="padding: 6px;">User</th>
+                            <th style="padding: 6px;">PID</th>
+                            <th style="padding: 6px;">CPU%</th>
+                            <th style="padding: 6px;">Command</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.top_cpu_processes.map(p => `
+                            <tr style="border-bottom: 1px solid var(--border-light);">
+                                <td style="padding: 6px; font-family: monospace;">${p.user}</td>
+                                <td style="padding: 6px; font-family: monospace;">${p.pid}</td>
+                                <td style="padding: 6px;"><span class="tag ${getProgressColor(p.cpu_percent)}">${p.cpu_percent}%</span></td>
+                                <td style="padding: 6px; font-family: monospace;">${p.command}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="stat-card" style="grid-column: 1 / -1;">
+                <div class="stat-header"><h3>Top Memory Processes</h3></div>
+                <table style="width: 100%; font-size: 0.8rem; margin-top: 12px;">
+                    <thead>
+                        <tr style="border-bottom: 1px solid var(--border); text-align: left;">
+                            <th style="padding: 6px;">User</th>
+                            <th style="padding: 6px;">PID</th>
+                            <th style="padding: 6px;">Memory%</th>
+                            <th style="padding: 6px;">Memory MB</th>
+                            <th style="padding: 6px;">Command</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.top_memory_processes.map(p => `
+                            <tr style="border-bottom: 1px solid var(--border-light);">
+                                <td style="padding: 6px; font-family: monospace;">${p.user}</td>
+                                <td style="padding: 6px; font-family: monospace;">${p.pid}</td>
+                                <td style="padding: 6px;"><span class="tag ${getProgressColor(p.memory_percent)}">${p.memory_percent}%</span></td>
+                                <td style="padding: 6px;">${p.memory_mb} MB</td>
+                                <td style="padding: 6px; font-family: monospace;">${p.command}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    /**
+     * Inizializzazione al caricamento della pagina
+     */
     document.addEventListener('DOMContentLoaded', () => {
+        // Prima renderizzazione
         updateDashboard();
-        // Refresh ogni 5 secondi
+
+        // Aggiorna ogni 5 secondi
         setInterval(updateDashboard, 5000);
     });
+
+    // Esponi switchTab globalmente per i button onclick
+    window.switchTab = switchTab;
 </script>
