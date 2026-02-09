@@ -126,9 +126,9 @@ parse_args(int argc, char *argv[])
 static void
 apply_openbsd_security(void)
 {
-    printf("Applying OpenBSD security features (simplified)...\n");
+    printf("Applying OpenBSD security features...\n");
 
-    /* Solo unveil di base */
+    /* Unveil directories for reading templates and static files */
     if (unveil("templates", "r") == -1) {
         fprintf(stderr, "Warning: Cannot unveil templates directory\n");
     }
@@ -137,20 +137,33 @@ apply_openbsd_security(void)
         fprintf(stderr, "Warning: Cannot unveil static directory\n");
     }
 
-    /* Lock unveil */
+    /* Unveil system binaries for ps and netstat (needed by metrics.c) */
+    if (unveil("/bin", "x") == -1) {
+        fprintf(stderr, "Warning: Cannot unveil /bin directory\n");
+    }
+
+    if (unveil("/usr/bin", "x") == -1) {
+        fprintf(stderr, "Warning: Cannot unveil /usr/bin directory\n");
+    }
+
+    /* Lock unveil - no more paths can be added after this */
     if (unveil(NULL, NULL) == -1) {
         fprintf(stderr, "Warning: Cannot lock unveil\n");
     }
 
-    /* Promise semplificate - solo quelle assolutamente necessarie */
-    /* stdio: I/O standard
-     * rpath: leggere file
-     * wpath: scrivere file
-     * inet: operazioni di rete
-     * proc: informazioni sui processi
-     * exec: eseguire comandi (per ps, netstat)
+    /* Minimal pledge promises for web server with metrics
+     *
+     * stdio  - Standard I/O (printf, fprintf, fopen, etc.)
+     * rpath  - Read files (templates, static files)
+     * inet   - Network operations (socket, bind, accept, send, recv)
+     * proc   - Process info (getpid, getrusage - used by metrics and libmicrohttpd)
+     * exec   - Execute commands (popen for ps/netstat in metrics.c)
+     *
+     * NOTE: We need 'exec' because metrics.c uses popen() to run ps and netstat.
+     * NOTE: 'sysctl' is NOT a valid promise - it's a syscall that's allowed by default
+     * NOTE: We removed 'wpath' and 'cpath' - this server only reads, doesn't write files
      */
-    const char *promises = "stdio rpath wpath cpath flock inet proc exec unveil sysctl";
+    const char *promises = "stdio rpath inet proc exec vminfo ps";
 
     if (pledge(promises, NULL) == -1) {
         perror("pledge");

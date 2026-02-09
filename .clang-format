@@ -1,0 +1,22 @@
+---
+Language: Cpp
+BasedOnStyle: LLVM
+
+# OpenBSD KNF Specifics
+IndentWidth: 8
+UseTab: Always
+TabWidth: 8
+ColumnLimit: 80
+
+# Bracing & Style
+BreakBeforeBraces: Linux # Similar to K&R: { on the same line of if/for/while
+AllowShortIfStatementsOnASingleLine: false
+IndentCaseLabels: false
+
+# Formatting tweaks
+AlignAfterOpenBracket: Align
+AlwaysBreakAfterReturnType: AllDefinitions # KNF type on previus line
+PointerAlignment: Right # int *ptr; instead of int* ptr;
+SpaceAfterCStyleCast: false
+SpaceBeforeParens: ControlStatements
+---

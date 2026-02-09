@@ -1,5 +1,122 @@
 <!-- info_extra_js.html -->
 <script>
-    console.log('Page loaded');
-    // JavaScript personalizzato
+    /**
+     * Funzione principale per recuperare i dati dall'API
+     */
+    async function updateDashboard() {
+        try {
+            const response = await fetch('/api/metrics');
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+            const data = await response.json();
+            renderDashboard(data);
+
+            // Aggiorna info meta se presenti nel layout
+            const lastUpdateEl = document.getElementById('last-update');
+            const uptimeEl = document.getElementById('uptime');
+            const hostInfoEl = document.getElementById('host-info');
+
+            if (lastUpdateEl) lastUpdateEl.innerText = data.timestamp;
+            if (uptimeEl) uptimeEl.innerText = data.uptime;
+            if (hostInfoEl) hostInfoEl.innerText = `${data.hostname} (${data.os.type} ${data.os.release})`;
+
+        } catch (e) {
+            console.error("Errore nel caricamento metriche:", e);
+        }
+    }
+
+    /**
+     * Funzione per determinare il colore della progress bar
+     */
+    function getProgressColor(percent) {
+        if (percent > 85) return 'danger';
+        if (percent > 65) return 'warning';
+        return '';
+    }
+
+    /**
+     * Rendering della dashboard nel container HTML
+     */
+    function renderDashboard(data) {
+        const container = document.getElementById('dashboard');
+        if (!container) return;
+
+        // LOGICA MEMORIA: Inactive e Cache sono considerate memoria libera/disponibile
+        const availableMb = data.memory.free_mb + data.memory.inactive_mb + (data.memory.cache_mb || 0);
+        const usedMb = data.memory.total_mb - availableMb;
+        const ramPercent = Math.round((usedMb / data.memory.total_mb) * 100);
+
+        // LOGICA CPU
+        const cpuUsage = 100 - data.cpu.idle;
+        const cpuColorClass = getProgressColor(cpuUsage);
+
+        container.innerHTML = `
+            <div class="stat-card">
+                <div class="stat-header">
+                    <h3>Processor</h3>
+                    <span class="tag ${cpuColorClass}">${cpuUsage}%</span>
+                </div>
+                <div class="progress-wrapper">
+                    <div class="progress-label"><span>Usage</span><span>${cpuUsage}%</span></div>
+                    <div class="progress-bg">
+                        <div class="progress-fill ${cpuColorClass}" style="width: ${cpuUsage}%"></div>
+                    </div>
+                </div>
+                <div class="" style="font-size: 0.8rem">
+                    Load: ${data.load["1min"]} ${data.load["5min"]} ${data.load["15min"]}
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-header"><h3>Memory</h3><span class="tag">${ramPercent}%</span></div>
+                <div class="progress-wrapper">
+                    <div class="progress-label"><span>Used (Real)</span><span>${usedMb} MB / ${data.memory.total_mb} MB</span></div>
+                    <div class="progress-bg">
+                        <div class="progress-fill ${getProgressColor(ramPercent)}" style="width: ${ramPercent}%"></div>
+                    </div>
+                </div>
+                <div class="text-muted" style="font-size: 0.75rem; margin-top: 5px;">
+                    Free: ${data.memory.free_mb}MB | Inactive/Cache: ${data.memory.inactive_mb + (data.memory.cache_mb || 0)}MB
+                </div>
+            </div>
+
+            <div class="stat-card" style="grid-row: span 2;">
+                <div class="stat-header"><h3>Storage (${data.disks.length})</h3></div>
+                <div class="disk-list" style="max-height: 450px; overflow-y: auto; padding-right: 10px;">
+                    ${data.disks.map(d => `
+                        <div class="progress-wrapper" style="margin-bottom: 0.8rem;">
+                            <div class="progress-label" style="font-size: 0.75rem;">
+                                <span title="${d.device}"><strong>${d.mount}</strong></span>
+                                <span>${d.percent}%</span>
+                            </div>
+                            <div class="progress-bg" style="height: 6px;">
+                                <div class="progress-fill ${getProgressColor(d.percent)}" style="width: ${d.percent}%"></div>
+                            </div>
+                            <div class="text-muted" style="font-size: 0.65rem;">${d.used_mb}MB / ${d.total_mb}MB</div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-header"><h3>Interfaces</h3></div>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    ${data.network.map(n => `
+                        <div>
+                            <span class="tag" style="margin-left:0; font-family: monospace;">${n.name}</span>
+                            <code style="font-size: 0.8rem;">${n.ip}</code>
+                            <span class="${n.status === 'up' ? 'done' : 'todo'}" style="font-size: 0.7rem;">[${n.status.toUpperCase()}]</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    }
+
+    // Avvio al caricamento del DOM
+    document.addEventListener('DOMContentLoaded', () => {
+        updateDashboard();
+        // Refresh ogni 5 secondi
+        setInterval(updateDashboard, 5000);
+    });
 </script>

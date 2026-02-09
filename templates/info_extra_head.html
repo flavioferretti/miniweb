@@ -1,4 +1,64 @@
 <!-- info_extra_head.html -->
 <style>
-    .custom-class { color: blue; }
+  /* Estensioni al custom.css fornito */
+  .dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+  }
+
+  .stat-card {
+    background-color: var(--code-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1.25rem;
+    transition: transform 0.2s ease;
+  }
+
+  .stat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 0.5rem;
+  }
+
+  .stat-header h3 { margin: 0; font-size: 1.1rem; }
+
+  /* Progress Bar System */
+  .progress-wrapper { margin-bottom: 1rem; }
+  .progress-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .progress-bg {
+    background-color: var(--border-color);
+    border-radius: 10px;
+    height: 8px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background-color: var(--link-color);
+    transition: width 0.5s ease-out;
+  }
+
+  .progress-fill.warning { background-color: #f39c12; }
+  .progress-fill.danger { background-color: #e74c3c; }
+
+  .disk-list { max-height: 300px; overflow-y: auto; padding-right: 5px; }
+  .net-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: var(--border-color);
+    font-size: 0.8rem;
+    margin-bottom: 5px;
+  }
 </style>

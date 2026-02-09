@@ -27,139 +27,166 @@
 #include <sys/statvfs.h>
 #include <uvm/uvmexp.h>
 #include <sys/sched.h>
+#include <sys/swap.h>
 #endif
 
 #define JSON_BUFFER_SIZE 8192
 #define MB (1024 * 1024)
 
-/* Absolute path to ps command for security */
-#define PS_COMMAND "/bin/ps"
-
-/* CPU statistics structure */
-typedef struct {
-    int user;
-    int nice;
-    int system;
-    int interrupt;
-    int idle;
-} CpuStats;
-
-/* Memory statistics structure */
-typedef struct {
-    long total_mb;
-    long free_mb;
-    long active_mb;
-    long inactive_mb;
-    long wired_mb;
-    long cache_mb;
-} MemoryStats;
-
-/* Load average structure */
-typedef struct {
-    double load_1min;
-    double load_5min;
-    double load_15min;
-} LoadAverage;
-
-/* Disk information structure */
-typedef struct {
-    char device[64];
-    char mount_point[256];
-    long total_mb;
-    long used_mb;
-    int percent_used;
-} DiskInfo;
-
-/* Port information structure */
-typedef struct {
-    int port;
-    char protocol[16];
-    int connection_count;
-    char state[16];
-} PortInfo;
-
-/* Network interface structure */
-typedef struct {
-    char name[32];
-    char ip_address[64];
-    char status[16];
-} NetworkInterface;
 
 /* ===== IMPLEMENTAZIONE DELLE FUNZIONI DI SISTEMA ===== */
 
-/* Get CPU statistics - versione semplificata per OpenBSD */
+/* Get CPU statistics using sysctl cp_time with delta sampling */
 int metrics_get_cpu_stats(CpuStats *stats) {
-    /* Per OpenBSD, usa un approccio semplificato */
-    FILE *fp;
-    char buffer[256];
+    #ifdef __OpenBSD__
+    int mib[2];
+    long cp_time1[CPUSTATES], cp_time2[CPUSTATES];
+    long delta[CPUSTATES];
+    size_t len = sizeof(cp_time1);
 
-    fp = popen("vmstat 1 2 | tail -1", "r");
-    if (fp == NULL) {
+    mib[0] = CTL_KERN;
+    mib[1] = KERN_CPTIME;
+
+    /* First sample */
+    if (sysctl(mib, 2, &cp_time1, &len, NULL, 0) == -1) {
         return -1;
     }
 
-    /* Leggi la linea di vmstat */
-    if (fgets(buffer, sizeof(buffer), fp) == NULL) {
-        pclose(fp);
+    /* Sleep for a short interval to get meaningful delta */
+    usleep(100000);  /* 100ms */
+
+    /* Second sample */
+    len = sizeof(cp_time2);
+    if (sysctl(mib, 2, &cp_time2, &len, NULL, 0) == -1) {
         return -1;
     }
 
-    pclose(fp);
+    /* Calculate deltas */
+    long total_delta = 0;
+    for (int i = 0; i < CPUSTATES; i++) {
+        delta[i] = cp_time2[i] - cp_time1[i];
+        total_delta += delta[i];
+    }
 
-    /* Parsing semplificato - vmstat su OpenBSD mostra:
-     *      procs    memory       page                    disks    traps          cpu
-     *      r b w    avm     fre  flt  re  pi  po  fr  sr wd0 fd0  in   sy   cs us sy id */
+    if (total_delta == 0) {
+        /* No time elapsed, return idle */
+        stats->user = 0;
+        stats->nice = 0;
+        stats->system = 0;
+        stats->interrupt = 0;
+        stats->idle = 100;
+        return 0;
+    }
 
-    /* Per semplicità, restituisci valori predefiniti */
+    /* Convert deltas to percentages */
+    stats->user = (int)((delta[CP_USER] * 100) / total_delta);
+    stats->nice = (int)((delta[CP_NICE] * 100) / total_delta);
+    stats->system = (int)((delta[CP_SYS] * 100) / total_delta);
+    stats->interrupt = (int)((delta[CP_INTR] * 100) / total_delta);
+    stats->idle = (int)((delta[CP_IDLE] * 100) / total_delta);
+
+    return 0;
+    #else
+    /* Fallback for non-OpenBSD systems */
     stats->user = 10;
     stats->nice = 0;
     stats->system = 5;
     stats->interrupt = 1;
     stats->idle = 84;
-
     return 0;
+    #endif
 }
 
-/* Get memory statistics - versione semplificata */
+/* Get memory and swap statistics using sysctl */
 int metrics_get_memory_stats(MemoryStats *stats) {
-    /* Approccio semplificato usando sysctl */
+    #ifdef __OpenBSD__
     int mib[2];
-    unsigned long total, free, active, inactive, wired;
     size_t len;
 
-    /* Memoria totale */
+    /* Get physical memory total */
+    unsigned long physmem;
     mib[0] = CTL_HW;
-    mib[1] = HW_PHYSMEM;
-    len = sizeof(total);
-    if (sysctl(mib, 2, &total, &len, NULL, 0) == -1) {
-        total = 0;
+    mib[1] = HW_PHYSMEM64;
+    len = sizeof(physmem);
+    if (sysctl(mib, 2, &physmem, &len, NULL, 0) == -1) {
+        return -1;
     }
 
-    /* Memoria libera - approccio semplificato */
+    /* Get UVM statistics for detailed memory info */
+    struct uvmexp uvm;
     mib[0] = CTL_VM;
     mib[1] = VM_UVMEXP;
-    struct uvmexp uvm;
     len = sizeof(uvm);
-    if (sysctl(mib, 2, &uvm, &len, NULL, 0) != -1) {
-        free = uvm.free * uvm.pagesize;
-        active = uvm.active * uvm.pagesize;
-        inactive = uvm.inactive * uvm.pagesize;
-        wired = uvm.wired * uvm.pagesize;
-    } else {
-        free = total * 0.3;  /* 30% libero come stima */
-        active = total * 0.4;
-        inactive = total * 0.2;
-        wired = total * 0.1;
+    if (sysctl(mib, 2, &uvm, &len, NULL, 0) == -1) {
+        return -1;
     }
 
-    stats->total_mb = total / MB;
-    stats->free_mb = free / MB;
-    stats->active_mb = active / MB;
-    stats->inactive_mb = inactive / MB;
-    stats->wired_mb = wired / MB;
-    stats->cache_mb = 0;
+    /* Calculate memory values in bytes */
+    unsigned long pagesize = uvm.pagesize;
+    unsigned long free_mem = uvm.free * pagesize;
+    unsigned long active_mem = uvm.active * pagesize;
+    unsigned long inactive_mem = uvm.inactive * pagesize;
+    unsigned long wired_mem = uvm.wired * pagesize;
+
+    /* Convert to MB */
+    stats->total_mb = physmem / MB;
+    stats->free_mb = free_mem / MB;
+    stats->active_mb = active_mem / MB;
+    stats->inactive_mb = inactive_mem / MB;
+    stats->wired_mb = wired_mem / MB;
+    stats->cache_mb = 0;  /* OpenBSD doesn't track cache separately like Linux */
+
+    /* Get swap information */
+    struct swapent *swdev;
+    int nswap, rnswap;
+
+    nswap = swapctl(SWAP_NSWAP, NULL, 0);
+    if (nswap == 0) {
+        /* No swap configured */
+        stats->swap_total_mb = 0;
+        stats->swap_used_mb = 0;
+    } else {
+        swdev = calloc(nswap, sizeof(*swdev));
+        if (swdev == NULL) {
+            stats->swap_total_mb = 0;
+            stats->swap_used_mb = 0;
+        } else {
+            rnswap = swapctl(SWAP_STATS, swdev, nswap);
+            if (rnswap == -1) {
+                stats->swap_total_mb = 0;
+                stats->swap_used_mb = 0;
+            } else {
+                unsigned long swap_total = 0;
+                unsigned long swap_used = 0;
+
+                for (int i = 0; i < nswap; i++) {
+                    if (swdev[i].se_flags & SWF_ENABLE) {
+                        swap_total += swdev[i].se_nblks;
+                        swap_used += swdev[i].se_inuse;
+                    }
+                }
+
+                /* Convert from 512-byte blocks to MB */
+                stats->swap_total_mb = (swap_total * 512) / MB;
+                stats->swap_used_mb = (swap_used * 512) / MB;
+            }
+            free(swdev);
+        }
+    }
 
     return 0;
+    #else
+    /* Fallback for non-OpenBSD */
+    stats->total_mb = 8192;
+    stats->free_mb = 2048;
+    stats->active_mb = 4096;
+    stats->inactive_mb = 1024;
+    stats->wired_mb = 1024;
+    stats->cache_mb = 0;
+    stats->swap_total_mb = 0;
+    stats->swap_used_mb = 0;
+    return 0;
+    #endif
 }
 
 /* Get load average */
@@ -192,25 +219,15 @@ int metrics_get_os_info(char *type, char *release, char *machine, size_t size) {
     return 0;
 }
 
-/* Get system uptime */
+/* Get system uptime using sysctl KERN_BOOTTIME */
 int metrics_get_uptime(char *uptime_str, size_t size) {
+    #ifdef __OpenBSD__
     struct timeval boottime;
     time_t now;
     size_t len = sizeof(boottime);
     int mib[2] = {CTL_KERN, KERN_BOOTTIME};
 
     if (sysctl(mib, 2, &boottime, &len, NULL, 0) == -1) {
-        /* Fallback: usa uptime command */
-        FILE *fp = popen("uptime", "r");
-        if (fp) {
-            if (fgets(uptime_str, size, fp) != NULL) {
-                pclose(fp);
-                /* Rimuovi newline */
-                uptime_str[strcspn(uptime_str, "\n")] = 0;
-                return 0;
-            }
-            pclose(fp);
-        }
         strlcpy(uptime_str, "unknown", size);
         return -1;
     }
@@ -232,6 +249,10 @@ int metrics_get_uptime(char *uptime_str, size_t size) {
     }
 
     return 0;
+    #else
+    strlcpy(uptime_str, "unknown", size);
+    return -1;
+    #endif
 }
 
 /* Get hostname */
@@ -239,119 +260,163 @@ int metrics_get_hostname(char *hostname, size_t size) {
     return gethostname(hostname, size);
 }
 
-/* Get disk usage information */
+/* Get disk usage information using statfs */
 int metrics_get_disk_usage(DiskInfo *disks, int max_disks) {
+    #ifdef __OpenBSD__
+    struct statfs *mntbuf;
+    int mntsize, i, count = 0;
+
+    /* Get list of mounted filesystems */
+    mntsize = getmntinfo(&mntbuf, MNT_NOWAIT);
+    if (mntsize == 0) {
+        return 0;
+    }
+
+    for (i = 0; i < mntsize && count < max_disks; i++) {
+        struct statfs *fs = &mntbuf[i];
+
+        /* Skip special filesystems */
+        if (strcmp(fs->f_fstypename, "tmpfs") == 0 ||
+            strcmp(fs->f_fstypename, "procfs") == 0 ||
+            strcmp(fs->f_fstypename, "devfs") == 0 ||
+            strcmp(fs->f_fstypename, "fdescfs") == 0) {
+            continue;
+            }
+
+            /* Skip if no blocks */
+            if (fs->f_blocks == 0) {
+                continue;
+            }
+
+            DiskInfo *disk = &disks[count];
+
+            /* Copy device name and mount point */
+            strlcpy(disk->device, fs->f_mntfromname, sizeof(disk->device));
+            strlcpy(disk->mount_point, fs->f_mntonname, sizeof(disk->mount_point));
+
+            /* Calculate sizes in MB */
+            unsigned long total = fs->f_blocks * fs->f_bsize;
+            unsigned long available = fs->f_bavail * fs->f_bsize;
+            unsigned long used = total - available;
+
+            disk->total_mb = total / MB;
+            disk->used_mb = used / MB;
+
+            /* Calculate percentage */
+            if (disk->total_mb > 0) {
+                disk->percent_used = (int)((disk->used_mb * 100) / disk->total_mb);
+            } else {
+                disk->percent_used = 0;
+            }
+
+            count++;
+    }
+
+    return count;
+    #else
+    return 0;
+    #endif
+}
+
+/* Get top listening ports using netstat command */
+int metrics_get_top_ports(PortInfo *ports, int max_ports) {
     FILE *fp;
     char buffer[512];
-    int disk_count = 0;
+    int port_count = 0;
 
-    /* Usa df command per OpenBSD */
-    fp = popen("df -k 2>/dev/null", "r");
+    /* Use netstat to get listening ports - OpenBSD format */
+    fp = popen("netstat -an -f inet -p tcp 2>/dev/null | grep LISTEN", "r");
     if (fp == NULL) {
         return 0;
     }
 
-    /* Salta la prima riga (intestazione) */
-    if (fgets(buffer, sizeof(buffer), fp) == NULL) {
-        pclose(fp);
-        return 0;
-    }
+    while (fgets(buffer, sizeof(buffer), fp) != NULL && port_count < max_ports) {
+        char proto[16], recv_q[16], send_q[16];
+        char local_addr[128], foreign_addr[128], state[32];
 
-    while (fgets(buffer, sizeof(buffer), fp) != NULL && disk_count < max_disks) {
-        char filesystem[256], mounted_on[256];
-        long total_kb, used_kb, available_kb;
-        int percent;
+        /* Parse OpenBSD netstat output:
+         * tcp   0   0  127.0.0.1.9001        *.*                    LISTEN
+         * tcp   0   0  *.22                  *.*                    LISTEN
+         */
+        if (sscanf(buffer, "%15s %15s %15s %127s %127s %31s",
+            proto, recv_q, send_q, local_addr, foreign_addr, state) == 6) {
 
-        /* Parsing della linea df */
-        if (sscanf(buffer, "%255s %ld %ld %ld %d%% %255s",
-            filesystem, &total_kb, &used_kb, &available_kb, &percent, mounted_on) == 6) {
+            /* Extract port from local address */
+            char *port_str = strrchr(local_addr, '.');
+        if (port_str != NULL) {
+            int port_num = atoi(port_str + 1);
 
-            /* Salta filesystem speciali */
-            if (strstr(filesystem, "tmpfs") != NULL ||
-                strstr(filesystem, "procfs") != NULL ||
-                strstr(filesystem, "swap") != NULL) {
-                continue;
+            if (port_num > 0 && port_num <= 65535) {
+                /* Check if we already have this port */
+                int duplicate = 0;
+                for (int i = 0; i < port_count; i++) {
+                    if (ports[i].port == port_num) {
+                        duplicate = 1;
+                        break;
+                    }
                 }
 
-                DiskInfo *disk = &disks[disk_count];
-            strlcpy(disk->device, filesystem, sizeof(disk->device));
-            strlcpy(disk->mount_point, mounted_on, sizeof(disk->mount_point));
-            disk->total_mb = total_kb / 1024;
-            disk->used_mb = used_kb / 1024;
-            disk->percent_used = percent;
+                if (!duplicate) {
+                    PortInfo *port_info = &ports[port_count];
+                    port_info->port = port_num;
+                    strlcpy(port_info->protocol, proto, sizeof(port_info->protocol));
+                    strlcpy(port_info->state, state, sizeof(port_info->state));
+                    port_info->connection_count = 1;  /* Simplified */
 
-            disk_count++;
+                    port_count++;
+                }
+            }
+        }
             }
     }
 
     pclose(fp);
-    return disk_count;
-}
 
-/* Get top network ports (simplified version) */
-int metrics_get_top_ports(PortInfo *ports, int max_ports) {
-    /* Versione semplificata per OpenBSD */
-    int count = 0;
+    /* Also check UDP if we have space */
+    if (port_count < max_ports) {
+        fp = popen("netstat -an -f inet -p udp 2>/dev/null | grep -E '\\*\\.[0-9]+'", "r");
+        if (fp != NULL) {
+            while (fgets(buffer, sizeof(buffer), fp) != NULL && port_count < max_ports) {
+                char proto[16], recv_q[16], send_q[16];
+                char local_addr[128], foreign_addr[128];
 
-    /* Prova a leggere da netstat */
-    FILE *fp = popen("netstat -an 2>/dev/null | grep 'LISTEN' | head -20", "r");
-    if (fp) {
-        char buffer[256];
-        while (fgets(buffer, sizeof(buffer), fp) != NULL && count < max_ports) {
-            // char proto[16], local_addr[64], state[16];
-            char proto[16], state[16];
-            int port;
+                if (sscanf(buffer, "%15s %15s %15s %127s %127s",
+                    proto, recv_q, send_q, local_addr, foreign_addr) >= 4) {
 
-            /* Esempio di parsing: tcp  0 0 *.80 *.* LISTEN */
-            if (sscanf(buffer, "%15s %*s %*s %*[^.].%d %*s %15s",
-                proto, &port, state) >= 2) {
+                    char *port_str = strrchr(local_addr, '.');
+                if (port_str != NULL) {
+                    int port_num = atoi(port_str + 1);
 
-                /* Salta se non è una porta valida */
-                if (port <= 0 || port > 65535) continue;
+                    if (port_num > 0 && port_num <= 65535) {
+                        int duplicate = 0;
+                        for (int i = 0; i < port_count; i++) {
+                            if (ports[i].port == port_num) {
+                                duplicate = 1;
+                                break;
+                            }
+                        }
 
-                PortInfo *p = &ports[count];
-                p->port = port;
-            strlcpy(p->protocol, proto, sizeof(p->protocol));
-            strlcpy(p->state, state, sizeof(p->state));
-            p->connection_count = 1; /* Approssimazione */
+                        if (!duplicate) {
+                            PortInfo *port_info = &ports[port_count];
+                            port_info->port = port_num;
+                            strlcpy(port_info->protocol, "udp", sizeof(port_info->protocol));
+                            strlcpy(port_info->state, "active", sizeof(port_info->state));
+                            port_info->connection_count = 1;
 
-            count++;
+                            port_count++;
+                        }
+                    }
                 }
-        }
-        pclose(fp);
-    }
-
-    /* Se non abbiamo trovato porte, ritorna alcune comuni */
-    if (count == 0) {
-        if (count < max_ports) {
-            strlcpy(ports[count].protocol, "tcp", sizeof(ports[count].protocol));
-            ports[count].port = 22;
-            ports[count].connection_count = 1;
-            strlcpy(ports[count].state, "LISTEN", sizeof(ports[count].state));
-            count++;
-        }
-
-        if (count < max_ports) {
-            strlcpy(ports[count].protocol, "tcp", sizeof(ports[count].protocol));
-            ports[count].port = 80;
-            ports[count].connection_count = 1;
-            strlcpy(ports[count].state, "LISTEN", sizeof(ports[count].state));
-            count++;
-        }
-
-        if (count < max_ports) {
-            strlcpy(ports[count].protocol, "tcp", sizeof(ports[count].protocol));
-            ports[count].port = 443;
-            ports[count].connection_count = 1;
-            strlcpy(ports[count].state, "LISTEN", sizeof(ports[count].state));
-            count++;
+                    }
+            }
+            pclose(fp);
         }
     }
 
-    return count;
+    return port_count;
 }
 
-/* Get network interfaces */
+/* Get network interfaces using getifaddrs */
 int metrics_get_network_interfaces(NetworkInterface *interfaces, int max_interfaces) {
     struct ifaddrs *ifaddr, *ifa;
 
@@ -364,10 +429,43 @@ int metrics_get_network_interfaces(NetworkInterface *interfaces, int max_interfa
     for (ifa = ifaddr; ifa != NULL && count < max_interfaces; ifa = ifa->ifa_next) {
         if (ifa->ifa_addr == NULL) continue;
 
+        /* Only process IPv4 and IPv6 addresses */
+        if (ifa->ifa_addr->sa_family != AF_INET &&
+            ifa->ifa_addr->sa_family != AF_INET6) {
+            continue;
+            }
+
+            /* Check if we already have this interface - if so, skip if it already has an IP */
+            int found_idx = -1;
+        for (int i = 0; i < count; i++) {
+            if (strcmp(interfaces[i].name, ifa->ifa_name) == 0) {
+                found_idx = i;
+                break;
+            }
+        }
+
+        if (found_idx >= 0) {
+            /* Interface already exists - if it has no IP yet, update it */
+            if (strcmp(interfaces[found_idx].ip_address, "N/A") == 0) {
+                NetworkInterface *intf = &interfaces[found_idx];
+
+                if (ifa->ifa_addr->sa_family == AF_INET) {
+                    struct sockaddr_in *addr = (struct sockaddr_in *)ifa->ifa_addr;
+                    inet_ntop(AF_INET, &addr->sin_addr, intf->ip_address, sizeof(intf->ip_address));
+                } else if (ifa->ifa_addr->sa_family == AF_INET6) {
+                    struct sockaddr_in6 *addr = (struct sockaddr_in6 *)ifa->ifa_addr;
+                    inet_ntop(AF_INET6, &addr->sin6_addr, intf->ip_address, sizeof(intf->ip_address));
+                }
+            }
+            /* Otherwise, interface already has an IP - skip this entry */
+            continue;
+        }
+
+        /* New interface - add it */
         NetworkInterface *intf = &interfaces[count];
         strlcpy(intf->name, ifa->ifa_name, sizeof(intf->name));
 
-        /* Ottieni indirizzo IP */
+        /* Get IP address (prefer IPv4) */
         if (ifa->ifa_addr->sa_family == AF_INET) {
             struct sockaddr_in *addr = (struct sockaddr_in *)ifa->ifa_addr;
             inet_ntop(AF_INET, &addr->sin_addr, intf->ip_address, sizeof(intf->ip_address));
@@ -378,7 +476,7 @@ int metrics_get_network_interfaces(NetworkInterface *interfaces, int max_interfa
             strlcpy(intf->ip_address, "N/A", sizeof(intf->ip_address));
         }
 
-        /* Ottieni stato */
+        /* Get interface status */
         if (ifa->ifa_flags & IFF_UP) {
             if (ifa->ifa_flags & IFF_RUNNING) {
                 strlcpy(intf->status, "up", sizeof(intf->status));
@@ -394,6 +492,150 @@ int metrics_get_network_interfaces(NetworkInterface *interfaces, int max_interfa
 
     freeifaddrs(ifaddr);
     return count;
+}
+
+/* Get top CPU-consuming processes */
+int metrics_get_top_cpu_processes(ProcessInfo *processes, int max_processes) {
+    FILE *fp;
+    char buffer[512];
+    int count = 0;
+
+    /* Use ps to get processes sorted by CPU usage */
+    fp = popen("/bin/ps -axo user,pid,%cpu,comm | sort -nrk3 | head -10", "r");
+    if (fp == NULL) {
+        return 0;
+    }
+
+    /* Skip header line */
+    if (fgets(buffer, sizeof(buffer), fp) == NULL) {
+        pclose(fp);
+        return 0;
+    }
+
+    while (fgets(buffer, sizeof(buffer), fp) != NULL && count < max_processes) {
+        char user[32], command[256];
+        int pid;
+        float cpu_pct;
+
+        if (sscanf(buffer, "%31s %d %f %255[^\n]", user, &pid, &cpu_pct, command) == 4) {
+            ProcessInfo *proc = &processes[count];
+
+            strlcpy(proc->user, user, sizeof(proc->user));
+            proc->pid = pid;
+            proc->cpu_percent = cpu_pct;
+            proc->memory_percent = 0.0f;  /* Will be filled if needed */
+            proc->memory_mb = 0;
+
+            /* Sanitize command name (remove paths, limit length) */
+            char *cmd_base = strrchr(command, '/');
+            if (cmd_base) {
+                strlcpy(proc->command, cmd_base + 1, sizeof(proc->command));
+            } else {
+                strlcpy(proc->command, command, sizeof(proc->command));
+            }
+
+            count++;
+        }
+    }
+
+    pclose(fp);
+    return count;
+}
+
+/* Get top memory-consuming processes */
+int metrics_get_top_memory_processes(ProcessInfo *processes, int max_processes) {
+    FILE *fp;
+    char buffer[512];
+    int count = 0;
+
+    /* Use ps to get processes sorted by memory usage (RSS) */
+    fp = popen("/bin/ps -axo user,pid,%mem,rss,comm | sort -nrk3 | head -10", "r");
+    if (fp == NULL) {
+        return 0;
+    }
+
+    /* Skip header line */
+    if (fgets(buffer, sizeof(buffer), fp) == NULL) {
+        pclose(fp);
+        return 0;
+    }
+
+    while (fgets(buffer, sizeof(buffer), fp) != NULL && count < max_processes) {
+        char user[32], command[256];
+        int pid, rss_kb;
+        float mem_pct;
+
+        if (sscanf(buffer, "%31s %d %f %d %255[^\n]",
+            user, &pid, &mem_pct, &rss_kb, command) == 5) {
+            ProcessInfo *proc = &processes[count];
+
+        strlcpy(proc->user, user, sizeof(proc->user));
+        proc->pid = pid;
+        proc->cpu_percent = 0.0f;  /* Will be filled if needed */
+        proc->memory_percent = mem_pct;
+        proc->memory_mb = rss_kb / 1024;  /* Convert KB to MB */
+
+        /* Sanitize command name */
+        char *cmd_base = strrchr(command, '/');
+        if (cmd_base) {
+            strlcpy(proc->command, cmd_base + 1, sizeof(proc->command));
+        } else {
+            strlcpy(proc->command, command, sizeof(proc->command));
+        }
+
+        count++;
+            }
+    }
+
+    pclose(fp);
+    return count;
+}
+
+/* Get process count statistics */
+int metrics_get_process_stats(int *total, int *running, int *sleeping, int *zombie) {
+    FILE *fp;
+    char buffer[512];
+
+    *total = 0;
+    *running = 0;
+    *sleeping = 0;
+    *zombie = 0;
+
+    /* Use ps to get process states */
+    fp = popen("/bin/ps -ax -o state", "r");
+    if (fp == NULL) {
+        return -1;
+    }
+
+    /* Skip header */
+    if (fgets(buffer, sizeof(buffer), fp) == NULL) {
+        pclose(fp);
+        return -1;
+    }
+
+    /* Count processes by state */
+    while (fgets(buffer, sizeof(buffer), fp) != NULL) {
+        (*total)++;
+
+        char state = buffer[0];
+        switch (state) {
+            case 'R':  /* Running */
+                (*running)++;
+                break;
+            case 'S':  /* Sleeping (interruptible) */
+            case 'I':  /* Idle */
+                (*sleeping)++;
+                break;
+            case 'Z':  /* Zombie */
+                (*zombie)++;
+                break;
+            default:
+                break;
+        }
+    }
+
+    pclose(fp);
+    return 0;
 }
 
 /* ===== FUNZIONI JSON ===== */
@@ -413,9 +655,19 @@ static void append_memory_stats_json(char *buffer, size_t size) {
     MemoryStats stats;
     if (metrics_get_memory_stats(&stats) == 0) {
         snprintf(buffer, size,
-                 "\"memory\": {\"total_mb\": %ld, \"free_mb\": %ld, \"active_mb\": %ld, \"inactive_mb\": %ld, \"wired_mb\": %ld, \"cache_mb\": %ld}",
+                 "\"memory\": {"
+                 "\"total_mb\": %ld, "
+                 "\"free_mb\": %ld, "
+                 "\"active_mb\": %ld, "
+                 "\"inactive_mb\": %ld, "
+                 "\"wired_mb\": %ld, "
+                 "\"cache_mb\": %ld, "
+                 "\"swap_total_mb\": %ld, "
+                 "\"swap_used_mb\": %ld"
+                 "}",
                  stats.total_mb, stats.free_mb, stats.active_mb,
-                 stats.inactive_mb, stats.wired_mb, stats.cache_mb);
+                 stats.inactive_mb, stats.wired_mb, stats.cache_mb,
+                 stats.swap_total_mb, stats.swap_used_mb);
     } else {
         snprintf(buffer, size, "\"memory\": {\"total_mb\": 0, \"free_mb\": 0}");
     }
@@ -537,6 +789,93 @@ static void append_network_interfaces_json(char *buffer, size_t size) {
     snprintf(ptr, size, "]");
 }
 
+static void append_top_cpu_processes_json(char *buffer, size_t size) {
+    ProcessInfo processes[10];
+    int count = metrics_get_top_cpu_processes(processes, 10);
+
+    char *ptr = buffer;
+    int written = 0;
+
+    written = snprintf(ptr, size, "\"top_cpu_processes\": [");
+    ptr += written;
+    size -= written;
+
+    for (int i = 0; i < count && size > 100; i++) {
+        if (i > 0) {
+            written = snprintf(ptr, size, ", ");
+            ptr += written;
+            size -= written;
+        }
+
+        written = snprintf(ptr, size,
+                           "{\"user\": \"%s\", "
+                           "\"pid\": %d, "
+                           "\"cpu_percent\": %.1f, "
+                           "\"command\": \"%s\"}",
+                           processes[i].user,
+                           processes[i].pid,
+                           processes[i].cpu_percent,
+                           processes[i].command);
+        ptr += written;
+        size -= written;
+    }
+
+    snprintf(ptr, size, "]");
+}
+
+static void append_top_memory_processes_json(char *buffer, size_t size) {
+    ProcessInfo processes[10];
+    int count = metrics_get_top_memory_processes(processes, 10);
+
+    char *ptr = buffer;
+    int written = 0;
+
+    written = snprintf(ptr, size, "\"top_memory_processes\": [");
+    ptr += written;
+    size -= written;
+
+    for (int i = 0; i < count && size > 100; i++) {
+        if (i > 0) {
+            written = snprintf(ptr, size, ", ");
+            ptr += written;
+            size -= written;
+        }
+
+        written = snprintf(ptr, size,
+                           "{\"user\": \"%s\", "
+                           "\"pid\": %d, "
+                           "\"memory_percent\": %.1f, "
+                           "\"memory_mb\": %d, "
+                           "\"command\": \"%s\"}",
+                           processes[i].user,
+                           processes[i].pid,
+                           processes[i].memory_percent,
+                           processes[i].memory_mb,
+                           processes[i].command);
+        ptr += written;
+        size -= written;
+    }
+
+    snprintf(ptr, size, "]");
+}
+
+static void append_process_stats_json(char *buffer, size_t size) {
+    int total, running, sleeping, zombie;
+
+    if (metrics_get_process_stats(&total, &running, &sleeping, &zombie) == 0) {
+        snprintf(buffer, size,
+                 "\"process_stats\": {"
+                 "\"total\": %d, "
+                 "\"running\": %d, "
+                 "\"sleeping\": %d, "
+                 "\"zombie\": %d"
+                 "}",
+                 total, running, sleeping, zombie);
+    } else {
+        snprintf(buffer, size, "\"process_stats\": {\"total\": 0, \"running\": 0, \"sleeping\": 0, \"zombie\": 0}");
+    }
+}
+
 /* Funzione principale che genera tutto il JSON */
 char* get_system_metrics_json(void) {
     static char json[JSON_BUFFER_SIZE];
@@ -561,6 +900,9 @@ char* get_system_metrics_json(void) {
     char disks_json[2048];
     char ports_json[2048];
     char network_json[1024];
+    char top_cpu_json[2048];
+    char top_mem_json[2048];
+    char proc_stats_json[256];
 
     /* Genera le varie sezioni */
     append_cpu_stats_json(cpu_json, sizeof(cpu_json));
@@ -571,6 +913,9 @@ char* get_system_metrics_json(void) {
     append_disk_info_json(disks_json, sizeof(disks_json));
     append_top_ports_json(ports_json, sizeof(ports_json));
     append_network_interfaces_json(network_json, sizeof(network_json));
+    append_top_cpu_processes_json(top_cpu_json, sizeof(top_cpu_json));
+    append_top_memory_processes_json(top_mem_json, sizeof(top_mem_json));
+    append_process_stats_json(proc_stats_json, sizeof(proc_stats_json));
 
     /* Costruisci il JSON completo */
     snprintf(json, sizeof(json),
@@ -584,7 +929,10 @@ char* get_system_metrics_json(void) {
              "%s,"   /* uptime */
              "%s,"   /* disks */
              "%s,"   /* ports */
-             "%s"    /* network */
+             "%s,"   /* network */
+             "%s,"   /* top_cpu_processes */
+             "%s,"   /* top_memory_processes */
+             "%s"    /* process_stats */
              "}",
              timestamp,
              hostname,
@@ -595,7 +943,10 @@ char* get_system_metrics_json(void) {
              uptime_json,
              disks_json,
              ports_json,
-             network_json);
+             network_json,
+             top_cpu_json,
+             top_mem_json,
+             proc_stats_json);
 
     return json;
 }

@@ -1,0 +1,113 @@
+# Compiled binaries
+m_plus_server
+*.o
+*.out
+*.exe
+
+# Build artifacts
+*.a
+*.so
+*.dylib
+
+# Core dumps
+core
+*.core
+vgcore.*
+
+# Logs
+*.log
+server.log
+
+# Emacs backup and temporary files
+*~
+\#*\#
+.\#*
+.*.swp
+.*.swo
+*.elc
+auto-save-list
+tramp
+.\#*
+TAGS
+tags
+
+# Emacs session files
+.session
+.emacs.desktop
+.emacs.desktop.lock
+*.desktop
+*.desktop.lock
+
+# Emacs project files
+.projectile
+.dir-locals.el
+projectile-bookmarks.eld
+
+# IDE and editor directories
+.vscode/
+.idea/
+*.sublime-*
+
+# OS-specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Backup files
+*.bak
+*.backup
+*.old
+*.orig
+
+# Test files
+test_output/
+*.test
+
+# Documentation build
+docs/_build/
+*.pdf
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Local configuration (if any)
+config.local
+*.local
+
+# Static files cache (if generated)
+static/.cache/
+
+# Coverage reports
+*.gcov
+*.gcda
+*.gcno
+coverage/
+
+# Dependencies (if using any package manager)
+vendor/
+node_modules/
+
+# Development database (if any)
+*.db
+*.sqlite
+*.sqlite3
+
+# Personal notes
+TODO.txt
+NOTES.txt
+scratch.txt
+
+# test result
+#results/
+build/
+benchmark_advanced/
+benchmark/
+
+# Kate
+*.kate-swp
