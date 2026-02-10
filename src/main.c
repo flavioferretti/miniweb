@@ -39,6 +39,65 @@ handle_signal(int sig)
 	running = 0;
 }
 
+/*
+ * Estrae l'IP reale del client dai header del reverse proxy
+ * Controlla in ordine: X-Real-IP, X-Forwarded-For, poi fallback all'IP diretto
+ */
+static const char *
+get_real_client_ip(struct MHD_Connection *connection)
+{
+	const char *real_ip = MHD_lookup_connection_value(
+	    connection, MHD_HEADER_KIND, "X-Real-IP");
+
+	if (real_ip) {
+		return real_ip;
+	}
+
+	const char *forwarded = MHD_lookup_connection_value(
+	    connection, MHD_HEADER_KIND, "X-Forwarded-For");
+
+	if (forwarded) {
+		/* X-Forwarded-For può contenere una lista: "client, proxy1,
+		 * proxy2" Prendiamo solo il primo IP */
+		static char first_ip[64];
+		const char *comma = strchr(forwarded, ',');
+		if (comma) {
+			size_t len = comma - forwarded;
+			if (len >= sizeof(first_ip))
+				len = sizeof(first_ip) - 1;
+			memcpy(first_ip, forwarded, len);
+			first_ip[len] = '\0';
+			return first_ip;
+		}
+		return forwarded;
+	}
+
+	/* Fallback: usa l'IP della connessione diretta */
+	const union MHD_ConnectionInfo *info = MHD_get_connection_info(
+	    connection, MHD_CONNECTION_INFO_CLIENT_ADDRESS);
+
+	if (info && info->client_addr) {
+		/* Per semplicità restituiamo una stringa statica
+		 * In produzione convertirei sockaddr in stringa IP */
+		return "(direct connection)";
+	}
+
+	return "unknown";
+}
+
+/*
+ * Determina se la richiesta è arrivata via HTTPS
+ * Controlla X-Forwarded-Proto dal reverse proxy
+ */
+static int
+is_https_request(struct MHD_Connection *connection)
+{
+	const char *proto = MHD_lookup_connection_value(
+	    connection, MHD_HEADER_KIND, "X-Forwarded-Proto");
+
+	return (proto && strcmp(proto, "https") == 0);
+}
+
 /* Main request handler */
 static int
 request_handler(void *cls, struct MHD_Connection *connection, const char *url,
@@ -48,9 +107,13 @@ request_handler(void *cls, struct MHD_Connection *connection, const char *url,
 {
 	(void)cls;
 
-	/* Log request if verbose */
+	/* Log request if verbose - ora con IP reale */
 	if (config.verbose) {
-		printf("[%s] %s %s\n", method, url, version);
+		const char *client_ip = get_real_client_ip(connection);
+		const char *proto =
+		    is_https_request(connection) ? "HTTPS" : "HTTP";
+		printf("[%s] %s %s %s (from %s)\n", proto, method, url, version,
+		       client_ip);
 	}
 
 	/* Find route handler */
@@ -153,56 +216,45 @@ apply_openbsd_security(void)
 
 	// Accesso ai manuali
 	if (unveil("/usr/share/man", "r") == -1) {
-        fprintf(stderr, "Warning: Cannot unveil /usr/share/man directory\n");
-    }
-    if (unveil("/usr/local/man", "r") == -1) {
-        fprintf(stderr, "Warning: Cannot unveil /usr/local/man directory\n");
-    }
+		fprintf(stderr,
+			"Warning: Cannot unveil /usr/share/man directory\n");
+	}
+	if (unveil("/usr/local/man", "r") == -1) {
+		fprintf(stderr,
+			"Warning: Cannot unveil /usr/local/man directory\n");
+	}
 
-    // Binari necessari per popen()
-    if (unveil("/usr/bin/mandoc", "x") == -1) {
-        fprintf(stderr, "Warning: Cannot unveil /usr/bin/mandoc\n");
-    }
+	// Binari necessari per popen()
+	if (unveil("/usr/bin/mandoc", "x") == -1) {
+		fprintf(stderr, "Warning: Cannot unveil /usr/bin/mandoc\n");
+	}
 
-    if (unveil("/usr/bin/man", "x") == -1) {
-        fprintf(stderr, "Warning: Cannot unveil /usr/bin/man\n");
-    }
+	if (unveil("/usr/bin/man", "x") == -1) {
+		fprintf(stderr, "Warning: Cannot unveil /usr/bin/man\n");
+	}
 
-    if (unveil("/usr/bin/less", "x") == -1) {
-        fprintf(stderr, "Warning: Cannot unveil /usr/bin/less\n");
-    }
+	if (unveil("/usr/bin/less", "x") == -1) {
+		fprintf(stderr, "Warning: Cannot unveil /usr/bin/less\n");
+	}
 
-    if (unveil("/usr/bin/apropos", "x") == -1) {
-        fprintf(stderr, "Warning: Cannot unveil /usr/bin/apropos\n");
-    }
-    if (unveil("/bin/sh", "x") == -1) {
-        fprintf(stderr, "Warning: Cannot unveil /bin/sh\n");
-    } // Necessario per popen
+	if (unveil("/usr/bin/apropos", "x") == -1) {
+		fprintf(stderr, "Warning: Cannot unveil /usr/bin/apropos\n");
+	}
+	if (unveil("/bin/sh", "x") == -1) {
+		fprintf(stderr, "Warning: Cannot unveil /bin/sh\n");
+	}
 
-    // File di configurazione di apropos
-    if (unveil("/etc/man.conf", "r") == -1) {
-        fprintf(stderr, "Warning: Cannot unveil /etc/man.conf\n");
-    }
+	// File di configurazione di apropos
+	if (unveil("/etc/man.conf", "r") == -1) {
+		fprintf(stderr, "Warning: Cannot unveil /etc/man.conf\n");
+	}
 
-    /* Lock unveil - no more paths can be added after this */
-    if (unveil(NULL, NULL) == -1) {
-        fprintf(stderr, "Warning: Cannot lock unveil\n");
-    }
+	/* Lock unveil - no more paths can be added after this */
+	if (unveil(NULL, NULL) == -1) {
+		fprintf(stderr, "Warning: Cannot lock unveil\n");
+	}
 
-	/* Minimal pledge promises for web server with metrics
-	 *
-	 * stdio  - Standard I/O (printf, fprintf, fopen, etc.)
-	 * rpath  - Read files (templates, static files)
-	 * inet   - Network operations (socket, bind, accept, send, recv)
-	 * proc   - Process info (getpid, getrusage - used by metrics and
-	 * libmicrohttpd) exec   - Execute commands (popen for ps/netstat in
-	 * metrics.c)
-	 *
-	 * NOTE: We need 'exec' because metrics.c uses popen() to run ps and
-	 * netstat. NOTE: 'sysctl' is NOT a valid promise - it's a syscall
-	 * that's allowed by default NOTE: We removed 'wpath' and 'cpath' - this
-	 * server only reads, doesn't write files
-	 */
+	/* Minimal pledge promises for web server with metrics */
 	const char *promises = "stdio rpath inet proc exec vminfo ps";
 
 	if (pledge(promises, NULL) == -1) {
@@ -235,29 +287,74 @@ main(int argc, char *argv[])
 	signal(SIGINT, handle_signal);
 	signal(SIGTERM, handle_signal);
 #ifdef SIGPIPE
-	signal(SIGPIPE, SIG_IGN); /* Ignore SIGPIPE for network connections */
+	signal(SIGPIPE, SIG_IGN);
 #endif
 
 	printf("Starting MiniWeb (libmicrohttpd) on %s:%d\n", config.bind_addr,
 	       config.port);
 
-	/* Create MHD daemon */
+	/*
+	 * CONFIGURAZIONE OTTIMIZZATA PER REVERSE PROXY
+	 *
+	 * IMPORTANTE: Non possiamo usare MHD_USE_POLL con
+	 * MHD_USE_THREAD_PER_CONNECTION perché non sono compatibili nella
+	 * versione di libmicrohttpd su OpenBSD.
+	 *
+	 * Usiamo invece MHD_USE_INTERNAL_POLLING_THREAD con un thread pool.
+	 * Questo offre un buon compromesso tra performance e compatibilità.
+	 *
+	 * Differenze dalla configurazione precedente:
+	 * 1. MHD_USE_INTERNAL_POLLING_THREAD: un thread gestisce tutte le
+	 * connessioni
+	 * 2. THREAD_POOL_SIZE: crea un pool di worker thread per gestire le
+	 * richieste
+	 * 3. Timeout aumentato a 120 secondi per operazioni lente
+	 * 4. Connection limits per prevenire DoS
+	 */
 	daemon = MHD_start_daemon(
-	    MHD_USE_POLL_INTERNALLY | MHD_USE_INTERNAL_POLLING_THREAD,
+	    MHD_USE_INTERNAL_POLLING_THREAD, /* Un thread gestisce poll() */
 	    config.port, NULL, NULL, &request_handler, NULL,
+
+	    /* Thread pool per distribuire il carico di lavoro */
 	    MHD_OPTION_THREAD_POOL_SIZE, config.thread_pool_size,
+
+	    /* Limiti di connessione per prevenire DoS */
 	    MHD_OPTION_CONNECTION_LIMIT, config.connection_limit,
-	    MHD_OPTION_CONNECTION_TIMEOUT, 30,
-	    MHD_OPTION_PER_IP_CONNECTION_LIMIT, 100, // Prevent DoS
+	    MHD_OPTION_PER_IP_CONNECTION_LIMIT, 20,
+
+	    /* Timeout aumentato per operazioni lente (man, apropos, PDF) */
+	    MHD_OPTION_CONNECTION_TIMEOUT, 120,
+
+	    /* Buffer size ottimizzato */
+	    MHD_OPTION_CONNECTION_MEMORY_LIMIT, 256 * 1024,
+
 	    MHD_OPTION_END);
 
 	if (!daemon) {
 		fprintf(stderr, "Failed to start server on port %d\n",
 			config.port);
+		fprintf(stderr, "\nPossible causes:\n");
+		fprintf(
+		    stderr,
+		    "  - Port already in use (check with: fstat | grep :%d)\n",
+		    config.port);
+		fprintf(stderr, "  - Permission denied (try ports > 1024)\n");
+		fprintf(stderr, "  - IPv6/IPv4 binding issue\n");
 		return 1;
 	}
 
-	printf("Server started. Press Ctrl+C to stop\n");
+	printf("Server started successfully!\n");
+	if (config.verbose) {
+		printf("Configuration:\n");
+		printf("  - Mode: Internal polling thread with worker pool\n");
+		printf("  - Thread pool size: %d\n", config.thread_pool_size);
+		printf("  - Max connections: %d\n", config.connection_limit);
+		printf("  - Connection timeout: 120s\n");
+		printf("  - Per-IP limit: 20\n");
+		printf("  - Listening on: %s:%d\n", config.bind_addr,
+		       config.port);
+	}
+	printf("Press Ctrl+C to stop\n\n");
 
 	/* Main loop */
 	while (running) {
@@ -265,8 +362,9 @@ main(int argc, char *argv[])
 	}
 
 	/* Cleanup */
+	printf("\nShutting down...\n");
 	MHD_stop_daemon(daemon);
-	printf("\nServer stopped.\n");
+	printf("Server stopped.\n");
 
 	return 0;
 }
