@@ -1,11 +1,14 @@
 /* main.c - Punto di ingresso per OpenBSD con libmicrohttpd */
 
+#include <arpa/inet.h>
 #include <microhttpd.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <unistd.h>
+#include <netinet/in.h>
 
 #include "../include/routes.h"
 
@@ -311,9 +314,24 @@ main(int argc, char *argv[])
 	 * 3. Timeout aumentato a 120 secondi per operazioni lente
 	 * 4. Connection limits per prevenire DoS
 	 */
+	/* Prepara l'indirizzo di bind */
+	struct sockaddr_in bind_addr;
+	memset(&bind_addr, 0, sizeof(bind_addr));
+	bind_addr.sin_family = AF_INET;
+	bind_addr.sin_port = htons(config.port);
+
+	/* Converti l'indirizzo stringa in binario */
+	if (inet_pton(AF_INET, config.bind_addr, &bind_addr.sin_addr) != 1) {
+		fprintf(stderr, "Invalid bind address: %s\n", config.bind_addr);
+		return 1;
+	}
+
 	daemon = MHD_start_daemon(
-	    MHD_USE_INTERNAL_POLLING_THREAD, /* Un thread gestisce poll() */
-	    config.port, NULL, NULL, &request_handler, NULL,
+	    MHD_USE_INTERNAL_POLLING_THREAD, config.port, NULL, NULL,
+	    &request_handler, NULL,
+
+	    /* ✅ BIND ADDRESS - CRITICO! */
+	    MHD_OPTION_SOCK_ADDR, (struct sockaddr *)&bind_addr,
 
 	    /* Thread pool per distribuire il carico di lavoro */
 	    MHD_OPTION_THREAD_POOL_SIZE, config.thread_pool_size,
