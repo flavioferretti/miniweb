@@ -13,10 +13,6 @@
 #include "../include/http_utils.h"
 #include "../include/routes.h"
 
-/* OpenBSD security headers */
-#ifdef __OpenBSD__
-#include <unistd.h>
-#endif
 
 /* Configuration */
 struct server_config {
@@ -167,7 +163,6 @@ parse_args(int argc, char *argv[])
 static void
 apply_openbsd_security(void)
 {
-#ifdef __OpenBSD__
 	printf("Applying OpenBSD security features...\n");
 
 	unveil("templates", "r");
@@ -194,10 +189,6 @@ apply_openbsd_security(void)
 	} else if (config.verbose) {
 		printf("Pledge promises set: %s\n", promises);
 	}
-#else
-	(void)config;
-	printf("Running on non-OpenBSD system, security features disabled.\n");
-#endif
 }
 
 /* Main function */

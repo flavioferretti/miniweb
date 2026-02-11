@@ -1,11 +1,11 @@
-# Makefile per MiniWeb con libmicrohttpd (OpenBSD/BSD make)
+# Makefile for MiniWeb with libmicrohttpd (OpenBSD/BSD make)
 
 PROG=      miniweb
 SRCDIR=    src
 INCDIR=    include
 BUILDDIR=  build
 
-# Source files per la nuova implementazione con libmicrohttpd
+# Source files for libmicrohttpd MiniWeb
 SRCS=      ${SRCDIR}/main.c \
            ${SRCDIR}/routes.c \
            ${SRCDIR}/template_engine.c \
@@ -29,7 +29,7 @@ CFLAGS+=   -fstack-protector-strong -I${INCDIR}
 CFLAGS+=   -D_FORTIFY_SOURCE=2
 CFLAGS+=   -Wformat -Wformat-security
 CFLAGS+=   -g -D__OpenBSD__
-CFLAGS+=   -D_OPENBSD  # Per abilitare pledge/unveil
+CFLAGS+=   -D_OPENBSD  # Activate pledge/unveil
 
 # Flags per libmicrohttpd
 CFLAGS+=   -D_DEFAULT_SOURCE -I/usr/local/include
@@ -92,8 +92,5 @@ ${BUILDDIR}/routes.o: ${SRCDIR}/routes.c
 ${BUILDDIR}/template_engine.o: ${SRCDIR}/template_engine.c
 	@mkdir -p ${BUILDDIR}
 	${CC} ${CFLAGS} -c ${SRCDIR}/template_engine.c -o $@
-
-
-
 
 .PHONY: all clean run debug install

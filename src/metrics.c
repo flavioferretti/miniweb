@@ -1,4 +1,4 @@
-/* metrics.c - System metrics completo per OpenBSD con libmicrohttpd */
+/* metrics.c - System metrics for OpenBSD with libmicrohttpd */
 
 #include "metrics.h"
 #include <arpa/inet.h>
@@ -33,13 +33,12 @@
 #define JSON_BUFFER_SIZE 8192
 #define MB (1024 * 1024)
 
-/* ===== IMPLEMENTAZIONE DELLE FUNZIONI DI SISTEMA ===== */
+/* ===== SYSTEM FUNCTIONS IMPLEMENTATION ===== */
 
 /* Get CPU statistics using sysctl cp_time with delta sampling */
 int
 metrics_get_cpu_stats(CpuStats *stats)
 {
-#ifdef __OpenBSD__
 	int mib[2];
 	long cp_time1[CPUSTATES], cp_time2[CPUSTATES];
 	long delta[CPUSTATES];
@@ -87,22 +86,12 @@ metrics_get_cpu_stats(CpuStats *stats)
 	stats->idle = (int)((delta[CP_IDLE] * 100) / total_delta);
 
 	return 0;
-#else
-	/* Fallback for non-OpenBSD systems */
-	stats->user = 10;
-	stats->nice = 0;
-	stats->system = 5;
-	stats->interrupt = 1;
-	stats->idle = 84;
-	return 0;
-#endif
 }
 
 /* Get memory and swap statistics using sysctl */
 int
 metrics_get_memory_stats(MemoryStats *stats)
 {
-#ifdef __OpenBSD__
 	int mib[2];
 	size_t len;
 
@@ -179,18 +168,6 @@ metrics_get_memory_stats(MemoryStats *stats)
 	}
 
 	return 0;
-#else
-	/* Fallback for non-OpenBSD */
-	stats->total_mb = 8192;
-	stats->free_mb = 2048;
-	stats->active_mb = 4096;
-	stats->inactive_mb = 1024;
-	stats->wired_mb = 1024;
-	stats->cache_mb = 0;
-	stats->swap_total_mb = 0;
-	stats->swap_used_mb = 0;
-	return 0;
-#endif
 }
 
 /* Get load average */
@@ -231,7 +208,6 @@ metrics_get_os_info(char *type, char *release, char *machine, size_t size)
 int
 metrics_get_uptime(char *uptime_str, size_t size)
 {
-#ifdef __OpenBSD__
 	struct timeval boottime;
 	time_t now;
 	size_t len = sizeof(boottime);
@@ -259,10 +235,6 @@ metrics_get_uptime(char *uptime_str, size_t size)
 	}
 
 	return 0;
-#else
-	strlcpy(uptime_str, "unknown", size);
-	return -1;
-#endif
 }
 
 /* Get hostname */
@@ -276,7 +248,6 @@ metrics_get_hostname(char *hostname, size_t size)
 int
 metrics_get_disk_usage(DiskInfo *disks, int max_disks)
 {
-#ifdef __OpenBSD__
 	struct statfs *mntbuf;
 	int mntsize, i, count = 0;
 
@@ -329,9 +300,6 @@ metrics_get_disk_usage(DiskInfo *disks, int max_disks)
 	}
 
 	return count;
-#else
-	return 0;
-#endif
 }
 
 /* Get top listening ports using netstat command */
@@ -1013,7 +981,7 @@ append_process_stats_json(char *buffer, size_t size)
 	}
 }
 
-/* Funzione principale che genera tutto il JSON */
+/* Main function generate all the JSON */
 char *
 get_system_metrics_json(void)
 {
@@ -1022,7 +990,7 @@ get_system_metrics_json(void)
 	char hostname[256];
 	time_t now;
 
-	/* Ottieni timestamp e hostname */
+	/* Get timestamp e hostname */
 	time(&now);
 	strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S",
 		 localtime(&now));
@@ -1031,7 +999,7 @@ get_system_metrics_json(void)
 		strlcpy(hostname, "localhost", sizeof(hostname));
 	}
 
-	/* Buffer per le varie sezioni */
+	/* Buffer for sections */
 	char cpu_json[256];
 	char memory_json[512];
 	char load_json[256];
@@ -1044,7 +1012,7 @@ get_system_metrics_json(void)
 	char top_mem_json[2048];
 	char proc_stats_json[256];
 
-	/* Genera le varie sezioni */
+	/* Generate sections */
 	append_cpu_stats_json(cpu_json, sizeof(cpu_json));
 	append_memory_stats_json(memory_json, sizeof(memory_json));
 	append_load_average_json(load_json, sizeof(load_json));
@@ -1057,7 +1025,7 @@ get_system_metrics_json(void)
 	append_top_memory_processes_json(top_mem_json, sizeof(top_mem_json));
 	append_process_stats_json(proc_stats_json, sizeof(proc_stats_json));
 
-	/* Costruisci il JSON completo */
+	/* build the complete JSON */
 	snprintf(json, sizeof(json),
 		 "{"
 		 "\"timestamp\": \"%s\","
@@ -1081,7 +1049,7 @@ get_system_metrics_json(void)
 	return json;
 }
 
-/* Metrics API handler per libmicrohttpd */
+/* Metrics API handler for libmicrohttpd */
 int
 metrics_handler(void *cls, struct MHD_Connection *connection, const char *url,
 		const char *method, const char *version,

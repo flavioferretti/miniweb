@@ -12,46 +12,42 @@
 static const char *ERROR_404_HTML =
 "<!DOCTYPE html><html><head><meta charset=\"UTF-8\">"
 "<title>404 Not Found</title>"
-"<style>body{font-family:sans-serif;padding:2rem;background:#fafafa;}"
-"h1{color:#e74c3c;}code{background:#f0f0f0;padding:0.2rem 0.4rem;}</style>"
+"<link rel=\"stylesheet\" type=\"text/css\" href=\"/static/custom.css\" />"
 "</head><body>"
 "<h1>404 - Page Not Found</h1>"
 "<p>The requested resource <code>%s</code> was not found on this server.</p>"
-"<hr><p>MiniWeb Server on OpenBSD</p>"
+"<hr><p><a href=\"/\">MiniWeb Server</a> on OpenBSD</p>"
 "</body></html>";
 
 static const char *ERROR_500_HTML =
 "<!DOCTYPE html><html><head><meta charset=\"UTF-8\">"
 "<title>500 Internal Server Error</title>"
-"<style>body{font-family:sans-serif;padding:2rem;background:#fafafa;}"
-"h1{color:#c0392b;}</style>"
+"<link rel=\"stylesheet\" type=\"text/css\" href=\"/static/custom.css\" />"
 "</head><body>"
 "<h1>500 - Internal Server Error</h1>"
 "<p>Something went wrong processing your request.</p>"
 "<p><small>%s</small></p>"
-"<hr><p>MiniWeb Server on OpenBSD</p>"
+"<hr><p><a href=\"/\">MiniWeb Server</a> on OpenBSD</p>"
 "</body></html>";
 
 static const char *ERROR_400_HTML =
 "<!DOCTYPE html><html><head><meta charset=\"UTF-8\">"
 "<title>400 Bad Request</title>"
-"<style>body{font-family:sans-serif;padding:2rem;background:#fafafa;}"
-"h1{color:#f39c12;}</style>"
+"<link rel=\"stylesheet\" type=\"text/css\" href=\"/static/custom.css\" />"
 "</head><body>"
 "<h1>400 - Bad Request</h1>"
 "<p>%s</p>"
-"<hr><p>MiniWeb Server on OpenBSD</p>"
+"<hr><p><a href=\"/\">MiniWeb Server</a> on OpenBSD</p>"
 "</body></html>";
 
 static const char *ERROR_403_HTML =
 "<!DOCTYPE html><html><head><meta charset=\"UTF-8\">"
 "<title>403 Forbidden</title>"
-"<style>body{font-family:sans-serif;padding:2rem;background:#fafafa;}"
-"h1{color:#e67e22;}</style>"
+"<link rel=\"stylesheet\" type=\"text/css\" href=\"/static/custom.css\" />"
 "</head><body>"
 "<h1>403 - Forbidden</h1>"
 "<p>You don't have permission to access this resource.</p>"
-"<hr><p>MiniWeb Server on OpenBSD</p>"
+"<hr><p><a href=\"/\">MiniWeb Server</a> on OpenBSD</p>"
 "</body></html>";
 
 /* Create error response with HTML formatting */
