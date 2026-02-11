@@ -1,5 +1,5 @@
 #include "../include/man.h"
-#include <ctype.h>
+#include "../include/http_utils.h"
 #include <errno.h>
 #include <microhttpd.h>
 #include <stdio.h>
@@ -8,110 +8,8 @@
 #include <sys/wait.h>
 
 #define ALL_MAN_PATHS "/usr/share/man:/usr/local/man"
-
-/* --- Utility Functions --- */
-
-static void
-sanitize(char *s)
-{
-	while (*s) {
-		if (!isalnum((unsigned char)*s) && *s != '.' && *s != '-')
-			*s = '_';
-		s++;
-	}
-}
-
-/*
- * Versione migliorata di read_command_output con:
- * - Timeout per prevenire freeze
- * - Cleanup garantito del processo figlio
- * - Gestione errori completa
- */
-static char *
-read_command_output(const char *cmd, size_t max_size)
-{
-	FILE *fp = popen(cmd, "r");
-	if (!fp) {
-		fprintf(stderr, "popen failed for: %s (errno=%d)\n", cmd,
-			errno);
-		return NULL;
-	}
-
-	size_t capacity = 16384;
-	size_t total = 0;
-	char *buffer = malloc(capacity);
-	if (!buffer) {
-		pclose(fp);
-		return NULL;
-	}
-
-	char chunk[4096];
-	size_t n;
-
-	/* Leggi l'output con controllo della dimensione massima */
-	while ((n = fread(chunk, 1, sizeof(chunk), fp)) > 0) {
-		/* Verifica se abbiamo raggiunto il limite */
-		if (total + n >= max_size) {
-			fprintf(
-			    stderr,
-			    "Warning: command output truncated at %zu bytes\n",
-			    max_size);
-			/* Leggi fino alla fine per evitare deadlock del
-			 * processo */
-			while (fread(chunk, 1, sizeof(chunk), fp) > 0)
-				;
-			break;
-		}
-
-		/* Espandi il buffer se necessario */
-		if (total + n + 1 > capacity) {
-			size_t new_capacity = capacity * 2;
-			if (new_capacity > max_size) {
-				new_capacity = max_size;
-			}
-
-			char *new_buf = realloc(buffer, new_capacity);
-			if (!new_buf) {
-				fprintf(stderr,
-					"realloc failed, output truncated\n");
-				break;
-			}
-			buffer = new_buf;
-			capacity = new_capacity;
-		}
-
-		memcpy(buffer + total, chunk, n);
-		total += n;
-	}
-
-	buffer[total] = '\0';
-
-	/* Chiudi la pipe e verifica lo stato del processo */
-	int status = pclose(fp);
-	if (status == -1) {
-		fprintf(stderr, "pclose failed for: %s (errno=%d)\n", cmd,
-			errno);
-		free(buffer);
-		return NULL;
-	}
-
-	/* Verifica se il comando è terminato con errore */
-	if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
-		fprintf(stderr, "Command exited with status %d: %s\n",
-			WEXITSTATUS(status), cmd);
-		/* Non è necessariamente un errore fatale, restituiamo comunque
-		 * l'output */
-	}
-
-	/* Se non abbiamo letto nulla, restituisci NULL invece di una stringa
-	 * vuota */
-	if (total == 0) {
-		free(buffer);
-		return NULL;
-	}
-
-	return buffer;
-}
+#define MAX_JSON_SIZE (256 * 1024)
+#define MAX_OUTPUT_SIZE (1024 * 1024)
 
 /* --- Core Logic --- */
 
@@ -147,52 +45,63 @@ man_get_sections_json(void)
 		      "}");
 }
 
-/* Funzione per l'escaping dei caratteri JSON (fondamentale!) */
-static void
-json_escape(char *dest, const char *src, size_t max)
+/* Verify that a man page exists in the specific section */
+int
+verify_man_page(const char *man_path, const char *section, const char *name)
 {
-	size_t d = 0;
-	for (size_t s = 0; src[s] != '\0' && d < max - 5; s++) {
-		switch (src[s]) {
-		case '"':
-			dest[d++] = '\\';
-			dest[d++] = '"';
-			break;
-		case '\\':
-			dest[d++] = '\\';
-			dest[d++] = '\\';
-			break;
-		case '\b':
-			dest[d++] = '\\';
-			dest[d++] = 'b';
-			break;
-		case '\f':
-			dest[d++] = '\\';
-			dest[d++] = 'f';
-			break;
-		case '\n':
-			dest[d++] = '\\';
-			dest[d++] = 'n';
-			break;
-		case '\r':
-			dest[d++] = '\\';
-			dest[d++] = 'r';
-			break;
-		case '\t':
-			dest[d++] = '\\';
-			dest[d++] = 't';
-			break;
-		default:
-			dest[d++] = src[s];
-			break;
-		}
-	}
-	dest[d] = '\0';
+	char cmd[512];
+	/* Usa il nome originale senza sanitizzazione */
+	snprintf(cmd, sizeof(cmd), "man -M %s -w -S %s %s 2>/dev/null",
+		 man_path, section, name);
+
+	char *result = safe_popen_read(cmd, 1024);
+	if (!result)
+		return 0;
+
+	char pattern[32];
+	snprintf(pattern, sizeof(pattern), "man%s/", section);
+
+	int found = (strstr(result, pattern) != NULL);
+	free(result);
+	return found;
 }
 
-/*
- * Versione migliorata con gestione errori e cleanup garantito
- */
+/* Determina se una man page è in system o packages */
+const char *
+determine_man_area(const char *name, const char *section)
+{
+	char cmd[512];
+	char s_clean[16];
+
+	strlcpy(s_clean, section, sizeof(s_clean));
+	sanitize_string(s_clean);
+
+	/* Prova prima in system (/usr/share/man) */
+	snprintf(cmd, sizeof(cmd),
+		 "man -M /usr/share/man -w -S %s %s 2>/dev/null", s_clean,
+		 name);
+
+	char *result = safe_popen_read(cmd, 1024);
+	if (result) {
+		free(result);
+		return "system";
+	}
+
+	/* Prova in packages (/usr/local/man) */
+	snprintf(cmd, sizeof(cmd),
+		 "man -M /usr/local/man -w -S %s %s 2>/dev/null", s_clean,
+		 name);
+
+	result = safe_popen_read(cmd, 1024);
+	if (result) {
+		free(result);
+		return "packages";
+	}
+
+	/* Se non trovato, default system (meglio di niente) */
+	return "system";
+}
+
 char *
 man_get_section_pages_json(const char *area, const char *section)
 {
@@ -202,122 +111,117 @@ man_get_section_pages_json(const char *area, const char *section)
 
 	char s_clean[16];
 	strlcpy(s_clean, section, sizeof(s_clean));
-	sanitize(s_clean);
+	sanitize_string(s_clean);
 
-	/* Determina il path base in base all'area */
-	const char *man_path = "/usr/share/man";
-	if (strcmp(area, "packages") == 0) {
-		man_path = "/usr/local/man";
-	}
+	const char *man_path = (strcmp(area, "packages") == 0)
+				   ? "/usr/local/man"
+				   : "/usr/share/man";
 
+	/*
+	 * OPENBSD: apropos con . elenca TUTTE le pagine della sezione
+	 * L'output è nel formato: nome(sezione) - descrizione
+	 */
 	char cmd[512];
-	snprintf(cmd, sizeof(cmd), "apropos -M %s -s %s ^ 2>/dev/null",
+	snprintf(cmd, sizeof(cmd), "apropos -M %s -s %s . 2>/dev/null",
 		 man_path, s_clean);
 
-	FILE *fp = popen(cmd, "r");
-	if (!fp) {
-		char *err = malloc(128);
-		snprintf(
-		    err, 128,
-		    "{\"error\":\"Failed to execute apropos\",\"errno\":%d}",
-		    errno);
-		return err;
+	char *output = safe_popen_read(cmd, MAX_JSON_SIZE / 2);
+	if (!output) {
+		char *json = malloc(256);
+		snprintf(json, 256,
+			 "{\"area\":\"%s\",\"section\":\"%s\",\"pages\":[]}",
+			 area, s_clean);
+		return json;
 	}
 
 	char *json = malloc(MAX_JSON_SIZE);
 	if (!json) {
-		pclose(fp);
+		free(output);
 		return strdup("{\"error\":\"Out of memory\"}");
 	}
 
-	/* Inizializzazione JSON pulita */
 	size_t len = snprintf(json, MAX_JSON_SIZE,
 			      "{\"area\":\"%s\",\"section\":\"%s\",\"pages\":[",
 			      area, s_clean);
 
-	if (len >= MAX_JSON_SIZE) {
-		free(json);
-		pclose(fp);
-		return strdup("{\"error\":\"Buffer overflow\"}");
-	}
-
-	char line[1024];
+	/* Fai una copia dell'output perché strtok lo modifica */
+	char *output_copy = strdup(output);
+	char *line = strtok(output_copy, "\n");
 	int first = 1;
 	int count = 0;
-	const int MAX_PAGES =
-	    500; /* Limita il numero di pagine per prevenire JSON enormi */
+	const int MAX_PAGES = 1000;
 
-	while (fgets(line, sizeof(line), fp) && count < MAX_PAGES) {
-		/* Controllo di sicurezza per non sforare il buffer */
-		if (len > MAX_JSON_SIZE - 1024) {
-			fprintf(stderr, "Warning: JSON buffer nearly full, "
-					"truncating results\n");
-			break;
+	while (line && count < MAX_PAGES && len < MAX_JSON_SIZE - 1024) {
+		/* Salta linee vuote */
+		if (strlen(line) == 0) {
+			line = strtok(NULL, "\n");
+			continue;
 		}
 
-		char *name = strtok(line, "(");
-		char *rest = strtok(NULL, "");
-		if (!name || !rest)
+		/* Cerca la prima parentesi aperta */
+		char *open_paren = strchr(line, '(');
+		if (!open_paren) {
+			line = strtok(NULL, "\n");
 			continue;
+		}
 
-		/* Cerchiamo la descrizione dopo il separatore " - " */
-		char *desc = strstr(rest, " - ");
+		/* Il nome è tutto prima della parentesi */
+		size_t name_len = open_paren - line;
+		char *name = malloc(name_len + 1);
+		memcpy(name, line, name_len);
+		name[name_len] = '\0';
+
+		/* Pulisci il nome (rimuovi spazi finali) */
+		char *end = name + name_len - 1;
+		while (end > name && (*end == ' ' || *end == '\t')) {
+			*end = '\0';
+			end--;
+		}
+
+		/* Cerca la descrizione dopo " - " */
+		char *desc = strstr(line, " - ");
 		if (desc) {
-			desc += 3; // Salta " - "
+			desc += 3; /* Salta " - " */
 		} else {
 			desc = "No description available";
 		}
 
-		/* Pulizia stringhe */
-		name[strcspn(name, " \t\n\r")] = 0;
-		desc[strcspn(desc, "\r\n")] = 0;
+		/* Pulisci la descrizione (rimuovi newline) */
+		char *desc_clean = strdup(desc);
+		desc_clean[strcspn(desc_clean, "\r\n")] = 0;
 
-		/* Skip se il nome è vuoto dopo la pulizia */
-		if (strlen(name) == 0)
-			continue;
+		if (strlen(name) > 0) {
+			char *e_name = json_escape_string(name);
+			char *e_desc = json_escape_string(desc_clean);
 
-		/* Escaping dei caratteri che rompono il JSON */
-		char e_name[128], e_desc[512];
-		json_escape(e_name, name, sizeof(e_name));
-		json_escape(e_desc, desc, sizeof(e_desc));
+			int written =
+			    snprintf(json + len, MAX_JSON_SIZE - len,
+				     "%s{\"name\":\"%s\",\"desc\":\"%s\"}",
+				     first ? "" : ",", e_name, e_desc);
 
-		int written = snprintf(json + len, MAX_JSON_SIZE - len,
-				       "%s{\"name\":\"%s\",\"desc\":\"%s\"}",
-				       first ? "" : ",", e_name, e_desc);
+			if (written > 0 &&
+			    (size_t)written < MAX_JSON_SIZE - len) {
+				len += written;
+				first = 0;
+				count++;
+			}
 
-		if (written < 0 || (size_t)written >= MAX_JSON_SIZE - len) {
-			fprintf(stderr, "Warning: JSON entry truncated\n");
-			break;
+			free(e_name);
+			free(e_desc);
 		}
 
-		len += written;
-		first = 0;
-		count++;
+		free(name);
+		free(desc_clean);
+		line = strtok(NULL, "\n");
 	}
 
-	/* Chiusura JSON - sempre garantita */
-	size_t remaining = MAX_JSON_SIZE - len;
-	if (remaining > 3) {
-		snprintf(json + len, remaining, "]}");
-	} else {
-		/* Se non c'è spazio, tronca e chiudi comunque */
-		json[MAX_JSON_SIZE - 3] = ']';
-		json[MAX_JSON_SIZE - 2] = '}';
-		json[MAX_JSON_SIZE - 1] = '\0';
-	}
+	snprintf(json + len, MAX_JSON_SIZE - len, "]}");
 
-	/* CLEANUP GARANTITO */
-	int status = pclose(fp);
-	if (status == -1) {
-		fprintf(stderr, "Warning: pclose failed (errno=%d)\n", errno);
-	}
-
+	free(output_copy);
+	free(output);
 	return json;
 }
 
-/*
- * Versione migliorata con timeout e controllo dimensione output
- */
 char *
 man_render_page(const char *area, const char *section, const char *name,
 		const char *format)
@@ -326,13 +230,13 @@ man_render_page(const char *area, const char *section, const char *name,
 		return NULL;
 	}
 
-	char s_clean[16], n_clean[64];
+	char s_clean[16];
 	strlcpy(s_clean, section, sizeof(s_clean));
-	strlcpy(n_clean, name, sizeof(n_clean));
-	sanitize(s_clean);
-	sanitize(n_clean);
+	sanitize_string(s_clean); // OK per la sezione
 
-	/* Validazione area */
+	/* NON sanitizzare il nome del comando! */
+	const char *n_clean = name; // Usa il nome originale
+
 	const char *man_path = "/usr/share/man";
 	if (strcmp(area, "packages") == 0) {
 		man_path = "/usr/local/man";
@@ -341,7 +245,13 @@ man_render_page(const char *area, const char *section, const char *name,
 		return NULL;
 	}
 
-	/* Determina formato mandoc */
+	/* Usa il nome originale per la verifica */
+	if (!verify_man_page(man_path, s_clean, n_clean)) {
+		fprintf(stderr, "Man page not found: %s(%s) in %s\n", n_clean,
+			s_clean, area);
+		return NULL;
+	}
+
 	const char *m_fmt = "html";
 	if (strcmp(format, "md") == 0) {
 		m_fmt = "markdown";
@@ -353,22 +263,282 @@ man_render_page(const char *area, const char *section, const char *name,
 	}
 
 	char cmd[512];
-	/*
-	 * Aggiungiamo timeout di 30 secondi per prevenire freeze
-	 * su pagine man complesse o PDF generation lenta
-	 */
 	snprintf(cmd, sizeof(cmd),
 		 "timeout 30 man -M %s -S %s -T %s %s 2>/dev/null", man_path,
-		 s_clean, m_fmt, n_clean);
+		 s_clean, m_fmt, n_clean); // n_clean NON sanitizzato!
 
-	char *output = read_command_output(cmd, MAX_OUTPUT_SIZE);
+	return safe_popen_read(cmd, MAX_OUTPUT_SIZE);
+}
 
-	if (!output) {
-		fprintf(stderr, "Failed to render man page: %s(%s) format=%s\n",
-			n_clean, s_clean, format);
+// char *
+// man_render_page(const char *area, const char *section, const char *name,
+// const char *format)
+// {
+// 	if (!area || !section || !name || !format) {
+// 		return NULL;
+// 	}
+//
+// 	char s_clean[16], n_clean[64];
+// 	strlcpy(s_clean, section, sizeof(s_clean));
+// 	strlcpy(n_clean, name, sizeof(n_clean));
+// 	sanitize_string(s_clean);
+// 	sanitize_string(n_clean);
+//
+// 	const char *man_path = "/usr/share/man";
+// 	if (strcmp(area, "packages") == 0) {
+// 		man_path = "/usr/local/man";
+// 	} else if (strcmp(area, "system") != 0) {
+// 		fprintf(stderr, "Invalid area: %s\n", area);
+// 		return NULL;
+// 	}
+//
+// 	if (!verify_man_page(man_path, s_clean, n_clean)) {
+// 		fprintf(stderr, "Man page not found: %s(%s) in %s\n",
+// 				n_clean, s_clean, area);
+// 		return NULL;
+// 	}
+//
+// 	const char *m_fmt = "html";
+// 	if (strcmp(format, "md") == 0) {
+// 		m_fmt = "markdown";
+// 	} else if (strcmp(format, "pdf") == 0) {
+// 		m_fmt = "pdf";
+// 	} else if (strcmp(format, "html") != 0) {
+// 		fprintf(stderr, "Invalid format: %s\n", format);
+// 		return NULL;
+// 	}
+//
+// 	char cmd[512];
+// 	snprintf(cmd, sizeof(cmd),
+// 			 "timeout 30 man -M %s -S %s -T %s %s 2>/dev/null",
+// 		  man_path, s_clean, m_fmt, n_clean);
+//
+// 	return safe_popen_read(cmd, MAX_OUTPUT_SIZE);
+// }
+
+char *
+man_get_page_metadata_json(const char *area, const char *section,
+			   const char *name)
+{
+	if (!area || !section || !name) {
+		return strdup("{\"error\":\"Missing parameters\"}");
 	}
 
-	return output;
+	char s_clean[16], a_clean[16];
+	strlcpy(a_clean, area, sizeof(a_clean));
+	strlcpy(s_clean, section, sizeof(s_clean));
+	sanitize_string(a_clean);
+	sanitize_string(s_clean);
+
+	/* VERIFICA CHE LA PAGINA ESISTA DAVVERO IN QUEST'AREA */
+	const char *man_path = (strcmp(area, "packages") == 0)
+				   ? "/usr/local/man"
+				   : "/usr/share/man";
+
+	if (!verify_man_page(man_path, s_clean, name)) {
+		char *json = malloc(256);
+		snprintf(json, 256,
+			 "{\"error\":\"Man page %s(%s) not found in %s\"}",
+			 name, s_clean, area);
+		return json;
+	}
+
+	char *json = malloc(2048);
+	if (!json) {
+		return strdup("{\"error\":\"Out of memory\"}");
+	}
+
+	char *e_name = json_escape_string(name);
+
+	snprintf(json, 2048,
+		 "{\"area\":\"%s\",\"section\":\"%s\",\"name\":\"%s\","
+		 "\"formats\":[\"html\",\"md\",\"pdf\"],"
+		 "\"links\":{"
+		 "\"html\":\"/man/%s/%s/%s\","
+		 "\"md\":\"/man/%s/%s/%s.md\","
+		 "\"pdf\":\"/man/%s/%s/%s.pdf\""
+		 "}}",
+		 a_clean, s_clean, e_name, a_clean, s_clean, e_name, a_clean,
+		 s_clean, e_name, a_clean, s_clean, e_name);
+
+	free(e_name);
+	return json;
+}
+
+// char *
+// man_get_page_metadata_json(const char *area, const char *section, const char
+// *name)
+// {
+// 	if (!area || !section || !name) {
+// 		return strdup("{\"error\":\"Missing parameters\"}");
+// 	}
+//
+// 	char s_clean[16], n_clean[64], a_clean[16];
+// 	strlcpy(a_clean, area, sizeof(a_clean));
+// 	strlcpy(s_clean, section, sizeof(s_clean));
+// 	strlcpy(n_clean, name, sizeof(n_clean));
+// 	sanitize_string(a_clean);
+// 	sanitize_string(s_clean);
+// 	sanitize_string(n_clean);
+//
+// 	char *json = malloc(2048);
+// 	if (!json) {
+// 		return strdup("{\"error\":\"Out of memory\"}");
+// 	}
+//
+// 	snprintf(json, 2048,
+// 			 "{\"area\":\"%s\",\"section\":\"%s\",\"name\":\"%s\",\"formats\":[\"html\",\"md\",\"pdf\"],"
+// 			 "\"links\":{"
+// 			 "\"html\":\"/man/%s/%s/%s\","
+// 			 "\"md\":\"/man/%s/%s/%s.md\","
+// 			 "\"pdf\":\"/man/%s/%s/%s.pdf\""
+// 			 "}}",
+// 		  a_clean, s_clean, n_clean,
+// 		  a_clean, s_clean, n_clean,
+// 		  a_clean, s_clean, n_clean,
+// 		  a_clean, s_clean, n_clean);
+//
+// 	return json;
+// }
+
+char *
+man_search_json(const char *query)
+{
+	if (!query || strlen(query) == 0) {
+		return strdup("{\"error\":\"Empty query\",\"results\":[]}");
+	}
+
+	/* OpenBSD: whatis NON restituisce il path, quindi dobbiamo verificare
+	 * noi */
+	char cmd[512];
+	snprintf(cmd, sizeof(cmd), "whatis -M %s %s 2>/dev/null | head -n 50",
+		 ALL_MAN_PATHS, query);
+
+	char *output = safe_popen_read(cmd, MAX_JSON_SIZE / 2);
+
+	if (!output) {
+		/* Fallback: apropos con match esatto */
+		snprintf(cmd, sizeof(cmd),
+			 "apropos -M %s '^%s$' 2>/dev/null | head -n 50",
+			 ALL_MAN_PATHS, query);
+		output = safe_popen_read(cmd, MAX_JSON_SIZE / 2);
+
+		if (!output) {
+			char *json = malloc(256);
+			snprintf(json, 256, "{\"query\":\"%s\",\"results\":[]}",
+				 query);
+			return json;
+		}
+	}
+
+	char *json = malloc(MAX_JSON_SIZE);
+	if (!json) {
+		free(output);
+		return strdup("{\"error\":\"Out of memory\",\"results\":[]}");
+	}
+
+	size_t len = snprintf(json, MAX_JSON_SIZE,
+			      "{\"query\":\"%s\",\"results\":[", query);
+
+	char *line = strtok(output, "\n");
+	int first = 1;
+	int count = 0;
+	const int MAX_RESULTS = 50;
+
+	while (line && count < MAX_RESULTS && len < MAX_JSON_SIZE - 1024) {
+		if (strlen(line) == 0) {
+			line = strtok(NULL, "\n");
+			continue;
+		}
+
+		/* Parsing: comando(sezione) - descrizione */
+		char *open_paren = strchr(line, '(');
+		if (!open_paren) {
+			line = strtok(NULL, "\n");
+			continue;
+		}
+
+		/* Nome = tutto prima della parentesi */
+		size_t name_len = open_paren - line;
+		char *name = malloc(name_len + 1);
+		memcpy(name, line, name_len);
+		name[name_len] = '\0';
+
+		/* Pulisci nome (rimuovi spazi finali) */
+		char *end = name + name_len - 1;
+		while (end > name &&
+		       (*end == ' ' || *end == '\t' || *end == '\r')) {
+			*end = '\0';
+			end--;
+		}
+
+		/* Sezione = dentro le parentesi */
+		char *close_paren = strchr(open_paren, ')');
+		if (!close_paren) {
+			free(name);
+			line = strtok(NULL, "\n");
+			continue;
+		}
+
+		size_t sec_len = close_paren - open_paren - 1;
+		char *section = malloc(sec_len + 1);
+		memcpy(section, open_paren + 1, sec_len);
+		section[sec_len] = '\0';
+
+		/* Pulisci sezione (rimuovi spazi) */
+		end = section + sec_len - 1;
+		while (end > section &&
+		       (*end == ' ' || *end == '\t' || *end == '\r')) {
+			*end = '\0';
+			end--;
+		}
+
+		/* Descrizione = dopo " - " */
+		char *desc = strstr(line, " - ");
+		if (desc) {
+			desc += 3;
+		} else {
+			desc = "No description available";
+		}
+
+		char *desc_clean = strdup(desc);
+		desc_clean[strcspn(desc_clean, "\r\n")] = 0;
+
+		/* VERIFICA REALE DELL'AREA - questo è fondamentale! */
+		const char *area = determine_man_area(name, section);
+
+		if (!first) {
+			len += snprintf(json + len, MAX_JSON_SIZE - len, ",");
+		}
+
+		char *e_name = json_escape_string(name);
+		char *e_desc = json_escape_string(desc_clean);
+		char *e_sec = json_escape_string(section);
+
+		int written = snprintf(json + len, MAX_JSON_SIZE - len,
+				       "{\"name\":\"%s\",\"section\":\"%s\","
+				       "\"desc\":\"%s\",\"area\":\"%s\"}",
+				       e_name, e_sec, e_desc, area);
+
+		if (written > 0 && (size_t)written < MAX_JSON_SIZE - len) {
+			len += written;
+			first = 0;
+			count++;
+		}
+
+		free(e_name);
+		free(e_desc);
+		free(e_sec);
+		free(name);
+		free(section);
+		free(desc_clean);
+		line = strtok(NULL, "\n");
+	}
+
+	snprintf(json + len, MAX_JSON_SIZE - len, "]}");
+
+	free(output);
+	return json;
 }
 
 /* --- HTTP Handlers --- */
@@ -386,54 +556,41 @@ man_render_handler(void *cls, struct MHD_Connection *connection,
 	(void)upload_data_size;
 	(void)con_cls;
 
-	/* Parse URL: /man/area/section/name[.format] */
 	const char *path = url + strlen("/man/");
-
 	char area[16] = {0}, section[16] = {0}, name[64] = {0},
 	     format[16] = "html";
 	const char *c_type = "text/html; charset=utf-8";
 
-	/* Extract area */
 	const char *slash1 = strchr(path, '/');
 	if (!slash1) {
-		const char *err =
-		    "Invalid URL format. Expected: /man/area/section/name";
-		struct MHD_Response *res = MHD_create_response_from_buffer(
-		    strlen(err), (void *)err, MHD_RESPMEM_PERSISTENT);
-		int ret =
-		    MHD_queue_response(connection, MHD_HTTP_BAD_REQUEST, res);
-		MHD_destroy_response(res);
-		return ret;
+		return http_queue_400(
+		    connection,
+		    "Invalid URL format. Expected: /man/area/section/name");
 	}
 
 	size_t area_len = slash1 - path;
 	if (area_len >= sizeof(area))
 		return MHD_NO;
 	memcpy(area, path, area_len);
+	area[area_len] = '\0';
 
-	/* Validate area */
 	if (strcmp(area, "system") != 0 && strcmp(area, "packages") != 0) {
-		const char *err = "Invalid area. Use 'system' or 'packages'";
-		struct MHD_Response *res = MHD_create_response_from_buffer(
-		    strlen(err), (void *)err, MHD_RESPMEM_PERSISTENT);
-		int ret =
-		    MHD_queue_response(connection, MHD_HTTP_BAD_REQUEST, res);
-		MHD_destroy_response(res);
-		return ret;
+		return http_queue_400(
+		    connection, "Invalid area. Use 'system' or 'packages'");
 	}
 
-	/* Extract section */
 	const char *rest = slash1 + 1;
 	const char *slash2 = strchr(rest, '/');
-	if (!slash2)
-		return MHD_NO;
+	if (!slash2) {
+		return http_queue_400(connection, "Missing section");
+	}
 
 	size_t sec_len = slash2 - rest;
 	if (sec_len >= sizeof(section))
 		sec_len = sizeof(section) - 1;
 	memcpy(section, rest, sec_len);
+	section[sec_len] = '\0';
 
-	/* Extract name and format */
 	const char *name_ptr = slash2 + 1;
 	const char *dot = strrchr(name_ptr, '.');
 
@@ -442,44 +599,36 @@ man_render_handler(void *cls, struct MHD_Connection *connection,
 		if (name_len >= sizeof(name))
 			name_len = sizeof(name) - 1;
 		memcpy(name, name_ptr, name_len);
+		name[name_len] = '\0';
+
+		/* NON sanitizzare il nome qui! */
 
 		if (strcmp(dot, ".md") == 0) {
 			strlcpy(format, "md", sizeof(format));
-			c_type = "text/plain; charset=utf-8";
+			c_type = "text/markdown; charset=utf-8";
 		} else if (strcmp(dot, ".pdf") == 0) {
 			strlcpy(format, "pdf", sizeof(format));
 			c_type = "application/pdf";
 		}
 	} else {
 		strlcpy(name, name_ptr, sizeof(name));
+		/* NON sanitizzare! */
 	}
 
-	/* Render la pagina */
 	char *output = man_render_page(area, section, name, format);
-
 	if (!output) {
-		const char *err = "Man page not found or rendering failed";
-		struct MHD_Response *res = MHD_create_response_from_buffer(
-		    strlen(err), (void *)err, MHD_RESPMEM_PERSISTENT);
-		int ret =
-		    MHD_queue_response(connection, MHD_HTTP_NOT_FOUND, res);
-		MHD_destroy_response(res);
-		return ret;
+		return http_queue_404(connection, url);
 	}
 
 	struct MHD_Response *res = MHD_create_response_from_buffer(
 	    strlen(output), output, MHD_RESPMEM_MUST_FREE);
 	MHD_add_response_header(res, "Content-Type", c_type);
-
-	/* Aggiungi cache header per ridurre carico */
 	MHD_add_response_header(res, "Cache-Control", "public, max-age=3600");
 
 	int ret = MHD_queue_response(connection, MHD_HTTP_OK, res);
 	MHD_destroy_response(res);
 	return ret;
 }
-
-/* --- HTTP Handlers per libmicrohttpd --- */
 
 int
 man_api_handler(void *cls, struct MHD_Connection *connection, const char *url,
@@ -497,7 +646,7 @@ man_api_handler(void *cls, struct MHD_Connection *connection, const char *url,
 	char *json = NULL;
 	const char *path = url + strlen("/api/man");
 
-	/* Routing interno all'API */
+	/* /api/man/search?q=query */
 	if (strncmp(path, "/search", 7) == 0) {
 		const char *q = MHD_lookup_connection_value(
 		    connection, MHD_GET_ARGUMENT_KIND, "q");
@@ -507,50 +656,52 @@ man_api_handler(void *cls, struct MHD_Connection *connection, const char *url,
 			json = strdup("{\"results\":[],\"error\":\"Missing or "
 				      "empty query parameter\"}");
 		}
-	} else if (*path == '\0' || strcmp(path, "/") == 0) {
-		/* GET /api/man - lista entrambe le aree */
+	}
+	/* /api/man/ */
+	else if (*path == '\0' || strcmp(path, "/") == 0) {
 		json = man_get_sections_json();
-	} else {
-		if (*path == '/')
-			path++;
+	}
+	/* /api/man/area/section or /api/man/area/section/name */
+	else {
+		/* Skip leading slash */
+		const char *rest = (*path == '/') ? path + 1 : path;
 
-		/* Parse: area/section o area/section/name */
-		char area[16] = {0};
-		char section[16] = {0};
-
-		const char *slash1 = strchr(path, '/');
+		/* Parse area - everything before first slash */
+		const char *slash1 = strchr(rest, '/');
 		if (!slash1) {
-			/* Solo area, non supportato - errore */
 			json = strdup("{\"error\":\"Invalid path. Use "
 				      "/api/man/area/section\"}");
 		} else {
-			/* Estrai area */
-			size_t area_len = slash1 - path;
+			char area[16] = {0};
+			size_t area_len = slash1 - rest;
 			if (area_len >= sizeof(area))
 				area_len = sizeof(area) - 1;
-			memcpy(area, path, area_len);
+			memcpy(area, rest, area_len);
+			area[area_len] = '\0';
 
-			/* Valida area */
+			/* Validate area */
 			if (strcmp(area, "system") != 0 &&
 			    strcmp(area, "packages") != 0) {
 				json = strdup("{\"error\":\"Invalid area. Use "
 					      "'system' or 'packages'\"}");
 			} else {
-				const char *rest = slash1 + 1;
-				const char *slash2 = strchr(rest, '/');
+				const char *remaining = slash1 + 1;
+				const char *slash2 = strchr(remaining, '/');
 
 				if (!slash2) {
-					/* GET /api/man/area/section - lista
-					 * pagine */
-					json = man_get_section_pages_json(area,
-									  rest);
+					/* /api/man/area/section - list all
+					 * pages in section */
+					json = man_get_section_pages_json(
+					    area, remaining);
 				} else {
-					/* GET /api/man/area/section/name -
+					/* /api/man/area/section/name - get page
 					 * metadata */
-					size_t sec_len = slash2 - rest;
+					char section[16] = {0};
+					size_t sec_len = slash2 - remaining;
 					if (sec_len >= sizeof(section))
 						sec_len = sizeof(section) - 1;
-					memcpy(section, rest, sec_len);
+					memcpy(section, remaining, sec_len);
+					section[sec_len] = '\0';
 
 					const char *name = slash2 + 1;
 					json = man_get_page_metadata_json(
@@ -560,7 +711,6 @@ man_api_handler(void *cls, struct MHD_Connection *connection, const char *url,
 		}
 	}
 
-	/* Se json è ancora NULL, c'è stato un errore interno */
 	if (!json) {
 		json = strdup("{\"error\":\"Internal server error\"}");
 	}
@@ -569,186 +719,9 @@ man_api_handler(void *cls, struct MHD_Connection *connection, const char *url,
 	    strlen(json), json, MHD_RESPMEM_MUST_FREE);
 	MHD_add_response_header(res, "Content-Type",
 				"application/json; charset=utf-8");
-
-	/* CORS headers per API */
 	MHD_add_response_header(res, "Access-Control-Allow-Origin", "*");
 
 	int ret = MHD_queue_response(connection, MHD_HTTP_OK, res);
 	MHD_destroy_response(res);
 	return ret;
-}
-
-/*
- * Genera i metadata JSON per una specifica pagina,
- * includendo i link ai vari formati disponibili.
- */
-char *
-man_get_page_metadata_json(const char *area, const char *section,
-			   const char *name)
-{
-	if (!area || !section || !name) {
-		return strdup("{\"error\":\"Missing parameters\"}");
-	}
-
-	char s_clean[16], n_clean[64], a_clean[16];
-	strlcpy(a_clean, area, sizeof(a_clean));
-	strlcpy(s_clean, section, sizeof(s_clean));
-	strlcpy(n_clean, name, sizeof(n_clean));
-	sanitize(a_clean);
-	sanitize(s_clean);
-	sanitize(n_clean);
-
-	char *json = malloc(2048);
-	if (!json) {
-		return strdup("{\"error\":\"Out of memory\"}");
-	}
-
-	snprintf(json, 2048,
-		 "{\"area\":\"%s\",\"section\":\"%s\",\"name\":\"%s\","
-		 "\"formats\":[\"html\",\"md\",\"pdf\"],"
-		 "\"links\":{"
-		 "\"html\":\"/man/%s/%s/%s\","
-		 "\"md\":\"/man/%s/%s/%s.md\","
-		 "\"pdf\":\"/man/%s/%s/%s.pdf\""
-		 "}}",
-		 a_clean, s_clean, n_clean, a_clean, s_clean, n_clean, a_clean,
-		 s_clean, n_clean, a_clean, s_clean, n_clean);
-
-	return json;
-}
-
-/*
- * Versione migliorata di man_search_json con:
- * - Gestione errori completa
- * - Cleanup garantito
- * - Limiti di risultati
- */
-char *
-man_search_json(const char *query)
-{
-	if (!query || strlen(query) == 0) {
-		return strdup("{\"error\":\"Empty query\",\"results\":[]}");
-	}
-
-	char q_clean[64];
-	strlcpy(q_clean, query, sizeof(q_clean));
-	sanitize(q_clean);
-
-	/* Se dopo sanitizzazione la query è vuota, ritorna errore */
-	if (strlen(q_clean) == 0) {
-		return strdup("{\"error\":\"Invalid query after "
-			      "sanitization\",\"results\":[]}");
-	}
-
-	char cmd[512];
-	/* Cerchiamo in tutte le sezioni e descrizioni, limitiamo a 50 risultati
-	 */
-	snprintf(cmd, sizeof(cmd), "apropos -M %s %s 2>/dev/null | head -n 50",
-		 ALL_MAN_PATHS, q_clean);
-
-	FILE *fp = popen(cmd, "r");
-	if (!fp) {
-		char *err = malloc(128);
-		snprintf(
-		    err, 128,
-		    "{\"error\":\"Search failed\",\"errno\":%d,\"results\":[]}",
-		    errno);
-		return err;
-	}
-
-	char *json = malloc(MAX_JSON_SIZE);
-	if (!json) {
-		pclose(fp);
-		return strdup("{\"error\":\"Out of memory\",\"results\":[]}");
-	}
-
-	size_t len = snprintf(json, MAX_JSON_SIZE,
-			      "{\"query\":\"%s\",\"results\":[", q_clean);
-
-	char line[1024];
-	int first = 1;
-	int count = 0;
-	const int MAX_RESULTS = 50;
-
-	while (fgets(line, sizeof(line), fp) && count < MAX_RESULTS) {
-		/* Controllo buffer overflow */
-		if (len > MAX_JSON_SIZE - 1024) {
-			fprintf(stderr, "Warning: search results truncated\n");
-			break;
-		}
-
-		char *name = strtok(line, "(");
-		char *section = strtok(NULL, ")");
-		char *rest = strtok(NULL, "");
-		char *desc = rest ? strstr(rest, "- ") : NULL;
-		if (desc)
-			desc += 2;
-		else
-			desc = "";
-
-		if (!name || !section)
-			continue;
-
-		/* Determina l'area basandosi sul path
-		 * Questo è un'approssimazione - apropos non dice il path esatto
-		 */
-		const char *area = "system"; // Default
-
-		/* Pulizia nome e sezione */
-		name[strcspn(name, " \t\n\r")] = 0;
-		section[strcspn(section, " \t\n\r")] = 0;
-		desc[strcspn(desc, "\r\n")] = 0;
-
-		/* Skip entry vuote */
-		if (strlen(name) == 0 || strlen(section) == 0)
-			continue;
-
-		if (!first) {
-			int written =
-			    snprintf(json + len, MAX_JSON_SIZE - len, ",");
-			if (written < 0)
-				break;
-			len += written;
-		}
-
-		char e_name[128], e_desc[512], e_sec[16];
-		json_escape(e_name, name, sizeof(e_name));
-		json_escape(e_desc, desc, sizeof(e_desc));
-		json_escape(e_sec, section, sizeof(e_sec));
-
-		int written = snprintf(json + len, MAX_JSON_SIZE - len,
-				       "{\"name\":\"%s\",\"section\":\"%s\","
-				       "\"desc\":\"%s\",\"area\":\"%s\"}",
-				       e_name, e_sec, e_desc, area);
-
-		if (written < 0 || (size_t)written >= MAX_JSON_SIZE - len) {
-			fprintf(stderr,
-				"Warning: search result entry truncated\n");
-			break;
-		}
-
-		len += written;
-		first = 0;
-		count++;
-	}
-
-	/* Chiusura JSON garantita */
-	size_t remaining = MAX_JSON_SIZE - len;
-	if (remaining > 3) {
-		snprintf(json + len, remaining, "]}");
-	} else {
-		json[MAX_JSON_SIZE - 3] = ']';
-		json[MAX_JSON_SIZE - 2] = '}';
-		json[MAX_JSON_SIZE - 1] = '\0';
-	}
-
-	/* CLEANUP GARANTITO */
-	int status = pclose(fp);
-	if (status == -1) {
-		fprintf(stderr,
-			"Warning: pclose failed for search (errno=%d)\n",
-			errno);
-	}
-
-	return json;
 }

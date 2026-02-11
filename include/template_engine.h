@@ -6,10 +6,10 @@
 #include <microhttpd.h>
 
 struct template_data {
-    const char *title;            /* Page Title (mandatory) */
-    const char *page_content;     /* Main content file (mandatory) */
-    const char *extra_head_file;  /* File for extra_head (optional) */
-    const char *extra_js_file;    /* File for extra_js (optional) */
+	const char *title;	     /* Page Title (mandatory) */
+	const char *page_content;    /* Main content file (mandatory) */
+	const char *extra_head_file; /* File for extra_head (optional) */
+	const char *extra_js_file;   /* File for extra_js (optional) */
 };
 
 /* Template engine functions */

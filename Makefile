@@ -10,14 +10,16 @@ SRCS=      ${SRCDIR}/main.c \
            ${SRCDIR}/routes.c \
            ${SRCDIR}/template_engine.c \
            ${SRCDIR}/metrics.c \
-           ${SRCDIR}/man.c
+           ${SRCDIR}/man.c \
+           ${SRCDIR}/http_utils.c
 
 # Object files (placed in build directory)
 OBJS=      ${BUILDDIR}/main.o \
            ${BUILDDIR}/routes.o \
            ${BUILDDIR}/template_engine.o \
            ${BUILDDIR}/metrics.o \
-           ${BUILDDIR}/man.o
+           ${BUILDDIR}/man.o \
+           ${BUILDDIR}/http_utils.o
 
 CC?=       cc
 
@@ -34,7 +36,7 @@ CFLAGS+=   -D_DEFAULT_SOURCE -I/usr/local/include
 
 # LDFLAGS: Linker options
 LDFLAGS+=  -Wl,-z,relro,-z,now -fno-plt -L/usr/local/lib
-LDADD=     -Wl,-rpath,/usr/local/lib -lmicrohttpd -lssl -lcrypto -lz
+LDADD=     -Wl,-rpath,/usr/local/lib -lmicrohttpd -lm -lssl -lcrypto -lz
 
 # LDFLAGS+= -Wl,-z,relro,-z,now -fno-plt -L/usr/local/lib
 # LDADD = -Wl,-rpath,/usr/local/lib -lmicrohttpd -lsqlite3 -lssl -lcrypto -lz
@@ -67,6 +69,10 @@ clean:
 	rm -f ${PROG} *.o
 
 # Compilation rules for individual objects
+${BUILDDIR}/http_utils.o: ${SRCDIR}/main.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/http_utils.c -o $@
+
 ${BUILDDIR}/main.o: ${SRCDIR}/main.c
 	@mkdir -p ${BUILDDIR}
 	${CC} ${CFLAGS} -c ${SRCDIR}/main.c -o $@
