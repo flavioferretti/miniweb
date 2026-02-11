@@ -169,6 +169,7 @@ apply_openbsd_security(void)
 	unveil("static", "r");
 	unveil("/usr/share/man", "r");
 	unveil("/usr/local/man", "r");
+	unveil("/usr/X11R6/man", "r");
 	unveil("/usr/bin/mandoc", "x");
 	unveil("/usr/bin/man", "x");
 	unveil("/usr/bin/less", "x");

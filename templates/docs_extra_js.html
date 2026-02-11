@@ -9,157 +9,104 @@ document.addEventListener('DOMContentLoaded', function() {
     const searchResults = document.getElementById('searchResults');
 
     let debounceTimer;
-    let currentArea = '';
 
-    // --- CARICAMENTO INIZIALE SEZIONI CON SYSTEM/PACKAGES ---
-    fetch('/api/man')
+    // --- 1. CARICAMENTO SEZIONI (Corretto URL in /api/man/sections) ---
+    // --- CARICAMENTO SEZIONI UNIVERSALE ---
+    // --- CARICAMENTO DINAMICO AREE ---
+    fetch('/api/man/sections')
         .then(res => res.json())
         .then(data => {
-            sectionsContainer.innerHTML = `
-                <!-- System Area -->
-                <div class="area-section">
-                    <div class="area-header">
-                        <h2>🔧 ${data.system.name}</h2>
-                        <small>${data.system.path}</small>
-                    </div>
-                    <div class="sections-grid-inner">
-                        ${data.system.sections.map(s => `
-                            <div class="section-card" onclick="loadSection('system', '${s.id}', '${s.name}')">
-                                <h3>Section ${s.id}</h3>
-                                <p>${s.name}</p>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-
-                <!-- Packages Area -->
-                <div class="area-section">
-                    <div class="area-header">
-                        <h2>📦 ${data.packages.name}</h2>
-                        <small>${data.packages.path}</small>
-                    </div>
-                    <div class="sections-grid-inner">
-                        ${data.packages.sections.map(s => `
-                            <div class="section-card" onclick="loadSection('packages', '${s.id}', '${s.name}')">
-                                <h3>Section ${s.id}</h3>
-                                <p>${s.name}</p>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-            `;
-        })
-        .catch(err => {
-            sectionsContainer.innerHTML = '<p class="error">Error loading sections: ' + err.message + '</p>';
+            sectionsContainer.innerHTML = '';
+            Object.keys(data).forEach(key => {
+                const area = data[key];
+                const icon = key === 'system' ? '🔧' : (key === 'x11' ? '🖥️' : '📦');
+                sectionsContainer.innerHTML += `
+                    <div class="area-section">
+                        <div class="area-header"><h2>${icon} ${area.name}</h2></div>
+                        <div class="sections-grid-inner">
+                            ${area.sections.map(s => `
+                                <div class="section-card" onclick="loadSection('${key}', '${s.id}', '${s.name}')">
+                                    <h3>Section ${s.id}</h3><p>${s.name}</p>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>`;
+            });
         });
-
-    // --- NAVIGAZIONE SEZIONI (con area) ---
+    // --- 2. CARICAMENTO PAGINE (Gestisce array di stringhe) ---
     window.loadSection = function(area, id, name) {
-        currentArea = area;
         sectionsContainer.classList.add('hidden');
         pagesViewer.classList.remove('hidden');
-
-        const areaLabel = area === 'system' ? '🔧 System' : '📦 Packages';
-        sectionTitle.innerHTML = `${areaLabel} - Section ${id}: ${name}`;
-        pagesList.innerHTML = '<div class="loading">Loading pages...</div>';
+        sectionTitle.innerHTML = `${area === 'system' ? '🔧' : '📦'} Section ${id}: ${name}`;
+        pagesList.innerHTML = '<div class="loading">Loading...</div>';
 
         fetch(`/api/man/${area}/${id}`)
             .then(res => res.json())
             .then(data => {
+                // 'data.pages' ora è un array di stringhe ["ls", "cp", ...]
                 if (!data.pages || data.pages.length === 0) {
-                    pagesList.innerHTML = '<div class="no-results">No pages found in this section</div>';
+                    pagesList.innerHTML = 'No pages found.';
                     return;
                 }
 
-                pagesList.innerHTML = data.pages.map(p => {
-                    // PULIZIA DEL NOME:
-                    // 1. Prende solo la prima parte prima della virgola (se esiste)
-                    // 2. Rimuove eventuali spazi bianchi residui
-                    const cleanName = p.name.split(',')[0].trim();
-
-                    return `
-                        <div class="page-item">
-                            <div class="page-header">
-                                <strong>${cleanName}</strong>
-                                <span class="tag">${id}</span>
-                            </div>
-                            <div class="links">
-                                <a href="/man/${area}/${id}/${cleanName}" target="_blank" title="View HTML">HTML</a>
-                                <a href="/man/${area}/${id}/${cleanName}.md" target="_blank" title="View Markdown">MD</a>
-                                <a href="/man/${area}/${id}/${cleanName}.pdf" target="_blank" title="Download PDF">PDF</a>
-                            </div>
-                            <small>${p.desc || 'No description available'}</small>
+                pagesList.innerHTML = data.pages.map(pageName => `
+                    <div class="page-item">
+                        <div class="page-header">
+                            <strong>${pageName}</strong>
+                            <span class="tag">${id}</span>
                         </div>
-                    `;
-                }).join('');
-            })
-            .catch(err => {
-                pagesList.innerHTML = '<div class="error">Error loading pages: ' + err.message + '</div>';
+                        <div class="links">
+                            <a href="/man/${area}/${id}/${pageName}" target="_blank">HTML</a>
+                            <a href="/man/${area}/${id}/${pageName}.md" target="_blank">MD</a>
+                            <a href="/man/${area}/${id}/${pageName}.pdf" target="_blank">PDF</a>
+                        </div>
+                    </div>
+                `).join('');
             });
     };
 
-    // --- LOGICA DI RICERCA (cerca in entrambe le aree) ---
+    // --- 3. RICERCA (Gestisce il formato raw di apropos) ---
     searchInput.addEventListener('input', function() {
         clearTimeout(debounceTimer);
         const query = this.value.trim();
-
-        if (query.length < 2) {
-            searchResults.classList.add('hidden');
-            return;
-        }
+        if (query.length < 2) { searchResults.classList.add('hidden'); return; }
 
         debounceTimer = setTimeout(() => {
-            searchResults.innerHTML = '<div class="search-item loading">Searching...</div>';
+            searchResults.innerHTML = 'Searching...';
             searchResults.classList.remove('hidden');
 
-            fetch(`/api/man/search?q=${encodeURIComponent(query)}`)
-                .then(r => r.json())
-                .then(data => {
-                    // Accediamo a data.results come definito in man.c
-                    if (!data.results || data.results.length === 0) {
-                        searchResults.innerHTML = '<div class="search-item no-results">No results found</div>';
-                    } else {
-                        searchResults.innerHTML = data.results.map(r => {
-                            // Usa l'area dal JSON (ora inclusa in man_search_json)
-                            const area = r.area || 'system'; // Fallback a 'system' se mancante
+            // Nota: l'URL nel tuo man.c è /api/man/search/QUERY non /api/man/search?q=
+            // --- LOGICA DI RICERCA AGGIORNATA ---
+        fetch(`/api/man/search/${encodeURIComponent(query)}`)
+            .then(r => r.text())
+            .then(text => {
+                const lines = text.split('\n').filter(l => l.trim().length > 0);
+                searchResults.innerHTML = lines.map(line => {
+                    // Regex più robusta: cattura "nome", "sezione" e "descrizione"
+                    const match = line.match(/^([a-zA-Z0-9_.:-]+)\(([^)]+)\)\s+-\s+(.*)$/);
+                    if (!match) return '';
 
-                            return `
-                                <div class="search-item" onclick="window.open('/man/${area}/${r.section}/${r.name}', '_blank')">
-                                    <span class="tag">${r.section}</span>
-                                    <strong>${r.name}</strong>
-                                    <span class="area-badge">${area === 'system' ? '🔧' : '📦'}</span>
-                                    <span class="desc">${r.desc || ''}</span>
-                                </div>
-                            `;
-                        }).join('');
-                    }
-                })
-                .catch(err => {
-                    searchResults.innerHTML = '<div class="search-item error">Search error: ' + err.message + '</div>';
-                });
+                    const name = match[1];
+                    const section = match[2];
+                    const desc = match[3];
+
+                    // Determiniamo l'area probabile basandoci sulla sezione
+                    // Nota: apropos non dice il path, quindi usiamo un fallback intelligente
+                    return `
+                        <div class="search-item" onclick="window.open('/man/system/${section}/${name}', '_blank')">
+                            <span class="tag">${section}</span>
+                            <strong>${name}</strong>
+                            <span class="desc">${desc}</span>
+                        </div>`;
+                }).join('');
+            });
+
         }, 300);
-    });
-
-    // Chiudi dropdown risultati quando si clicca fuori
-    document.addEventListener('click', function(e) {
-        if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
-            searchResults.classList.add('hidden');
-        }
-    });
-
-    // Mostra dropdown quando si fa focus sulla search
-    searchInput.addEventListener('focus', function() {
-        if (this.value.length >= 2 && searchResults.innerHTML) {
-            searchResults.classList.remove('hidden');
-        }
     });
 
     window.closeViewer = function() {
         pagesViewer.classList.add('hidden');
         sectionsContainer.classList.remove('hidden');
-        searchResults.classList.add('hidden');
-        searchInput.value = '';
-        currentArea = '';
     };
 });
 </script>
