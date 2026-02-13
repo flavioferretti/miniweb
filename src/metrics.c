@@ -280,18 +280,17 @@ metrics_get_top_cpu_processes(ProcessInfo *processes, int max_processes)
 	if (processes == NULL || max_processes <= 0)
 		return 0;
 
-	int mib[6] = {CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0,
-		      (int)sizeof(struct kinfo_proc), 0};
+	int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0};
 	size_t len = 0;
 
-	if (sysctl(mib, 6, NULL, &len, NULL, 0) == -1 || len == 0)
+	if (sysctl(mib, 4, NULL, &len, NULL, 0) == -1 || len == 0)
 		return 0;
 
 	struct kinfo_proc *procs = calloc(1, len);
 	if (procs == NULL)
 		return 0;
 
-	if (sysctl(mib, 6, procs, &len, NULL, 0) == -1) {
+	if (sysctl(mib, 4, procs, &len, NULL, 0) == -1) {
 		free(procs);
 		return 0;
 	}
@@ -354,17 +353,16 @@ metrics_get_top_memory_processes(ProcessInfo *processes, int max_processes)
 	if (sysctl(mib, 2, &physmem, &memlen, NULL, 0) == -1 || physmem == 0)
 		return 0;
 
-	int pmib[6] = {CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0,
-		       (int)sizeof(struct kinfo_proc), 0};
+	int pmib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0};
 	size_t len = 0;
-	if (sysctl(pmib, 6, NULL, &len, NULL, 0) == -1 || len == 0)
+	if (sysctl(pmib, 4, NULL, &len, NULL, 0) == -1 || len == 0)
 		return 0;
 
 	struct kinfo_proc *procs = calloc(1, len);
 	if (procs == NULL)
 		return 0;
 
-	if (sysctl(pmib, 6, procs, &len, NULL, 0) == -1) {
+	if (sysctl(pmib, 4, procs, &len, NULL, 0) == -1) {
 		free(procs);
 		return 0;
 	}
@@ -421,11 +419,10 @@ int
 metrics_get_process_stats(int *total, int *running, int *sleeping, int *zombie)
 {
 #ifdef __OpenBSD__
-	int mib[6] = {CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0,
-		      (int)sizeof(struct kinfo_proc), 0};
+	int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0};
 	size_t len = 0;
 
-	if (sysctl(mib, 6, NULL, &len, NULL, 0) == -1)
+	if (sysctl(mib, 4, NULL, &len, NULL, 0) == -1)
 		return -1;
 
 	if (len == 0) {
@@ -440,7 +437,7 @@ metrics_get_process_stats(int *total, int *running, int *sleeping, int *zombie)
 	if (procs == NULL)
 		return -1;
 
-	if (sysctl(mib, 6, procs, &len, NULL, 0) == -1) {
+	if (sysctl(mib, 4, procs, &len, NULL, 0) == -1) {
 		free(procs);
 		return -1;
 	}
