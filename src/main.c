@@ -167,6 +167,7 @@ parse_args(int argc, char *argv[])
 static void
 apply_openbsd_security(void)
 {
+#ifdef __OpenBSD__
 	printf("Applying OpenBSD security features...\n");
 
 	unveil("templates", "r");
@@ -176,15 +177,11 @@ apply_openbsd_security(void)
 	unveil("/usr/X11R6/man", "r");
 	unveil("/usr/bin/mandoc", "x");
 	unveil("/usr/bin/man", "x");
-	unveil("/usr/bin/less", "x");
 	unveil("/usr/bin/apropos", "x");
-	unveil("/bin/sh", "x");
-	unveil("/etc/man.conf", "r");
-
-	/* For metrics */
 	unveil("/bin/ps", "x");
 	unveil("/usr/bin/netstat", "x");
-
+	unveil("/bin/sh", "x");
+	unveil("/etc/man.conf", "r");
 	unveil(NULL, NULL);
 
 	const char *promises = "stdio rpath inet proc exec vminfo ps";
@@ -194,6 +191,10 @@ apply_openbsd_security(void)
 	} else if (config.verbose) {
 		printf("Pledge promises set: %s\n", promises);
 	}
+#else
+	if (config.verbose)
+		printf("OpenBSD security features disabled on this platform.\n");
+#endif
 }
 
 /* Main function */

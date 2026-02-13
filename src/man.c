@@ -6,6 +6,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <dirent.h>
+#include <ctype.h>
 #include <errno.h>
 
 #include "../include/man.h"
@@ -14,14 +15,42 @@
 #define MAX_JSON_SIZE (256 * 1024)
 #define MAX_OUTPUT_SIZE (2 * 1024 * 1024)
 
+
+static int
+is_valid_token(const char *s)
+{
+	if (!s || *s == '\0')
+		return 0;
+	for (const unsigned char *p = (const unsigned char *)s; *p; p++) {
+		if (!isalnum(*p) && *p != '.' && *p != '_' && *p != '-' && *p != '+')
+			return 0;
+	}
+	return 1;
+}
+
+static int
+is_valid_section(const char *section)
+{
+	if (!section || *section == '\0' || strlen(section) > 8)
+		return 0;
+	for (const unsigned char *p = (const unsigned char *)section; *p; p++) {
+		if (!isalnum(*p))
+			return 0;
+	}
+	return 1;
+}
+
 /* Risolve il path della pagina man usando 'man -w' */
 static char *
 resolve_man_path(const char *name, const char *section)
 {
-	char cmd[512];
-	snprintf(cmd, sizeof(cmd), "man -M /usr/share/man:/usr/local/man:/usr/X11R6/man -w %s %s 2>/dev/null", section, name);
+	if (!is_valid_token(name) || !is_valid_section(section))
+		return NULL;
 
-	char *path = safe_popen_read(cmd, 512);
+	char *const argv[] = {"man", "-M",
+		"/usr/share/man:/usr/local/man:/usr/X11R6/man",
+		"-w", (char *)section, (char *)name, NULL};
+	char *path = safe_popen_read_argv("/usr/bin/man", argv, 512, 5);
 	if (path) {
 		path[strcspn(path, "\r\n")] = 0;
 		if (strlen(path) == 0) {
@@ -31,6 +60,7 @@ resolve_man_path(const char *name, const char *section)
 	}
 	return path;
 }
+
 
 /* --- API JSON --- */
 char *
@@ -82,8 +112,6 @@ man_get_sections_json(void)
 	"}"
 	"}");
 }
-
-#include <dirent.h>
 
 char *
 man_get_section_pages_json(const char *area, const char *section)
@@ -168,20 +196,18 @@ man_get_page_metadata_json(const char *area, const char *section, const char *na
 char *
 man_api_search(const char *query)
 {
-	char cmd[512];
-	char sanitized[128];
-	strncpy(sanitized, query, sizeof(sanitized)-1);
-	sanitize_string(sanitized);
+	if (!is_valid_token(query))
+		return strdup("");
 
-	/* Forziamo apropos a cercare in tutti i database di sistema, X11 e local */
-	snprintf(cmd, sizeof(cmd),
-			 "apropos -M /usr/share/man:/usr/local/man:/usr/X11R6/man %s",
-		  sanitized);
+	char *const argv[] = {"apropos", "-M",
+		"/usr/share/man:/usr/local/man:/usr/X11R6/man",
+		(char *)query, NULL};
+	char *output = safe_popen_read_argv("/usr/bin/apropos", argv,
+		MAX_OUTPUT_SIZE, 5);
+	if (!output)
+		return strdup("");
 
-	char *output = safe_popen_read(cmd, MAX_OUTPUT_SIZE);
-	if (!output) return strdup("");
-
-	return output; // Il FE ora farà il parsing riga per riga
+	return output;
 }
 
 /* --- Handlers HTTP (Usano http_queue_* dal tuo http_utils.h) --- */
@@ -210,7 +236,10 @@ man_api_handler(void *cls, struct MHD_Connection *connection, const char *url,
 		if (sscanf(url, "/api/man/%15[^/]/%15[^/]/%127s", area, section, name) == 3) {
 			// Validazione area per sicurezza
 			if (strcmp(area, "system") == 0 || strcmp(area, "packages") == 0 || strcmp(area, "x11") == 0) {
-				json = man_get_page_metadata_json(area, section, name);
+				if (!is_valid_section(section) || !is_valid_token(name)) {
+				return http_queue_400(connection, "Invalid section or page name");
+			}
+			json = man_get_page_metadata_json(area, section, name);
 			} else {
 				return http_queue_400(connection, "Invalid area: use system, packages, or x11");
 			}
@@ -218,7 +247,10 @@ man_api_handler(void *cls, struct MHD_Connection *connection, const char *url,
 		/* Caso B: Elenco pagine in una sezione -> /api/man/{area}/{section} */
 		else if (sscanf(url, "/api/man/%15[^/]/%15[^/]", area, section) == 2) {
 			if (strcmp(area, "system") == 0 || strcmp(area, "packages") == 0 || strcmp(area, "x11") == 0) {
-				json = man_get_section_pages_json(area, section);
+				if (!is_valid_section(section)) {
+				return http_queue_400(connection, "Invalid section");
+			}
+			json = man_get_section_pages_json(area, section);
 			} else {
 				return http_queue_400(connection, "Invalid area: use system, packages, or x11");
 			}
@@ -260,6 +292,11 @@ man_render_handler(void *cls, struct MHD_Connection *connection, const char *url
 		return http_queue_400(connection, "Formato URL non valido. Usa /man/area/sezione/pagina");
 	}
 
+	if ((strcmp(area, "system") != 0 && strcmp(area, "packages") != 0 && strcmp(area, "x11") != 0) ||
+	    !is_valid_section(section) || !is_valid_token(page_raw)) {
+		return http_queue_400(connection, "Invalid section or page name");
+	}
+
 	const char *mime = "text/html; charset=utf-8";
 	const char *format = "html";
 	char name[128];
@@ -292,25 +329,28 @@ man_render_handler(void *cls, struct MHD_Connection *connection, const char *url
 		return http_queue_404(connection, name);
 	}
 
-	/* 3. Costruzione del comando mandoc con Fallback */
-	char cmd[512];
+	/* 3. Esecuzione di mandoc con argv sicuro */
+	char *output = NULL;
 	if (is_markdown_request) {
-		/* * Se l'utente vuole Markdown:
-		 * Tenta mandoc -Tmarkdown. Se fallisce (es. su pagine man(7)),
-		 * esegue mandoc -Tascii e pulisce l'output dai backspace (^H) con col -b.
-		 */
-		snprintf(cmd, sizeof(cmd),
-				 "mandoc -Tmarkdown %s 2>/dev/null || mandoc -Tascii %s | col -b",
-		   filepath, filepath);
+		char *const md_argv[] = {"mandoc", "-Tmarkdown", filepath, NULL};
+		output = safe_popen_read_argv("/usr/bin/mandoc", md_argv,
+			MAX_OUTPUT_SIZE, 10);
+		if (!output) {
+			char *const ascii_argv[] = {"mandoc", "-Tascii", filepath, NULL};
+			output = safe_popen_read_argv("/usr/bin/mandoc", ascii_argv,
+				MAX_OUTPUT_SIZE, 10);
+		}
 	} else {
-		/* Rendering standard: html o pdf */
-		snprintf(cmd, sizeof(cmd), "mandoc -T%s %s", format, filepath);
+		char fmt[32];
+		snprintf(fmt, sizeof(fmt), "-T%s", format);
+		char *const argv[] = {"mandoc", fmt, filepath, NULL};
+		output = safe_popen_read_argv("/usr/bin/mandoc", argv,
+			MAX_OUTPUT_SIZE, 10);
 	}
 
 	free(filepath);
 
-	/* 4. Esecuzione e lettura output */
-	char *output = safe_popen_read(cmd, MAX_OUTPUT_SIZE);
+	/* 4. Lettura output */
 	if (!output) {
 		return http_queue_500(connection, "Errore durante il rendering del manuale");
 	}

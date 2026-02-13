@@ -27,6 +27,8 @@ char *json_escape_string(const char *src);
 
 /* Command execution helper with cleanup */
 char *safe_popen_read(const char *cmd, size_t max_size);
+char *safe_popen_read_argv(const char *path, char *const argv[],
+			   size_t max_size, int timeout_seconds);
 
 /* Safe string copy with sanitization */
 void sanitize_string(char *s);

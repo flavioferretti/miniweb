@@ -5,8 +5,12 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <poll.h>
+#include <signal.h>
 #include <string.h>
 #include <sys/wait.h>
+#include <time.h>
+#include <unistd.h>
 
 /* Default error pages */
 static const char *ERROR_404_HTML =
@@ -277,64 +281,89 @@ sanitize_string(char *s)
 
 /* Safe popen read with timeout and size limit */
 char *
-safe_popen_read(const char *cmd, size_t max_size)
+safe_popen_read_argv(const char *path, char *const argv[], size_t max_size,
+			   int timeout_seconds)
 {
-	FILE *fp = popen(cmd, "r");
-	if (!fp) {
-		fprintf(stderr, "popen failed: %s (errno=%d)\n", cmd, errno);
+	int pipefd[2];
+	if (pipe(pipefd) == -1)
+		return NULL;
+
+	pid_t pid = fork();
+	if (pid == -1) {
+		close(pipefd[0]);
+		close(pipefd[1]);
 		return NULL;
 	}
 
-	size_t capacity = 16384;
-	size_t total = 0;
-	char *buffer = malloc(capacity);
+	if (pid == 0) {
+		close(pipefd[0]);
+		dup2(pipefd[1], STDOUT_FILENO);
+		dup2(pipefd[1], STDERR_FILENO);
+		close(pipefd[1]);
+		execv(path, argv);
+		_exit(127);
+	}
+
+	close(pipefd[1]);
+
+	size_t capacity = max_size > 0 ? max_size : 1;
+	char *buffer = malloc(capacity + 1);
 	if (!buffer) {
-		pclose(fp);
+		close(pipefd[0]);
+		kill(pid, SIGKILL);
+		waitpid(pid, NULL, 0);
 		return NULL;
 	}
 
-	char chunk[4096];
-	size_t n;
+	size_t total = 0;
+	time_t deadline = time(NULL) + (timeout_seconds > 0 ? timeout_seconds : 5);
+	int timed_out = 0;
 
-	while ((n = fread(chunk, 1, sizeof(chunk), fp)) > 0) {
-		if (total + n >= max_size) {
-			fprintf(stderr,
-				"Warning: output truncated at %zu bytes\n",
-				max_size);
-			while (fread(chunk, 1, sizeof(chunk), fp))
-				;
+	while (total < max_size) {
+		time_t now = time(NULL);
+		if (now >= deadline) {
+			timed_out = 1;
 			break;
 		}
-
-		if (total + n + 1 > capacity) {
-			size_t new_capacity = capacity * 2;
-			if (new_capacity > max_size)
-				new_capacity = max_size;
-
-			char *new_buf = realloc(buffer, new_capacity);
-			if (!new_buf)
-				break;
-			buffer = new_buf;
-			capacity = new_capacity;
+		int wait_ms = (int)((deadline - now) * 1000);
+		struct pollfd pfd = {.fd = pipefd[0], .events = POLLIN};
+		int pr = poll(&pfd, 1, wait_ms);
+		if (pr == 0) {
+			timed_out = 1;
+			break;
 		}
-
-		memcpy(buffer + total, chunk, n);
-		total += n;
+		if (pr < 0) {
+			if (errno == EINTR)
+				continue;
+			break;
+		}
+		if (pfd.revents & POLLIN) {
+			ssize_t n = read(pipefd[0], buffer + total, max_size - total);
+			if (n <= 0)
+				break;
+			total += (size_t)n;
+		}
+		if (pfd.revents & (POLLERR | POLLHUP))
+			break;
 	}
+
+	close(pipefd[0]);
+
+	if (timed_out)
+		kill(pid, SIGKILL);
+	waitpid(pid, NULL, 0);
 
 	buffer[total] = '\0';
-
-	int status = pclose(fp);
-	if (status == -1) {
-		fprintf(stderr, "pclose failed: %s (errno=%d)\n", cmd, errno);
+	if (timed_out || total == 0) {
 		free(buffer);
 		return NULL;
 	}
-
-	if (total == 0) {
-		free(buffer);
-		return NULL;
-	}
-
 	return buffer;
+}
+
+char *
+safe_popen_read(const char *cmd, size_t max_size)
+{
+	char *const argv[] = {"sh", "-c", (char *)cmd, NULL};
+	return safe_popen_read_argv("/bin/sh", argv, max_size, 5);
 }

@@ -15,6 +15,7 @@
 
 #include "config.h"
 #include "metrics.h"
+#include "http_utils.h"
 #include <arpa/inet.h>
 #include <errno.h>
 #include <ifaddrs.h>
@@ -69,6 +70,7 @@ metrics_get_cpu_stats(CpuStats *stats)
 int
 metrics_get_memory_stats(MemoryStats *stats)
 {
+#ifdef __OpenBSD__
 	LOG("Memory stats START");
 	int mib[2];
 	size_t len;
@@ -81,72 +83,50 @@ metrics_get_memory_stats(MemoryStats *stats)
 		LOG("  sysctl HW_PHYSMEM64 FAILED");
 		return -1;
 	}
-	LOG("  physmem OK");
 
 	struct uvmexp uvm;
 	mib[0] = CTL_VM;
 	mib[1] = VM_UVMEXP;
 	len = sizeof(uvm);
-	if (sysctl(mib, 2, &uvm, &len, NULL, 0) == -1) {
-		LOG("  sysctl VM_UVMEXP FAILED");
+	if (sysctl(mib, 2, &uvm, &len, NULL, 0) == -1)
 		return -1;
-	}
-	LOG("  uvmexp OK");
 
 	unsigned long pagesize = uvm.pagesize;
-	unsigned long free_mem = uvm.free * pagesize;
-	unsigned long active_mem = uvm.active * pagesize;
-	unsigned long inactive_mem = uvm.inactive * pagesize;
-	unsigned long wired_mem = uvm.wired * pagesize;
-
 	stats->total_mb = physmem / MB;
-	stats->free_mb = free_mem / MB;
-	stats->active_mb = active_mem / MB;
-	stats->inactive_mb = inactive_mem / MB;
-	stats->wired_mb = wired_mem / MB;
+	stats->free_mb = (uvm.free * pagesize) / MB;
+	stats->active_mb = (uvm.active * pagesize) / MB;
+	stats->inactive_mb = (uvm.inactive * pagesize) / MB;
+	stats->wired_mb = (uvm.wired * pagesize) / MB;
 	stats->cache_mb = 0;
 
-	LOG("  Getting swap info...");
-	struct swapent *swdev;
-	int nswap, rnswap;
-
-	nswap = swapctl(SWAP_NSWAP, NULL, 0);
-	LOG("  swapctl SWAP_NSWAP returned %d", nswap);
-
-	if (nswap == 0) {
+	int nswap = swapctl(SWAP_NSWAP, NULL, 0);
+	if (nswap <= 0) {
 		stats->swap_total_mb = 0;
 		stats->swap_used_mb = 0;
-	} else {
-		swdev = calloc(nswap, sizeof(*swdev));
-		if (swdev == NULL) {
-			LOG("  calloc for swap FAILED");
-			stats->swap_total_mb = 0;
-			stats->swap_used_mb = 0;
-		} else {
-			rnswap = swapctl(SWAP_STATS, swdev, nswap);
-			LOG("  swapctl SWAP_STATS returned %d", rnswap);
-
-			if (rnswap == -1) {
-				stats->swap_total_mb = 0;
-				stats->swap_used_mb = 0;
-			} else {
-				unsigned long swap_total = 0;
-				unsigned long swap_used = 0;
-
-				for (int i = 0; i < nswap; i++) {
-					swap_total += swdev[i].se_nblks;
-					swap_used += swdev[i].se_inuse;
-				}
-
-				stats->swap_total_mb = (swap_total * 512) / MB;
-				stats->swap_used_mb = (swap_used * 512) / MB;
-			}
-			free(swdev);
-		}
+		return 0;
 	}
-
-	LOG("Memory stats END");
+	struct swapent *swdev = calloc(nswap, sizeof(*swdev));
+	if (!swdev)
+		return 0;
+	int rnswap = swapctl(SWAP_STATS, swdev, nswap);
+	if (rnswap == -1) {
+		free(swdev);
+		return 0;
+	}
+	unsigned long swap_total = 0;
+	unsigned long swap_used = 0;
+	for (int i = 0; i < nswap; i++) {
+		swap_total += swdev[i].se_nblks;
+		swap_used += swdev[i].se_inuse;
+	}
+	free(swdev);
+	stats->swap_total_mb = (swap_total * 512) / MB;
+	stats->swap_used_mb = (swap_used * 512) / MB;
 	return 0;
+#else
+	memset(stats, 0, sizeof(*stats));
+	return -1;
+#endif
 }
 
 int
@@ -190,36 +170,32 @@ metrics_get_os_info(char *type, char *release, char *machine, size_t size)
 int
 metrics_get_uptime(char *uptime_str, size_t size)
 {
-	LOG("Uptime START");
+#ifdef __OpenBSD__
 	struct timeval boottime;
 	time_t now;
 	size_t len = sizeof(boottime);
 	int mib[2] = {CTL_KERN, KERN_BOOTTIME};
-
 	if (sysctl(mib, 2, &boottime, &len, NULL, 0) == -1) {
-		LOG("  sysctl KERN_BOOTTIME FAILED");
 		strlcpy(uptime_str, "unknown", size);
 		return -1;
 	}
-
 	time(&now);
 	long uptime_seconds = difftime(now, boottime.tv_sec);
-
 	long days = uptime_seconds / (60 * 60 * 24);
 	long hours = (uptime_seconds % (60 * 60 * 24)) / (60 * 60);
 	long minutes = (uptime_seconds % (60 * 60)) / 60;
 	long seconds = uptime_seconds % 60;
-
-	if (days > 0) {
+	if (days > 0)
 		snprintf(uptime_str, size, "%ld days, %ld:%02ld:%02ld", days,
-				 hours, minutes, seconds);
-	} else {
+			 hours, minutes, seconds);
+	else
 		snprintf(uptime_str, size, "%ld:%02ld:%02ld", hours, minutes,
-				 seconds);
-	}
-
-	LOG("Uptime END");
+			 seconds);
 	return 0;
+#else
+	strlcpy(uptime_str, "unsupported", size);
+	return -1;
+#endif
 }
 
 int
@@ -234,104 +210,70 @@ metrics_get_hostname(char *hostname, size_t size)
 int
 metrics_get_disk_usage(DiskInfo *disks, int max_disks)
 {
-	LOG("Disk usage START");
+#ifdef __OpenBSD__
 	struct statfs *mntbuf;
-	int mntsize, i, count = 0;
-
+	int mntsize, count = 0;
 	mntsize = getmntinfo(&mntbuf, MNT_NOWAIT);
-	LOG("  getmntinfo returned %d filesystems", mntsize);
-
-	if (mntsize == 0) {
+	if (mntsize == 0)
 		return 0;
-	}
-
-	for (i = 0; i < mntsize && count < max_disks; i++) {
+	for (int i = 0; i < mntsize && count < max_disks; i++) {
 		struct statfs *fs = &mntbuf[i];
-
 		if (strcmp(fs->f_fstypename, "tmpfs") == 0 ||
-			strcmp(fs->f_fstypename, "procfs") == 0 ||
-			strcmp(fs->f_fstypename, "devfs") == 0 ||
-			strcmp(fs->f_fstypename, "fdescfs") == 0) {
+		    strcmp(fs->f_fstypename, "procfs") == 0 ||
+		    strcmp(fs->f_fstypename, "devfs") == 0 ||
+		    strcmp(fs->f_fstypename, "fdescfs") == 0 || fs->f_blocks == 0)
 			continue;
-			}
-
-			if (fs->f_blocks == 0) {
-				continue;
-			}
-
-			DiskInfo *disk = &disks[count];
-
-			strlcpy(disk->device, fs->f_mntfromname, sizeof(disk->device));
-			strlcpy(disk->mount_point, fs->f_mntonname,
-					sizeof(disk->mount_point));
-
-			unsigned long total = fs->f_blocks * fs->f_bsize;
-			unsigned long available = fs->f_bavail * fs->f_bsize;
-			unsigned long used = total - available;
-
-			disk->total_mb = total / MB;
-			disk->used_mb = used / MB;
-
-			if (disk->total_mb > 0) {
-				disk->percent_used =
-				(int)((disk->used_mb * 100) / disk->total_mb);
-			} else {
-				disk->percent_used = 0;
-			}
-
-			count++;
+		DiskInfo *disk = &disks[count++];
+		strlcpy(disk->device, fs->f_mntfromname, sizeof(disk->device));
+		strlcpy(disk->mount_point, fs->f_mntonname, sizeof(disk->mount_point));
+		unsigned long total = fs->f_blocks * fs->f_bsize;
+		unsigned long available = fs->f_bavail * fs->f_bsize;
+		disk->total_mb = total / MB;
+		disk->used_mb = (total - available) / MB;
+		disk->percent_used = disk->total_mb > 0 ?
+			(int)((disk->used_mb * 100) / disk->total_mb) : 0;
 	}
-
-	LOG("Disk usage END (found %d disks)", count);
 	return count;
+#else
+	(void)disks; (void)max_disks;
+	return 0;
+#endif
 }
 
 int
 metrics_get_top_ports(PortInfo *ports, int max_ports)
 {
-	LOG("Top ports START - calling popen(netstat)...");
-	fflush(stderr);
-
-	FILE *fp;
-	char buffer[512];
-	int port_count = 0;
-
-	fp = popen("netstat -an -f inet -p tcp 2>/dev/null | grep LISTEN", "r");
-	if (fp == NULL) {
-		LOG("  popen FAILED! errno=%d", errno);
+	char *const argv[] = {"netstat", "-an", "-f", "inet", "-p", "tcp", NULL};
+	char *output = safe_popen_read_argv("/usr/bin/netstat", argv, 128 * 1024, 5);
+	if (!output)
 		return 0;
+
+	int port_count = 0;
+	char *saveptr = NULL;
+	for (char *line = strtok_r(output, "\n", &saveptr);
+	     line && port_count < max_ports;
+	     line = strtok_r(NULL, "\n", &saveptr)) {
+		if (!strstr(line, "LISTEN"))
+			continue;
+		char proto[16], recv_q[16], send_q[16], local_addr[128], foreign_addr[128], state[32];
+		if (sscanf(line, "%15s %15s %15s %127s %127s %31s", proto, recv_q,
+			   send_q, local_addr, foreign_addr, state) != 6)
+			continue;
+		char *last_dot = strrchr(local_addr, '.');
+		if (!last_dot)
+			continue;
+		int port = atoi(last_dot + 1);
+		if (port <= 0 || port >= 65536)
+			continue;
+		ports[port_count].port = port;
+		strlcpy(ports[port_count].protocol, proto,
+			sizeof(ports[port_count].protocol));
+		strlcpy(ports[port_count].state, state,
+			sizeof(ports[port_count].state));
+		ports[port_count].connection_count = 1;
+		port_count++;
 	}
-	LOG("  popen succeeded");
-
-	while (fgets(buffer, sizeof(buffer), fp) != NULL && port_count < max_ports) {
-		char proto[16], recv_q[16], send_q[16];
-		char local_addr[128], foreign_addr[128], state[32];
-
-		if (sscanf(buffer, "%15s %15s %15s %127s %127s %31s", proto,
-			recv_q, send_q, local_addr, foreign_addr, state) == 6) {
-
-			char *last_dot = strrchr(local_addr, '.');
-		if (last_dot != NULL) {
-			int port = atoi(last_dot + 1);
-			if (port > 0 && port < 65536) {
-				ports[port_count].port = port;
-				strlcpy(ports[port_count].protocol, proto,
-						sizeof(ports[port_count].protocol));
-				strlcpy(ports[port_count].state, state,
-						sizeof(ports[port_count].state));
-				ports[port_count].connection_count = 1;
-				port_count++;
-			}
-		}
-			}
-	}
-
-	LOG("  Read %d lines, calling pclose...", port_count);
-	fflush(stderr);
-
-	pclose(fp);
-
-	LOG("Top ports END (found %d ports)", port_count);
+	free(output);
 	return port_count;
 }
 
@@ -394,166 +336,86 @@ metrics_get_network_interfaces(NetworkInterface *interfaces, int max_interfaces)
 int
 metrics_get_top_cpu_processes(ProcessInfo *processes, int max_processes)
 {
-	LOG("Top CPU processes START - calling popen(ps)...");
-	fflush(stderr);
-
-	FILE *fp;
-	char buffer[512];
-	int count = 0;
-
-	fp = popen("ps aux | sort -k3 -r | head -11 | tail -10", "r");
-	if (fp == NULL) {
-		LOG("  popen FAILED! errno=%d", errno);
+	char *const argv[] = {"ps", "-axo", "user,pid,pcpu,pmem,rss,command", "-r", NULL};
+	char *output = safe_popen_read_argv("/bin/ps", argv, 256 * 1024, 5);
+	if (!output)
 		return 0;
-	}
-	LOG("  popen succeeded");
-
-	while (fgets(buffer, sizeof(buffer), fp) != NULL && count < max_processes) {
-		char user[32], pid_str[16], cpu_str[16], mem_str[16],
-		vsz_str[16], rss_str[16];
-		char tt[16], stat[16], started[16], time[16];
-		char command[256];
-
-		if (sscanf(buffer,
-			"%31s %15s %15s %15s %15s %15s %15s %15s %15s "
-			"%15s %255[^\n]",
-			 user, pid_str, cpu_str, mem_str, vsz_str, rss_str,
-			 tt, stat, started, time, command) == 11) {
-
-			processes[count].pid = atoi(pid_str);
+	int count = 0;
+	char *saveptr = NULL;
+	for (char *line = strtok_r(output, "\n", &saveptr);
+	     line && count < max_processes;
+	     line = strtok_r(NULL, "\n", &saveptr)) {
+		char user[32], pid_str[16], cpu_str[16], mem_str[16], rss_str[16], command[256];
+		if (sscanf(line, "%31s %15s %15s %15s %15s %255[^\n]", user, pid_str,
+			   cpu_str, mem_str, rss_str, command) != 6)
+			continue;
+		processes[count].pid = atoi(pid_str);
 		processes[count].cpu_percent = atof(cpu_str);
 		processes[count].memory_percent = atof(mem_str);
 		processes[count].memory_mb = atoi(rss_str) / 1024;
-
-		strlcpy(processes[count].user, user,
-				sizeof(processes[count].user));
-		strlcpy(processes[count].command, command,
-				sizeof(processes[count].command));
-
+		strlcpy(processes[count].user, user, sizeof(processes[count].user));
+		strlcpy(processes[count].command, command, sizeof(processes[count].command));
 		count++;
-			 }
 	}
-
-	LOG("  Read %d lines, calling pclose...", count);
-	fflush(stderr);
-
-	pclose(fp);
-
-	LOG("Top CPU processes END (found %d)", count);
+	free(output);
 	return count;
 }
 
 int
 metrics_get_top_memory_processes(ProcessInfo *processes, int max_processes)
 {
-	LOG("Top memory processes START - calling popen(ps)...");
-	fflush(stderr);
-
-	FILE *fp;
-	char buffer[512];
-	int count = 0;
-
-	fp = popen("ps aux | sort -k4 -r | head -11 | tail -10", "r");
-	if (fp == NULL) {
-		LOG("  popen FAILED! errno=%d", errno);
+	char *const argv[] = {"ps", "-axo", "user,pid,pcpu,pmem,rss,command", "-m", NULL};
+	char *output = safe_popen_read_argv("/bin/ps", argv, 256 * 1024, 5);
+	if (!output)
 		return 0;
-	}
-	LOG("  popen succeeded");
-
-	while (fgets(buffer, sizeof(buffer), fp) != NULL && count < max_processes) {
-		char user[32], pid_str[16], cpu_str[16], mem_str[16],
-		vsz_str[16], rss_str[16];
-		char tt[16], stat[16], started[16], time[16];
-		char command[256];
-
-		if (sscanf(buffer,
-			"%31s %15s %15s %15s %15s %15s %15s %15s %15s "
-			"%15s %255[^\n]",
-			 user, pid_str, cpu_str, mem_str, vsz_str, rss_str,
-			 tt, stat, started, time, command) == 11) {
-
-			processes[count].pid = atoi(pid_str);
+	int count = 0;
+	char *saveptr = NULL;
+	for (char *line = strtok_r(output, "\n", &saveptr);
+	     line && count < max_processes;
+	     line = strtok_r(NULL, "\n", &saveptr)) {
+		char user[32], pid_str[16], cpu_str[16], mem_str[16], rss_str[16], command[256];
+		if (sscanf(line, "%31s %15s %15s %15s %15s %255[^\n]", user, pid_str,
+			   cpu_str, mem_str, rss_str, command) != 6)
+			continue;
+		processes[count].pid = atoi(pid_str);
 		processes[count].cpu_percent = atof(cpu_str);
 		processes[count].memory_percent = atof(mem_str);
 		processes[count].memory_mb = atoi(rss_str) / 1024;
-
-		strlcpy(processes[count].user, user,
-				sizeof(processes[count].user));
-		strlcpy(processes[count].command, command,
-				sizeof(processes[count].command));
-
+		strlcpy(processes[count].user, user, sizeof(processes[count].user));
+		strlcpy(processes[count].command, command, sizeof(processes[count].command));
 		count++;
-			 }
 	}
-
-	LOG("  Read %d lines, calling pclose...", count);
-	fflush(stderr);
-
-	pclose(fp);
-
-	LOG("Top memory processes END (found %d)", count);
+	free(output);
 	return count;
 }
 
 int
 metrics_get_process_stats(int *total, int *running, int *sleeping, int *zombie)
 {
-	LOG("Process stats START - calling popen(ps)...");
-	fflush(stderr);
+	char *const argv[] = {"ps", "-axo", "state", NULL};
+	char *output = safe_popen_read_argv("/bin/ps", argv, 128 * 1024, 5);
+	if (!output)
+		return -1;
 
-	FILE *fp;
-	char buffer[512];
 	int t = 0, r = 0, s = 0, z = 0;
-
-	fp = popen("ps aux", "r");
-	if (fp == NULL) {
-		LOG("  popen FAILED! errno=%d", errno);
-		return -1;
-	}
-	LOG("  popen succeeded");
-
-	if (fgets(buffer, sizeof(buffer), fp) == NULL) {
-		LOG("  fgets header FAILED");
-		pclose(fp);
-		return -1;
-	}
-
-	while (fgets(buffer, sizeof(buffer), fp) != NULL) {
-		char stat[16];
-		char user[32], pid_str[16], cpu_str[16], mem_str[16];
-		char vsz_str[16], rss_str[16], tt[16];
-		char started[16], time[16], command[256];
-
-		if (sscanf(buffer,
-			"%31s %15s %15s %15s %15s %15s %15s %15s %15s "
-			"%15s %255[^\n]",
-			 user, pid_str, cpu_str, mem_str, vsz_str, rss_str,
-			 tt, stat, started, time, command) == 11) {
-
-			t++;
-
-		if (strchr(stat, 'R') != NULL) {
+	char *saveptr = NULL;
+	for (char *line = strtok_r(output, "\n", &saveptr); line;
+	     line = strtok_r(NULL, "\n", &saveptr)) {
+		if (strcmp(line, "STAT") == 0 || strcmp(line, "STATE") == 0)
+			continue;
+		t++;
+		if (strchr(line, 'R') != NULL)
 			r++;
-		} else if (strchr(stat, 'S') != NULL ||
-			strchr(stat, 'I') != NULL) {
+		else if (strchr(line, 'S') != NULL || strchr(line, 'I') != NULL)
 			s++;
-			} else if (strchr(stat, 'Z') != NULL) {
-				z++;
-			}
-			 }
+		else if (strchr(line, 'Z') != NULL)
+			z++;
 	}
-
-	LOG("  Read %d processes, calling pclose...", t);
-	fflush(stderr);
-
-	pclose(fp);
-
+	free(output);
 	*total = t;
 	*running = r;
 	*sleeping = s;
 	*zombie = z;
-
-	LOG("Process stats END (total=%d)", t);
 	return 0;
 }
 
