@@ -8,6 +8,7 @@
 #include <microhttpd.h>
 #include <net/if.h>
 #include <netinet/in.h>
+#include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -275,17 +276,145 @@ metrics_get_network_interfaces(NetworkInterface *interfaces, int max_interfaces)
 int
 metrics_get_top_cpu_processes(ProcessInfo *processes, int max_processes)
 {
+#ifdef __OpenBSD__
+	if (processes == NULL || max_processes <= 0)
+		return 0;
+
+	int mib[6] = {CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0,
+		      (int)sizeof(struct kinfo_proc), 0};
+	size_t len = 0;
+
+	if (sysctl(mib, 6, NULL, &len, NULL, 0) == -1 || len == 0)
+		return 0;
+
+	struct kinfo_proc *procs = calloc(1, len);
+	if (procs == NULL)
+		return 0;
+
+	if (sysctl(mib, 6, procs, &len, NULL, 0) == -1) {
+		free(procs);
+		return 0;
+	}
+
+	int nprocs = (int)(len / sizeof(struct kinfo_proc));
+	int count = 0;
+
+	for (int i = 0; i < nprocs; i++) {
+		float cpu_percent = (100.0f * (float)procs[i].p_pctcpu) / FSCALE;
+		if (cpu_percent <= 0.0f)
+			continue;
+
+		ProcessInfo proc = {0};
+		proc.pid = procs[i].p_pid;
+		proc.cpu_percent = cpu_percent;
+		strlcpy(proc.command, procs[i].p_comm, sizeof(proc.command));
+
+		struct passwd *pwd = getpwuid(procs[i].p_uid);
+		if (pwd != NULL)
+			strlcpy(proc.user, pwd->pw_name, sizeof(proc.user));
+		else
+			strlcpy(proc.user, "unknown", sizeof(proc.user));
+
+		int insert = count;
+		if (insert > max_processes - 1)
+			insert = max_processes - 1;
+
+		while (insert > 0 && processes[insert - 1].cpu_percent < proc.cpu_percent) {
+			if (insert < max_processes)
+				processes[insert] = processes[insert - 1];
+			insert--;
+		}
+
+		if (insert < max_processes) {
+			processes[insert] = proc;
+			if (count < max_processes)
+				count++;
+		}
+	}
+
+	free(procs);
+	return count;
+#else
 	(void)processes;
 	(void)max_processes;
 	return 0;
+#endif
 }
 
 int
 metrics_get_top_memory_processes(ProcessInfo *processes, int max_processes)
 {
+#ifdef __OpenBSD__
+	if (processes == NULL || max_processes <= 0)
+		return 0;
+
+	int mib[2] = {CTL_HW, HW_PHYSMEM64};
+	unsigned long long physmem = 0;
+	size_t memlen = sizeof(physmem);
+	if (sysctl(mib, 2, &physmem, &memlen, NULL, 0) == -1 || physmem == 0)
+		return 0;
+
+	int pmib[6] = {CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0,
+		       (int)sizeof(struct kinfo_proc), 0};
+	size_t len = 0;
+	if (sysctl(pmib, 6, NULL, &len, NULL, 0) == -1 || len == 0)
+		return 0;
+
+	struct kinfo_proc *procs = calloc(1, len);
+	if (procs == NULL)
+		return 0;
+
+	if (sysctl(pmib, 6, procs, &len, NULL, 0) == -1) {
+		free(procs);
+		return 0;
+	}
+
+	long page_size = getpagesize();
+	int nprocs = (int)(len / sizeof(struct kinfo_proc));
+	int count = 0;
+
+	for (int i = 0; i < nprocs; i++) {
+		unsigned long long rss_bytes =
+			(unsigned long long)procs[i].p_vm_rssize * (unsigned long long)page_size;
+		if (rss_bytes == 0)
+			continue;
+
+		ProcessInfo proc = {0};
+		proc.pid = procs[i].p_pid;
+		proc.memory_mb = (int)(rss_bytes / MB);
+		proc.memory_percent = (100.0f * (float)rss_bytes) / (float)physmem;
+		strlcpy(proc.command, procs[i].p_comm, sizeof(proc.command));
+
+		struct passwd *pwd = getpwuid(procs[i].p_uid);
+		if (pwd != NULL)
+			strlcpy(proc.user, pwd->pw_name, sizeof(proc.user));
+		else
+			strlcpy(proc.user, "unknown", sizeof(proc.user));
+
+		int insert = count;
+		if (insert > max_processes - 1)
+			insert = max_processes - 1;
+
+		while (insert > 0 && processes[insert - 1].memory_mb < proc.memory_mb) {
+			if (insert < max_processes)
+				processes[insert] = processes[insert - 1];
+			insert--;
+		}
+
+		if (insert < max_processes) {
+			processes[insert] = proc;
+			if (count < max_processes)
+				count++;
+		}
+	}
+
+	free(procs);
+	return count;
+#else
 	(void)processes;
 	(void)max_processes;
 	return 0;
+#endif
 }
 
 int
