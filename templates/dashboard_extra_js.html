@@ -1,10 +1,22 @@
 <!-- dashboard_extra_js.html - Complete metrics dashboard with tabs -->
+<script src="/static/chart.js"></script>
+<script src="/static/chartjs-plugin-streaming.min.js"></script>
 <script>
+     // Registra il plugin chart.js streaming
+    Chart.register(ChartStreaming);
     /**
      * Stato globale
      */
     let currentTab = 'overview';
     let metricsData = null;
+    let loadChart = null;
+    let loadHistory = {
+        load_1min: [],
+        load_5min: [],
+        load_15min: [],
+        timestamps: []
+    };
+    const MAX_SAMPLES = 300;
 
     /**
      * Funzione principale per recuperare i dati dall'API
@@ -16,6 +28,9 @@
 
             const data = await response.json();
             metricsData = data;
+
+            // Aggiorna storico load average
+            updateLoadHistory(data);
 
             // Aggiorna info meta
             updateMetaInfo(data);
@@ -29,6 +44,32 @@
             if (container) {
                 container.innerHTML = '<div class="stat-card"><p style="color: var(--danger);">Error loading metrics: ' + e.message + '</p></div>';
             }
+        }
+    }
+
+    /**
+     * Aggiorna lo storico delle medie di carico
+     */
+    function updateLoadHistory(data) {
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString();
+
+        loadHistory.timestamps.push(timeStr);
+        loadHistory.load_1min.push(data.load["1min"]);
+        loadHistory.load_5min.push(data.load["5min"]);
+        loadHistory.load_15min.push(data.load["15min"]);
+
+        // Mantieni solo gli ultimi MAX_SAMPLES
+        if (loadHistory.timestamps.length > MAX_SAMPLES) {
+            loadHistory.timestamps.shift();
+            loadHistory.load_1min.shift();
+            loadHistory.load_5min.shift();
+            loadHistory.load_15min.shift();
+        }
+
+        // Aggiorna il grafico se è visibile
+        if (currentTab === 'load' && loadChart) {
+            updateLoadChart();
         }
     }
 
@@ -51,6 +92,19 @@
     function getProgressColor(percent) {
         if (percent > 85) return 'danger';
         if (percent > 65) return 'warning';
+        return '';
+    }
+
+    /**
+     * Determina il colore del load average in base al numero di core
+     */
+    function getLoadColor(load) {
+        // Assumi 4 core come default (puoi renderlo dinamico se hai il dato)
+        const cores = 4;
+        const loadPercent = (load / cores) * 100;
+
+        if (loadPercent > 85) return 'danger';
+        if (loadPercent > 65) return 'warning';
         return '';
     }
 
@@ -84,8 +138,10 @@
             case 'overview':
                 container.innerHTML = renderOverviewTab(metricsData);
                 break;
-            case 'cpu':
-                container.innerHTML = renderCpuTab(metricsData);
+            case 'load':
+                container.innerHTML = renderLoadTab(metricsData);
+                // Inizializza il grafico dopo il render
+                setTimeout(() => initLoadChart(), 100);
                 break;
             case 'memory':
                 container.innerHTML = renderMemoryTab(metricsData);
@@ -106,28 +162,34 @@
      * TAB: Overview (riepilogo generale)
      */
     function renderOverviewTab(data) {
-        const cpuUsage = 100 - data.cpu.idle;
+        const load1min = data.load["1min"];
         const availableMb = data.memory.free_mb + data.memory.inactive_mb + (data.memory.cache_mb || 0);
         const usedMb = data.memory.total_mb - availableMb;
         const ramPercent = Math.round((usedMb / data.memory.total_mb) * 100);
 
-        const swapPercent = data.memory.swap_total_mb > 0
-            ? Math.round((data.memory.swap_used_mb / data.memory.swap_total_mb) * 100)
+        const swapPercent = data.swap.total_mb > 0
+            ? Math.round((data.swap.used_mb / data.swap.total_mb) * 100)
             : 0;
 
         return `
             <div class="stat-card">
                 <div class="stat-header">
-                    <h3>CPU Usage</h3>
-                    <span class="tag ${getProgressColor(cpuUsage)}">${cpuUsage}%</span>
+                    <h3>Load Average (1 min)</h3>
+                    <span class="tag ${getLoadColor(load1min)}">${load1min.toFixed(2)}</span>
                 </div>
-                <div class="progress-wrapper">
-                    <div class="progress-bg">
-                        <div class="progress-fill ${getProgressColor(cpuUsage)}" style="width: ${cpuUsage}%"></div>
+                <div style="font-size: 0.9rem; margin-top: 12px;">
+                    <div style="margin-bottom: 8px;">
+                        <span style="color: var(--text-muted);">1 min:</span>
+                        <strong style="font-size: 1.2rem; color: var(--primary);">${data.load["1min"].toFixed(2)}</strong>
                     </div>
-                </div>
-                <div style="font-size: 0.8rem; margin-top: 8px;">
-                    Load Average: <strong>${data.load["1min"]}</strong> / ${data.load["5min"]} / ${data.load["15min"]}
+                    <div style="margin-bottom: 8px;">
+                        <span style="color: var(--text-muted);">5 min:</span>
+                        <strong>${data.load["5min"].toFixed(2)}</strong>
+                    </div>
+                    <div>
+                        <span style="color: var(--text-muted);">15 min:</span>
+                        <strong>${data.load["15min"].toFixed(2)}</strong>
+                    </div>
                 </div>
             </div>
 
@@ -142,9 +204,9 @@
                         <div class="progress-fill ${getProgressColor(ramPercent)}" style="width: ${ramPercent}%"></div>
                     </div>
                 </div>
-                ${data.memory.swap_total_mb > 0 ? `
+                ${data.swap.total_mb > 0 ? `
                 <div class="progress-wrapper" style="margin-top: 12px;">
-                    <div class="progress-label"><span>Swap Used</span><span>${data.memory.swap_used_mb} / ${data.memory.swap_total_mb} MB</span></div>
+                    <div class="progress-label"><span>Swap Used</span><span>${data.swap.used_mb} / ${data.swap.total_mb} MB</span></div>
                     <div class="progress-bg">
                         <div class="progress-fill ${getProgressColor(swapPercent)}" style="width: ${swapPercent}%"></div>
                     </div>
@@ -154,7 +216,7 @@
 
             <div class="stat-card">
                 <div class="stat-header"><h3>System Info</h3></div>
-                <table style="width: 100%; font-size: 0.85rem;">
+                <table style="font-size: 0.80rem;">
                     <tr><td style="color: var(--text-muted);">Hostname</td><td><strong>${data.hostname}</strong></td></tr>
                     <tr><td style="color: var(--text-muted);">OS</td><td>${data.os.type} ${data.os.release}</td></tr>
                     <tr><td style="color: var(--text-muted);">Architecture</td><td>${data.os.machine}</td></tr>
@@ -166,10 +228,12 @@
             <div class="stat-card">
                 <div class="stat-header"><h3>Network Interfaces</h3></div>
                 <div style="display: flex; flex-direction: column; gap: 8px;">
-                    ${data.network.slice(0, 5).map(n => `
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <span class="tag" style="margin: 0; font-family: monospace; min-width: 60px;">${n.name}</span>
-                            <code style="font-size: 0.8rem; flex: 1;">${n.ip}</code>
+                    ${data.network.map(n => `
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px; border-bottom: 1px solid var(--border-light);">
+                            <div>
+                                <span class="tag" style="margin: 0; margin-right: 8px; font-family: monospace;">${n.name}</span>
+                                <span style="font-family: monospace; font-size: 0.85rem; color: var(--text-muted);">${n.ip}</span>
+                            </div>
                             <span class="${n.status === 'up' ? 'done' : 'todo'}" style="font-size: 0.7rem;">${n.status.toUpperCase()}</span>
                         </div>
                     `).join('')}
@@ -179,109 +243,237 @@
     }
 
     /**
-     * TAB: CPU Details
+     * TAB: Load (sostituisce CPU)
      */
-    function renderCpuTab(data) {
-        const cpuUsage = 100 - data.cpu.idle;
-
+    function renderLoadTab(data) {
         return `
             <div class="stat-card" style="grid-column: 1 / -1;">
                 <div class="stat-header">
-                    <h3>CPU Usage Breakdown</h3>
-                    <span class="tag ${getProgressColor(cpuUsage)}">${cpuUsage}% Total</span>
+                    <h3>Load Average History</h3>
+                    <span class="tag">${loadHistory.timestamps.length} samples</span>
                 </div>
+                <div style="margin-top: 16px; height: 400px; position: relative;">
+                    <canvas id="loadChart"></canvas>
+                </div>
+            </div>
 
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-top: 16px;">
-                    <div class="progress-wrapper">
-                        <div class="progress-label"><span>User</span><span>${data.cpu.user}%</span></div>
-                        <div class="progress-bg">
-                            <div class="progress-fill" style="width: ${data.cpu.user}%; background: var(--primary);"></div>
+            <div class="stat-card">
+                <div class="stat-header">
+                    <h3>Current Load Average</h3>
+                </div>
+                <div style="margin-top: 16px;">
+                    <div style="margin-bottom: 16px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <span style="color: var(--text-muted);">1 minute</span>
+                            <span class="tag ${getLoadColor(data.load["1min"])}" style="font-size: 1.1rem;">${data.load["1min"].toFixed(2)}</span>
+                        </div>
+                        <div style="font-size: 0.75rem; color: var(--text-muted);">
+                            Short-term load average
                         </div>
                     </div>
 
-                    <div class="progress-wrapper">
-                        <div class="progress-label"><span>System</span><span>${data.cpu.system}%</span></div>
-                        <div class="progress-bg">
-                            <div class="progress-fill warning" style="width: ${data.cpu.system}%"></div>
+                    <div style="margin-bottom: 16px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <span style="color: var(--text-muted);">5 minutes</span>
+                            <span class="tag ${getLoadColor(data.load["5min"])}" style="font-size: 1.1rem;">${data.load["5min"].toFixed(2)}</span>
+                        </div>
+                        <div style="font-size: 0.75rem; color: var(--text-muted);">
+                            Medium-term load average
                         </div>
                     </div>
 
-                    <div class="progress-wrapper">
-                        <div class="progress-label"><span>Nice</span><span>${data.cpu.nice}%</span></div>
-                        <div class="progress-bg">
-                            <div class="progress-fill" style="width: ${data.cpu.nice}%"></div>
+                    <div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <span style="color: var(--text-muted);">15 minutes</span>
+                            <span class="tag ${getLoadColor(data.load["15min"])}" style="font-size: 1.1rem;">${data.load["15min"].toFixed(2)}</span>
                         </div>
-                    </div>
-
-                    <div class="progress-wrapper">
-                        <div class="progress-label"><span>Interrupt</span><span>${data.cpu.interrupt}%</span></div>
-                        <div class="progress-bg">
-                            <div class="progress-fill danger" style="width: ${data.cpu.interrupt}%"></div>
-                        </div>
-                    </div>
-
-                    <div class="progress-wrapper">
-                        <div class="progress-label"><span>Idle</span><span>${data.cpu.idle}%</span></div>
-                        <div class="progress-bg">
-                            <div class="progress-fill" style="width: ${data.cpu.idle}%; background: var(--success);"></div>
+                        <div style="font-size: 0.75rem; color: var(--text-muted);">
+                            Long-term load average
                         </div>
                     </div>
                 </div>
             </div>
 
             <div class="stat-card">
-                <div class="stat-header"><h3>Load Average</h3></div>
-                <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 12px;">
-                    <div>
-                        <div style="color: var(--text-muted); font-size: 0.8rem;">1 minute</div>
-                        <div style="font-size: 1.5rem; font-weight: bold;">${data.load["1min"]}</div>
+                <div class="stat-header">
+                    <h3>Load Statistics</h3>
+                </div>
+                <div style="margin-top: 16px;">
+                    <div style="margin-bottom: 12px;">
+                        <div style="color: var(--text-muted); font-size: 0.8rem;">Min (1 min)</div>
+                        <div style="font-size: 1.2rem; font-weight: bold;">${loadHistory.load_1min.length > 0 ? Math.min(...loadHistory.load_1min).toFixed(2) : '0.00'}</div>
+                    </div>
+                    <div style="margin-bottom: 12px;">
+                        <div style="color: var(--text-muted); font-size: 0.8rem;">Max (1 min)</div>
+                        <div style="font-size: 1.2rem; font-weight: bold;">${loadHistory.load_1min.length > 0 ? Math.max(...loadHistory.load_1min).toFixed(2) : '0.00'}</div>
                     </div>
                     <div>
-                        <div style="color: var(--text-muted); font-size: 0.8rem;">5 minutes</div>
-                        <div style="font-size: 1.5rem; font-weight: bold;">${data.load["5min"]}</div>
-                    </div>
-                    <div>
-                        <div style="color: var(--text-muted); font-size: 0.8rem;">15 minutes</div>
-                        <div style="font-size: 1.5rem; font-weight: bold;">${data.load["15min"]}</div>
+                        <div style="color: var(--text-muted); font-size: 0.8rem;">Average (1 min)</div>
+                        <div style="font-size: 1.2rem; font-weight: bold;">${loadHistory.load_1min.length > 0 ? (loadHistory.load_1min.reduce((a, b) => a + b, 0) / loadHistory.load_1min.length).toFixed(2) : '0.00'}</div>
                     </div>
                 </div>
-            </div>
-
-            <div class="stat-card">
-                <div class="stat-header"><h3>Top CPU Processes</h3></div>
-                <table style="width: 100%; font-size: 0.8rem; margin-top: 12px;">
-                    <thead>
-                        <tr style="border-bottom: 1px solid var(--border); text-align: left;">
-                            <th style="padding: 4px;">User</th>
-                            <th style="padding: 4px;">PID</th>
-                            <th style="padding: 4px;">CPU%</th>
-                            <th style="padding: 4px;">Command</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${data.top_cpu_processes.map(p => `
-                            <tr style="border-bottom: 1px solid var(--border-light);">
-                                <td style="padding: 4px; font-family: monospace;">${p.user}</td>
-                                <td style="padding: 4px; font-family: monospace;">${p.pid}</td>
-                                <td style="padding: 4px;"><span class="tag ${getProgressColor(p.cpu_percent)}">${p.cpu_percent}%</span></td>
-                                <td style="padding: 4px; font-family: monospace;">${p.command}</td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
             </div>
         `;
     }
 
     /**
-     * TAB: Memory Details
+     * Inizializza il grafico Chart.js
+     */
+    function initLoadChart() {
+        const canvas = document.getElementById('loadChart');
+        if (!canvas) return;
+
+        const ctx = canvas.getContext('2d');
+
+        // Distruggi il grafico esistente se presente
+        if (loadChart) {
+            loadChart.destroy();
+        }
+
+        loadChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: loadHistory.timestamps,
+                datasets: [
+                    {
+                        label: '1 min',
+                        data: loadHistory.load_1min,
+                        borderColor: 'rgb(59, 130, 246)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        tension: 0.4,
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        pointHoverRadius: 4
+                    },
+                    {
+                        label: '5 min',
+                        data: loadHistory.load_5min,
+                        borderColor: 'rgb(34, 197, 94)',
+                        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                        tension: 0.4,
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        pointHoverRadius: 4
+                    },
+                    {
+                        label: '15 min',
+                        data: loadHistory.load_15min,
+                        borderColor: 'rgb(234, 179, 8)',
+                        backgroundColor: 'rgba(234, 179, 8, 0.1)',
+                        tension: 0.4,
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        pointHoverRadius: 4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            usePointStyle: true,
+                            padding: 15,
+                            font: {
+                                size: 12
+                            }
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        padding: 12,
+                        titleFont: {
+                            size: 13
+                        },
+                        bodyFont: {
+                            size: 12
+                        },
+                        callbacks: {
+                            label: function(context) {
+                                return context.dataset.label + ': ' + context.parsed.y.toFixed(2);
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        display: true,
+                        grid: {
+                            display: false
+                        },
+                        ticks: {
+                            maxRotation: 45,
+                            minRotation: 45,
+                            maxTicksLimit: 10,
+                            font: {
+                                size: 10
+                            }
+                        }
+                    },
+                    y: {
+                        display: true,
+                        beginAtZero: true,
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.05)'
+                        },
+                        ticks: {
+                            font: {
+                                size: 11
+                            },
+                            callback: function(value) {
+                                return value.toFixed(2);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    /**
+    * Aggiorna il grafico con i nuovi dati - versione ottimizzata
+    */
+    function updateLoadChart() {
+        if (!loadChart) return;
+
+        // Salva lo stato corrente di scrolling
+        const currentXScale = loadChart.scales.x;
+        const wasAtEnd = currentXScale &&
+                        currentXScale.max === loadChart.data.labels.length - 1;
+
+        // Aggiorna i dati
+        loadChart.data.labels = loadHistory.timestamps;
+        loadChart.data.datasets[0].data = loadHistory.load_1min;
+        loadChart.data.datasets[1].data = loadHistory.load_5min;
+        loadChart.data.datasets[2].data = loadHistory.load_15min;
+
+        // Usa 'active' per animare solo i nuovi punti
+        loadChart.update('active');
+
+        // Se eravamo alla fine, mantieni lo scroll sulla destra
+        if (wasAtEnd && loadChart.data.labels.length > 10) {
+            loadChart.scales.x.options.min = loadChart.data.labels.length - 20;
+            loadChart.update('none');
+        }
+    }
+
+    /**
+     * TAB: Memory
      */
     function renderMemoryTab(data) {
         const availableMb = data.memory.free_mb + data.memory.inactive_mb + (data.memory.cache_mb || 0);
         const usedMb = data.memory.total_mb - availableMb;
         const ramPercent = Math.round((usedMb / data.memory.total_mb) * 100);
-        const swapPercent = data.memory.swap_total_mb > 0
-            ? Math.round((data.memory.swap_used_mb / data.memory.swap_total_mb) * 100)
+
+        const swapPercent = data.swap.total_mb > 0
+            ? Math.round((data.swap.used_mb / data.swap.total_mb) * 100)
             : 0;
 
         return `
@@ -291,81 +483,111 @@
                     <span class="tag ${getProgressColor(ramPercent)}">${ramPercent}%</span>
                 </div>
                 <div class="progress-wrapper">
-                    <div class="progress-label"><span>Used</span><span>${usedMb} MB</span></div>
+                    <div class="progress-label"><span>Used</span><span>${usedMb} / ${data.memory.total_mb} MB</span></div>
                     <div class="progress-bg">
                         <div class="progress-fill ${getProgressColor(ramPercent)}" style="width: ${ramPercent}%"></div>
                     </div>
                 </div>
-                <div style="margin-top: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.85rem;">
-                    <div><span style="color: var(--text-muted);">Total:</span> <strong>${data.memory.total_mb} MB</strong></div>
-                    <div><span style="color: var(--text-muted);">Free:</span> <strong>${data.memory.free_mb} MB</strong></div>
-                    <div><span style="color: var(--text-muted);">Active:</span> <strong>${data.memory.active_mb} MB</strong></div>
-                    <div><span style="color: var(--text-muted);">Inactive:</span> <strong>${data.memory.inactive_mb} MB</strong></div>
-                    <div><span style="color: var(--text-muted);">Wired:</span> <strong>${data.memory.wired_mb} MB</strong></div>
-                    <div><span style="color: var(--text-muted);">Cache:</span> <strong>${data.memory.cache_mb} MB</strong></div>
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 16px; font-size: 0.85rem;">
+                    <div>
+                        <div style="color: var(--text-muted);">Total</div>
+                        <div style="font-weight: bold;">${data.memory.total_mb} MB</div>
+                    </div>
+                    <div>
+                        <div style="color: var(--text-muted);">Free</div>
+                        <div style="font-weight: bold;">${data.memory.free_mb} MB</div>
+                    </div>
+                    <div>
+                        <div style="color: var(--text-muted);">Active</div>
+                        <div style="font-weight: bold;">${data.memory.active_mb} MB</div>
+                    </div>
+                    <div>
+                        <div style="color: var(--text-muted);">Inactive</div>
+                        <div style="font-weight: bold;">${data.memory.inactive_mb} MB</div>
+                    </div>
+                    <div>
+                        <div style="color: var(--text-muted);">Wired</div>
+                        <div style="font-weight: bold;">${data.memory.wired_mb} MB</div>
+                    </div>
                 </div>
             </div>
 
-            ${data.memory.swap_total_mb > 0 ? `
+            ${data.swap.total_mb > 0 ? `
             <div class="stat-card">
                 <div class="stat-header">
                     <h3>Swap Usage</h3>
                     <span class="tag ${getProgressColor(swapPercent)}">${swapPercent}%</span>
                 </div>
                 <div class="progress-wrapper">
-                    <div class="progress-label"><span>Used</span><span>${data.memory.swap_used_mb} / ${data.memory.swap_total_mb} MB</span></div>
+                    <div class="progress-label"><span>Used</span><span>${data.swap.used_mb} / ${data.swap.total_mb} MB</span></div>
                     <div class="progress-bg">
                         <div class="progress-fill ${getProgressColor(swapPercent)}" style="width: ${swapPercent}%"></div>
                     </div>
                 </div>
+                <div style="margin-top: 16px; font-size: 0.85rem;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                        <span style="color: var(--text-muted);">Total</span>
+                        <strong>${data.swap.total_mb} MB</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                        <span style="color: var(--text-muted);">Used</span>
+                        <strong>${data.swap.used_mb} MB</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="color: var(--text-muted);">Free</span>
+                        <strong>${data.swap.total_mb - data.swap.used_mb} MB</strong>
+                    </div>
+                </div>
             </div>
-            ` : ''}
+            ` : '<div class="stat-card"><div class="stat-header"><h3>Swap</h3></div><p style="color: var(--text-muted); margin-top: 12px;">No swap configured</p></div>'}
 
             <div class="stat-card" style="grid-column: 1 / -1;">
-                <div class="stat-header"><h3>Top Memory Processes</h3></div>
-                <table style="width: 100%; font-size: 0.8rem; margin-top: 12px;">
-                    <thead>
-                        <tr style="border-bottom: 1px solid var(--border); text-align: left;">
-                            <th style="padding: 4px;">User</th>
-                            <th style="padding: 4px;">PID</th>
-                            <th style="padding: 4px;">Memory%</th>
-                            <th style="padding: 4px;">Memory MB</th>
-                            <th style="padding: 4px;">Command</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${data.top_memory_processes.map(p => `
-                            <tr style="border-bottom: 1px solid var(--border-light);">
-                                <td style="padding: 4px; font-family: monospace;">${p.user}</td>
-                                <td style="padding: 4px; font-family: monospace;">${p.pid}</td>
-                                <td style="padding: 4px;"><span class="tag ${getProgressColor(p.memory_percent)}">${p.memory_percent}%</span></td>
-                                <td style="padding: 4px;">${p.memory_mb} MB</td>
-                                <td style="padding: 4px; font-family: monospace;">${p.command}</td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
+                <div class="stat-header">
+                    <h3>Memory Breakdown</h3>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-top: 16px;">
+                    <div style="text-align: center; padding: 16px; border: 1px solid var(--border); border-radius: 8px;">
+                        <div style="font-size: 1.8rem; font-weight: bold; color: var(--primary);">${data.memory.total_mb}</div>
+                        <div style="color: var(--text-muted); font-size: 0.85rem;">Total MB</div>
+                    </div>
+                    <div style="text-align: center; padding: 16px; border: 1px solid var(--border); border-radius: 8px;">
+                        <div style="font-size: 1.8rem; font-weight: bold; color: var(--success);">${data.memory.free_mb}</div>
+                        <div style="color: var(--text-muted); font-size: 0.85rem;">Free MB</div>
+                    </div>
+                    <div style="text-align: center; padding: 16px; border: 1px solid var(--border); border-radius: 8px;">
+                        <div style="font-size: 1.8rem; font-weight: bold; color: var(--warning);">${data.memory.active_mb}</div>
+                        <div style="color: var(--text-muted); font-size: 0.85rem;">Active MB</div>
+                    </div>
+                    <div style="text-align: center; padding: 16px; border: 1px solid var(--border); border-radius: 8px;">
+                        <div style="font-size: 1.8rem; font-weight: bold; color: var(--text-muted);">${data.memory.inactive_mb}</div>
+                        <div style="color: var(--text-muted); font-size: 0.85rem;">Inactive MB</div>
+                    </div>
+                    <div style="text-align: center; padding: 16px; border: 1px solid var(--border); border-radius: 8px;">
+                        <div style="font-size: 1.8rem; font-weight: bold; color: var(--danger);">${data.memory.wired_mb}</div>
+                        <div style="color: var(--text-muted); font-size: 0.85rem;">Wired MB</div>
+                    </div>
+                </div>
             </div>
         `;
     }
 
     /**
-     * TAB: Disk Usage
+     * TAB: Disk
      */
     function renderDiskTab(data) {
-    return `
-        <div class="stat-card" style="grid-column: 1 / -1;">
-            <div class="stat-header">
-                <h3>Storage Devices</h3>
-                <span class="tag">${data.disks.length} mounted</span>
-            </div>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; margin-top: 16px;">
-                ${data.disks.map(d => `
-                    <div class="progress-wrapper" style="padding: 12px; border: 1px solid var(--border-color); border-radius: 8px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        return `
+            <div class="stat-card" style="grid-column: 1 / -1;">
+                <div class="stat-header">
+                    <h3>Disk Usage</h3>
+                    <span class="tag">${data.disks.length} filesystems</span>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 16px; margin-top: 16px;">
+                    ${data.disks.map(d => `
+                        <div style="padding: 16px; border: 1px solid var(--border); border-radius: 8px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                                 <div>
-                                    <div style="font-weight: bold; font-size: 0.9rem;">${d.mount}</div>
-                                    <div style="color: var(--text-muted); font-size: 0.75rem; font-family: monospace;">${d.device}</div>
+                                    <div style="font-weight: bold; font-size: 0.95rem;">${d.mount}</div>
+                                    <div style="font-size: 0.75rem; color: var(--text-muted); font-family: monospace; margin-top: 2px;">${d.device}</div>
                                 </div>
                                 <span class="tag ${getProgressColor(d.percent)}">${d.percent}%</span>
                             </div>

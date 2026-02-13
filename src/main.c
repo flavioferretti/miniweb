@@ -10,9 +10,9 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include "../include/config.h"
 #include "../include/http_utils.h"
 #include "../include/routes.h"
-
 
 /* Configuration */
 struct server_config {
@@ -28,6 +28,9 @@ static struct server_config config = {.port = 9001,
 				      .thread_pool_size = 4,
 				      .connection_limit = 1000,
 				      .verbose = 0};
+
+/* Define the global verbose flag for other modules */
+int config_verbose = 0;  /* Add this line */
 
 static volatile sig_atomic_t running = 1;
 
@@ -148,6 +151,7 @@ parse_args(int argc, char *argv[])
 			break;
 		case 'v':
 			config.verbose = 1;
+			config_verbose = 1;  /* Add this line */
 			break;
 		case 'h':
 			usage(argv[0]);
@@ -222,8 +226,8 @@ main(int argc, char *argv[])
 	}
 
 	daemon = MHD_start_daemon(
-	    MHD_USE_INTERNAL_POLLING_THREAD, config.port, NULL, NULL,
-	    &request_handler, NULL, MHD_OPTION_SOCK_ADDR,
+	    MHD_USE_POLL | MHD_USE_INTERNAL_POLLING_THREAD, config.port, NULL,
+	    NULL, &request_handler, NULL, MHD_OPTION_SOCK_ADDR,
 	    (struct sockaddr *)&bind_addr, MHD_OPTION_THREAD_POOL_SIZE,
 	    config.thread_pool_size, MHD_OPTION_CONNECTION_LIMIT,
 	    config.connection_limit, MHD_OPTION_PER_IP_CONNECTION_LIMIT, 20,

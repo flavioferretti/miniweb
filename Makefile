@@ -36,7 +36,7 @@ CFLAGS+=   -D_DEFAULT_SOURCE -I/usr/local/include
 
 # LDFLAGS: Linker options
 LDFLAGS+=  -Wl,-z,relro,-z,now -fno-plt -L/usr/local/lib
-LDADD=     -Wl,-rpath,/usr/local/lib -lmicrohttpd -lm -lssl -lcrypto -lz
+LDADD=     -Wl,-rpath,/usr/local/lib -lmicrohttpd -lm -lpthread -lssl -lcrypto -lz
 
 # LDFLAGS+= -Wl,-z,relro,-z,now -fno-plt -L/usr/local/lib
 # LDADD = -Wl,-rpath,/usr/local/lib -lmicrohttpd -lsqlite3 -lssl -lcrypto -lz

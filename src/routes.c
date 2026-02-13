@@ -80,6 +80,7 @@ init_routes(void)
 	register_route("GET", "/docs", man_handler, NULL);
 	register_route("GET", "/favicon.ico", favicon_handler, NULL);
 	register_route("GET", "/api/metrics", metrics_handler, NULL);
+	register_route("GET", "/apiroot", apiroot_handler, NULL);
 }
 
 /* Template rendering helper */
@@ -125,12 +126,34 @@ dashboard_handler(void *cls, struct MHD_Connection *connection, const char *url,
 	(void)con_cls;
 
 	struct template_data data = {
-	    .title = "MiniWeb - Info",
+	    .title = "MiniWeb - Dashboard",
 	    .page_content = "dashboard.html",
 	    .extra_head_file = "dashboard_extra_head.html",
 	    .extra_js_file = "dashboard_extra_js.html"};
 
-	return render_template_response(connection, &data, "info.html");
+	return render_template_response(connection, &data, "dashboard.html");
+}
+
+/* API root page handler */
+int
+apiroot_handler(void *cls, struct MHD_Connection *connection, const char *url,
+			const char *method, const char *version, const char *upload_data,
+			size_t *upload_data_size, void **con_cls)
+{
+	(void)cls;
+	(void)url;
+	(void)method;
+	(void)version;
+	(void)upload_data;
+	(void)upload_data_size;
+	(void)con_cls;
+
+	struct template_data data = {.title = "MiniWeb - API Root",
+		.page_content = "api.html",
+		.extra_head_file = NULL,
+		.extra_js_file = NULL};
+
+		return render_template_response(connection, &data, "api.html");
 }
 
 /* Documentation page handler */
@@ -152,7 +175,7 @@ man_handler(void *cls, struct MHD_Connection *connection, const char *url,
 				     .extra_head_file = "docs_extra_head.html",
 				     .extra_js_file = "docs_extra_js.html"};
 
-	return render_template_response(connection, &data, "index.html");
+	return render_template_response(connection, &data, "docs.html");
 }
 
 /* Favicon handler */

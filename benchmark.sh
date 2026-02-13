@@ -5,10 +5,10 @@
 
 set -e
 
-SERVER_URL="http://localhost:9001/static/test.txt"
-TEST_DURATION=20
+SERVER_URL="http://localhost:9001/api/metrics"
+TEST_DURATION=8
 THREADS=4
-set -A CONNECTIONS 10 25 50 100 150 200 250 300 350
+set -A CONNECTIONS 10 25
 OUTPUT_DIR="benchmark"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
@@ -128,7 +128,7 @@ set title 'Latency Analysis' font 'Arial,14'
 set ylabel 'Latency (ms)'
 plot 'CSV_FILE' using 1:3 skip 1 with linespoints lw 2 pt 7 lc rgb latency_color title 'Average', \
      'CSV_FILE' using 1:5 skip 1 with linespoints lw 2 pt 11 lc rgb stdev_color title 'Std Dev'
-     #'CSV_FILE' using 1:4 skip 1 with linespoints lw 2 pt 9 lc rgb "#FF0000" title 'Maximum', \
+#'CSV_FILE' using 1:4 skip 1 with linespoints lw 2 pt 9 lc rgb "#FF0000" title 'Maximum', \
 
 
 # === Plot 4: Latency with error bars ===
