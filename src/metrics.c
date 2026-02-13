@@ -277,6 +277,16 @@ int
 metrics_get_top_cpu_processes(ProcessInfo *processes, int max_processes)
 {
 #ifdef __OpenBSD__
+	/*
+	 * KERN_PROC sysctl queries can be blocked when pledge is active,
+	 * causing an abort on /api/metrics. Keep endpoint stable by
+	 * gracefully disabling per-process rankings in that mode.
+	 */
+	(void)processes;
+	(void)max_processes;
+	return 0;
+
+	/*
 	if (processes == NULL || max_processes <= 0)
 		return 0;
 
@@ -333,6 +343,7 @@ metrics_get_top_cpu_processes(ProcessInfo *processes, int max_processes)
 
 	free(procs);
 	return count;
+	*/
 #else
 	(void)processes;
 	(void)max_processes;
@@ -344,6 +355,12 @@ int
 metrics_get_top_memory_processes(ProcessInfo *processes, int max_processes)
 {
 #ifdef __OpenBSD__
+	/* See note in metrics_get_top_cpu_processes(). */
+	(void)processes;
+	(void)max_processes;
+	return 0;
+
+	/*
 	if (processes == NULL || max_processes <= 0)
 		return 0;
 
@@ -408,6 +425,7 @@ metrics_get_top_memory_processes(ProcessInfo *processes, int max_processes)
 
 	free(procs);
 	return count;
+	*/
 #else
 	(void)processes;
 	(void)max_processes;
@@ -419,6 +437,14 @@ int
 metrics_get_process_stats(int *total, int *running, int *sleeping, int *zombie)
 {
 #ifdef __OpenBSD__
+	/* See note in metrics_get_top_cpu_processes(). */
+	*total = 0;
+	*running = 0;
+	*sleeping = 0;
+	*zombie = 0;
+	return 0;
+
+	/*
 	int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0};
 	size_t len = 0;
 
@@ -468,6 +494,7 @@ metrics_get_process_stats(int *total, int *running, int *sleeping, int *zombie)
 
 	free(procs);
 	return 0;
+	*/
 #else
 	*total = 0;
 	*running = 0;
