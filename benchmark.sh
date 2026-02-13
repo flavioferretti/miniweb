@@ -6,9 +6,9 @@
 set -e
 
 SERVER_URL="http://localhost:9001/api/metrics"
-TEST_DURATION=8
+TEST_DURATION=30
 THREADS=4
-set -A CONNECTIONS 10 25
+set -A CONNECTIONS 10 25 50 100 200
 OUTPUT_DIR="benchmark"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
