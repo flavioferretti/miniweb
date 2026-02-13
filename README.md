@@ -19,7 +19,7 @@ It combines a small route dispatcher, a simple template engine, system metrics e
 
 ### Maturity snapshot
 - **Strengths**: clean modular split by responsibility, practical API set, explicit OpenBSD hardening intent.
-- **Limitations**: several features still rely on shell pipelines (`popen`), limited automated testing, and strong platform coupling to OpenBSD APIs/tooling.
+- **Limitations**: some features still rely on shell pipelines (`popen`) in man-page workflows, limited automated testing, and strong platform coupling to OpenBSD APIs/tooling.
 
 ---
 
@@ -75,13 +75,18 @@ Options:
 
 ## Security posture
 
+
+### OpenBSD process metrics note
+- `metrics_get_process_stats()` now uses `sysctl(KERN_PROC, KERN_PROC_ALL, ...)` to compute process totals/state buckets.
+- This avoids spawning `/bin/ps` from the metrics endpoint while still avoiding the previously failing `KERN_NPROCS` query under pledge.
+
 ### Present hardening
 - OpenBSD sandbox model via `unveil()` and `pledge()`.
 - Static-serving traversal checks (`..`, `//`) and `/static/` confinement.
 - Input sanitization in selected command paths.
 
 ### Known risk areas
-- Shell-command dependence through `popen` in metrics and man workflows increases attack surface.
+- Shell-command dependence through `popen` in man workflows increases attack surface (process metrics now use `sysctl(KERN_PROC)` instead of spawning `ps`).
 - `safe_popen_read()` currently enforces size limits, but timeout behavior is not actually implemented despite historical comments.
 - Full-buffer file/template reads can be improved with streaming approaches.
 - Metrics JSON construction is a long sequence of `snprintf` fragments and static buffers (fragile as payload grows).
@@ -103,7 +108,7 @@ This update resolves stale README claims and adds missing project-state transpar
 
 ## Recommended next engineering steps
 
-1. Replace shell-heavy metrics/man command paths with safer syscall/exec-argv designs.
+1. Continue reducing shell-heavy man command paths with safer syscall/exec-argv designs.
 2. Implement real subprocess timeout handling for `safe_popen_read()`.
 3. Add portability boundaries (feature gates + non-OpenBSD stubs).
 4. Add validation tests (route matching, template rendering, integration endpoints).

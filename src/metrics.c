@@ -20,8 +20,10 @@
 
 #ifdef __OpenBSD__
 #include <sys/mount.h>
+#include <sys/proc.h>
 #include <sys/swap.h>
 #include <sys/sysctl.h>
+#include <sys/user.h>
 #include <uvm/uvmexp.h>
 #endif
 
@@ -290,15 +292,55 @@ int
 metrics_get_process_stats(int *total, int *running, int *sleeping, int *zombie)
 {
 #ifdef __OpenBSD__
-	int mib[2] = {CTL_KERN, KERN_NPROCS};
-	size_t len = sizeof(*total);
+	int mib[6] = {CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0,
+		      (int)sizeof(struct kinfo_proc), 0};
+	size_t len = 0;
 
-	if (sysctl(mib, 2, total, &len, NULL, 0) == -1)
+	if (sysctl(mib, 6, NULL, &len, NULL, 0) == -1)
 		return -1;
 
+	if (len == 0) {
+		*total = 0;
+		*running = 0;
+		*sleeping = 0;
+		*zombie = 0;
+		return 0;
+	}
+
+	struct kinfo_proc *procs = calloc(1, len);
+	if (procs == NULL)
+		return -1;
+
+	if (sysctl(mib, 6, procs, &len, NULL, 0) == -1) {
+		free(procs);
+		return -1;
+	}
+
+	int nprocs = (int)(len / sizeof(struct kinfo_proc));
+	*total = nprocs;
 	*running = 0;
 	*sleeping = 0;
 	*zombie = 0;
+
+	for (int i = 0; i < nprocs; i++) {
+		switch (procs[i].p_stat) {
+		case SRUN:
+		case SIDL:
+			(*running)++;
+			break;
+		case SSLEEP:
+		case SSTOP:
+			(*sleeping)++;
+			break;
+		case SZOMB:
+			(*zombie)++;
+			break;
+		default:
+			break;
+		}
+	}
+
+	free(procs);
 	return 0;
 #else
 	*total = 0;
