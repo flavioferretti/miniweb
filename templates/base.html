@@ -1,120 +1,88 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en" data-theme="auto">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{{title}}</title>
-    <link rel="stylesheet" type="text/css" href="/static/custom.css" />
-    {{extra_head}}
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{title}}</title>
+  <link rel="stylesheet" type="text/css" href="/static/custom.css" />
+  {{extra_head}}
 </head>
-
 <body>
-
-  <!-- Navbar -->
-  <nav class="navbar">
+  <header class="site-header">
     <div class="container">
-      <div class="navbar-container">
-        <!-- Logo/Brand -->
-        <div class="navbar-brand">
-          <a href="/" class="navbar-logo">MiniWeb</a>
-        </div>
+      <div class="header-row">
+        <a href="/" class="brand">MiniWeb</a>
 
-        <!-- Hamburger Menu Button (mobile) -->
-        <button class="navbar-toggle" id="navbarToggle" aria-label="Toggle navigation">
-          <span class="navbar-toggle-icon"></span>
-          <span class="navbar-toggle-icon"></span>
-          <span class="navbar-toggle-icon"></span>
+        <button class="navbar-toggle" id="navbarToggle" aria-label="Toggle navigation" aria-expanded="false">
+          <span></span><span></span><span></span>
         </button>
 
-        <!-- Navigation Links -->
-        <div class="navbar-menu" id="navbarMenu">
-          <ul class="navbar-nav">
-            <li class="nav-item">
-              <a href="/" class="nav-link" data-page="/">Dashboard</a>
-            </li>
-            <li class="nav-item">
-              <a href="/docs" class="nav-link" data-page="/docs">Docs</a>
-            </li>
-            <li class="nav-item">
-              <a href="/apiroot" class="nav-link" data-page="/apiroot">API</a>
-            </li>
-          </ul>
-        </div>
+        <nav class="navbar-menu" id="navbarMenu" aria-label="Main navigation">
+          <a href="/" class="nav-link" data-page="/">Dashboard</a>
+          <a href="/docs" class="nav-link" data-page="/docs">Documentation</a>
+          <a href="/apiroot" class="nav-link" data-page="/apiroot">API</a>
+        </nav>
+
+        <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle theme">◐</button>
       </div>
     </div>
-  </nav>
+  </header>
 
-  <!-- Main Content -->
-  <div class="container">
+  <div class="container app-shell">
     <main>
       {{page_content}}
     </main>
 
     <footer>
-      <p>Powered by MiniWeb | OpenBSD ❤️</p>
+      <p>MiniWeb · OpenBSD system console</p>
     </footer>
   </div>
 
-<!-- JavaScript per il menu hamburger e active link -->
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-      // ===== HAMBURGER MENU =====
-      const toggleButton = document.getElementById('navbarToggle');
-      const navbarMenu = document.getElementById('navbarMenu');
-      
-      if (toggleButton && navbarMenu) {
-        toggleButton.addEventListener('click', function() {
-          const isExpanded = this.getAttribute('aria-expanded') === 'true';
-          this.setAttribute('aria-expanded', !isExpanded);
-          navbarMenu.classList.toggle('show');
-          
-          // Animazione hamburger a X
-          const spans = this.querySelectorAll('.navbar-toggle-icon');
-          spans.forEach((span, index) => {
-            span.classList.toggle('active');
-          });
-        });
-        
-        // Chiudi il menu quando si clicca su un link (solo mobile)
-        const navLinks = document.querySelectorAll('.nav-link');
-        navLinks.forEach(link => {
-          link.addEventListener('click', function() {
-            if (window.innerWidth <= 768) {
-              toggleButton.setAttribute('aria-expanded', 'false');
-              navbarMenu.classList.remove('show');
-              
-              // Reset hamburger
-              const spans = toggleButton.querySelectorAll('.navbar-toggle-icon');
-              spans.forEach(span => {
-                span.classList.remove('active');
-              });
-            }
-          });
-        });
-      }
-      
-      // ===== ACTIVE LINK HIGHLIGHTING =====
-      function setActiveLink() {
-        const currentPath = window.location.pathname;
-        const navLinks = document.querySelectorAll('.nav-link');
-        
-        navLinks.forEach(link => {
-          link.classList.remove('active');
-          const linkPath = link.getAttribute('data-page') || link.getAttribute('href');
-          
-          // Match esatto del path
-          if (linkPath === currentPath) {
-            link.classList.add('active');
-          }
-        });
-      }
-      
-      // Imposta il link attivo al caricamento della pagina
-      setActiveLink();
-    });
-</script>
-  
-  {{extra_js}}
+  <script>
+    (() => {
+      const root = document.documentElement;
+      const toggle = document.getElementById('themeToggle');
+      const menuToggle = document.getElementById('navbarToggle');
+      const menu = document.getElementById('navbarMenu');
 
+      const applyTheme = (theme) => {
+        if (theme === 'auto') {
+          const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          root.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+        } else {
+          root.setAttribute('data-theme', theme);
+        }
+      };
+
+      const savedTheme = localStorage.getItem('miniweb-theme') || 'auto';
+      applyTheme(savedTheme);
+
+      toggle?.addEventListener('click', () => {
+        const current = root.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+        const next = current === 'dark' ? 'light' : 'dark';
+        localStorage.setItem('miniweb-theme', next);
+        applyTheme(next);
+      });
+
+      menuToggle?.addEventListener('click', () => {
+        const expanded = menuToggle.getAttribute('aria-expanded') === 'true';
+        menuToggle.setAttribute('aria-expanded', String(!expanded));
+        menu.classList.toggle('show', !expanded);
+      });
+
+      const currentPath = window.location.pathname;
+      document.querySelectorAll('.nav-link').forEach((link) => {
+        if (link.dataset.page === currentPath) {
+          link.classList.add('active');
+        }
+        link.addEventListener('click', () => {
+          menu.classList.remove('show');
+          menuToggle?.setAttribute('aria-expanded', 'false');
+        });
+      });
+    })();
+  </script>
+
+  {{extra_js}}
 </body>
 </html>

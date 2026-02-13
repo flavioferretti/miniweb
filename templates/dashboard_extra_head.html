@@ -1,127 +1,50 @@
-<!-- dashboard_extra_head.html -->
 <style>
-  /* Estensioni al custom.css fornito */
-  .dashboard-grid {
-    display: grid;
-    /* Usiamo 1fr per forzare le colonne a stare dentro il box */
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
-    gap: 1.25rem;
-    margin: 1.5rem 0; /* Assicura spazio sopra e sotto */
-    width: 100%;      /* Forza la larghezza totale */
-    box-sizing: border-box;
-  }
+.dashboard-header { margin-bottom: 1rem; }
+.dashboard-header h1 { margin-bottom: 0.25rem; }
 
-  .stat-card {
-      background-color: var(--code-bg);
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      padding: 1.25rem;
-      /* Evita che il contenuto interno spinga i bordi verso l'esterno */
-      overflow: hidden;
-      word-wrap: break-word;
-      box-sizing: border-box;
-  }
+.tab-navigation {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.35rem;
+  margin-bottom: 1rem;
+}
 
-  .stat-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1rem;
-    border-bottom: 1px solid var(--border-color);
-    padding-bottom: 0.5rem;
-  }
+.tab-button {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  border-radius: 0.55rem;
+  padding: 0.45rem 0.7rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
 
-  .stat-header h3 { margin: 0; font-size: 1.1rem; }
+.tab-button.active {
+  color: var(--text);
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
 
-  /* Progress Bar System */
-  .progress-wrapper { margin-bottom: 1rem; }
-  .progress-label {
-    display: flex;
-    justify-content: space-between;
-    font-size: 0.85rem;
-    margin-bottom: 0.25rem;
-  }
+.dashboard-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+}
 
-  .progress-bg {
-    background-color: var(--border-color);
-    border-radius: 10px;
-    height: 8px;
-    overflow: hidden;
-  }
-
-  .progress-fill {
-    height: 100%;
-    background-color: var(--link-color);
-    transition: width 0.5s ease-out;
-  }
-
-  .progress-fill.warning { background-color: #f39c12; }
-  .progress-fill.danger { background-color: #e74c3c; }
-
-  .disk-list { max-height: 300px; overflow-y: auto; padding-right: 5px; }
-  .net-badge {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 4px;
-    background: var(--border-color);
-    font-size: 0.8rem;
-    margin-bottom: 5px;
-  }
-</style>
-
-<style>
-    .tab-navigation {
-        display: flex;
-        gap: 8px;
-        margin-bottom: 20px;
-        border-bottom: 2px solid var(--border);
-        padding-bottom: 0;
-        flex-wrap: wrap;
-    }
-
-    .tab-button {
-        padding: 10px 20px;
-        background: transparent;
-        border: none;
-        border-bottom: 3px solid transparent;
-        cursor: pointer;
-        font-size: 0.9rem;
-        font-weight: 500;
-        color: var(--text-muted);
-        transition: all 0.2s;
-        margin-bottom: -2px;
-    }
-
-    .tab-button:hover {
-        color: var(--text);
-        background: var(--bg-secondary);
-    }
-
-    .tab-button.active {
-        color: var(--primary);
-        border-bottom-color: var(--primary);
-    }
-
-    .dashboard-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-        gap: 20px;
-    }
-
-    /* Variabili CSS di supporto (se non definite altrove) */
-    :root {
-        --border-light: rgba(0, 0, 0, 0.05);
-        --success: #10b981;
-    }
-
-    @media (max-width: 768px) {
-        .tab-navigation {
-            overflow-x: auto;
-            flex-wrap: nowrap;
-        }
-
-        .tab-button {
-            white-space: nowrap;
-        }
-    }
+.stat-value { font-size: 1.6rem; font-weight: 700; }
+.progress {
+  width: 100%;
+  height: 8px;
+  background: var(--surface-2);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.progress > span {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+}
+.kv { display: flex; justify-content: space-between; gap: 1rem; }
+.dashboard-meta { margin-top: 1rem; }
 </style>

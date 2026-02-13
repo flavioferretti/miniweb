@@ -1,112 +1,86 @@
-<!-- templates/docs_extra_js.html -->
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const sectionsContainer = document.getElementById('sectionsContainer');
-    const pagesViewer = document.getElementById('pagesViewer');
-    const pagesList = document.getElementById('pagesList');
-    const sectionTitle = document.getElementById('currentSectionTitle');
-    const searchInput = document.getElementById('manSearch');
-    const searchResults = document.getElementById('searchResults');
+(() => {
+  const sectionsContainer = document.getElementById('sectionsContainer');
+  const pagesViewer = document.getElementById('pagesViewer');
+  const pagesList = document.getElementById('pagesList');
+  const sectionTitle = document.getElementById('currentSectionTitle');
+  const closeViewer = document.getElementById('closeViewer');
+  const searchInput = document.getElementById('manSearch');
+  const searchResults = document.getElementById('searchResults');
 
-    let debounceTimer;
+  const areaIcon = (area) => (area === 'system' ? 'System' : area === 'x11' ? 'X11' : 'Local');
 
-    // --- 1. CARICAMENTO SEZIONI (Corretto URL in /api/man/sections) ---
-    // --- CARICAMENTO SEZIONI UNIVERSALE ---
-    // --- CARICAMENTO DINAMICO AREE ---
-    fetch('/api/man/sections')
-        .then(res => res.json())
-        .then(data => {
-            sectionsContainer.innerHTML = '';
-            Object.keys(data).forEach(key => {
-                const area = data[key];
-                const icon = key === 'system' ? '🔧' : (key === 'x11' ? '🖥️' : '📦');
-                sectionsContainer.innerHTML += `
-                    <div class="area-section">
-                        <div class="area-header"><h2>${icon} ${area.name}</h2></div>
-                        <div class="sections-grid-inner">
-                            ${area.sections.map(s => `
-                                <div class="section-card" onclick="loadSection('${key}', '${s.id}', '${s.name}')">
-                                    <h3>Section ${s.id}</h3><p>${s.name}</p>
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>`;
-            });
-        });
-    // --- 2. CARICAMENTO PAGINE (Gestisce array di stringhe) ---
-    window.loadSection = function(area, id, name) {
-        sectionsContainer.classList.add('hidden');
-        pagesViewer.classList.remove('hidden');
-        sectionTitle.innerHTML = `${area === 'system' ? '🔧' : '📦'} Section ${id}: ${name}`;
-        pagesList.innerHTML = '<div class="loading">Loading...</div>';
+  const openSection = async (area, sectionId, sectionName) => {
+    sectionsContainer.classList.add('hidden');
+    pagesViewer.classList.remove('hidden');
+    sectionTitle.textContent = `${areaIcon(area)} · Section ${sectionId} · ${sectionName}`;
+    pagesList.innerHTML = '<p class="muted">Loading pages...</p>';
 
-        fetch(`/api/man/${area}/${id}`)
-            .then(res => res.json())
-            .then(data => {
-                // 'data.pages' ora è un array di stringhe ["ls", "cp", ...]
-                if (!data.pages || data.pages.length === 0) {
-                    pagesList.innerHTML = 'No pages found.';
-                    return;
-                }
+    const response = await fetch(`/api/man/${area}/${sectionId}`);
+    const data = await response.json();
+    const pages = data.pages || [];
+    if (!pages.length) {
+      pagesList.innerHTML = '<p class="muted">No pages found for this section.</p>';
+      return;
+    }
 
-                pagesList.innerHTML = data.pages.map(pageName => `
-                    <div class="page-item">
-                        <div class="page-header">
-                            <strong>${pageName}</strong>
-                            <span class="tag">${id}</span>
-                        </div>
-                        <div class="links">
-                            <a href="/man/${area}/${id}/${pageName}" target="_blank">HTML</a>
-                            <a href="/man/${area}/${id}/${pageName}.md" target="_blank">MD</a>
-                            <a href="/man/${area}/${id}/${pageName}.pdf" target="_blank">PDF</a>
-                        </div>
-                    </div>
-                `).join('');
-            });
-    };
+    pagesList.innerHTML = pages.map((name) => `
+      <div class="page-item">
+        <strong>${name}</strong>
+        <div class="page-links">
+          <a href="/man/${area}/${sectionId}/${name}" target="_blank" rel="noopener">html</a>
+          <a href="/man/${area}/${sectionId}/${name}.md" target="_blank" rel="noopener">md</a>
+          <a href="/man/${area}/${sectionId}/${name}.pdf" target="_blank" rel="noopener">pdf</a>
+        </div>
+      </div>`).join('');
+  };
 
-    // --- 3. RICERCA (Gestisce il formato raw di apropos) ---
-    searchInput.addEventListener('input', function() {
-        clearTimeout(debounceTimer);
-        const query = this.value.trim();
-        if (query.length < 2) { searchResults.classList.add('hidden'); return; }
+  const loadSections = async () => {
+    const response = await fetch('/api/man/sections');
+    const data = await response.json();
+    sectionsContainer.innerHTML = Object.entries(data).map(([key, area]) => `
+      <div class="area-section">
+        <h3>${areaIcon(key)} (${area.name})</h3>
+        <div class="section-grid">
+          ${area.sections.map((s) => `<button class="section-card" data-area="${key}" data-id="${s.id}" data-name="${s.name}" type="button"><strong>Section ${s.id}</strong><p class="muted">${s.name}</p></button>`).join('')}
+        </div>
+      </div>`).join('');
+  };
 
-        debounceTimer = setTimeout(() => {
-            searchResults.innerHTML = 'Searching...';
-            searchResults.classList.remove('hidden');
+  sectionsContainer.addEventListener('click', (event) => {
+    const card = event.target.closest('.section-card');
+    if (!card) return;
+    openSection(card.dataset.area, card.dataset.id, card.dataset.name);
+  });
 
-            // Nota: l'URL nel tuo man.c è /api/man/search/QUERY non /api/man/search?q=
-            // --- LOGICA DI RICERCA AGGIORNATA ---
-        fetch(`/api/man/search/${encodeURIComponent(query)}`)
-            .then(r => r.text())
-            .then(text => {
-                const lines = text.split('\n').filter(l => l.trim().length > 0);
-                searchResults.innerHTML = lines.map(line => {
-                    // Regex più robusta: cattura "nome", "sezione" e "descrizione"
-                    const match = line.match(/^([a-zA-Z0-9_.:-]+)\(([^)]+)\)\s+-\s+(.*)$/);
-                    if (!match) return '';
+  closeViewer.addEventListener('click', () => {
+    pagesViewer.classList.add('hidden');
+    sectionsContainer.classList.remove('hidden');
+  });
 
-                    const name = match[1];
-                    const section = match[2];
-                    const desc = match[3];
+  let timer;
+  searchInput.addEventListener('input', () => {
+    clearTimeout(timer);
+    const q = searchInput.value.trim();
+    if (q.length < 2) {
+      searchResults.classList.add('hidden');
+      return;
+    }
+    timer = setTimeout(async () => {
+      const response = await fetch(`/api/man/search/${encodeURIComponent(q)}`);
+      const text = await response.text();
+      const rows = text.split('\n').filter(Boolean);
+      searchResults.innerHTML = rows.map((line) => {
+        const m = line.match(/^([a-zA-Z0-9_.:-]+)\(([^)]+)\)\s+-\s+(.*)$/);
+        if (!m) return '';
+        return `<a class="search-item" href="/man/system/${m[2]}/${m[1]}" target="_blank" rel="noopener"><strong>${m[1]}(${m[2]})</strong><br><span class="muted">${m[3]}</span></a>`;
+      }).join('') || '<div class="search-item">No results.</div>';
+      searchResults.classList.remove('hidden');
+    }, 280);
+  });
 
-                    // Determiniamo l'area probabile basandoci sulla sezione
-                    // Nota: apropos non dice il path, quindi usiamo un fallback intelligente
-                    return `
-                        <div class="search-item" onclick="window.open('/man/system/${section}/${name}', '_blank')">
-                            <span class="tag">${section}</span>
-                            <strong>${name}</strong>
-                            <span class="desc">${desc}</span>
-                        </div>`;
-                }).join('');
-            });
-
-        }, 300);
-    });
-
-    window.closeViewer = function() {
-        pagesViewer.classList.add('hidden');
-        sectionsContainer.classList.remove('hidden');
-    };
-});
+  loadSections().catch(() => {
+    sectionsContainer.innerHTML = '<p class="muted">Unable to load sections.</p>';
+  });
+})();
 </script>

@@ -150,8 +150,8 @@ apiroot_handler(void *cls, struct MHD_Connection *connection, const char *url,
 
 	struct template_data data = {.title = "MiniWeb - API Root",
 		.page_content = "api.html",
-		.extra_head_file = NULL,
-		.extra_js_file = NULL};
+		.extra_head_file = "api_extra_head.html",
+		.extra_js_file = "api_extra_js.html"};
 
 		return render_template_response(connection, &data, "api.html");
 }
