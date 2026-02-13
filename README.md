@@ -49,7 +49,9 @@ Interfaccia programmatica per la documentazione di sistema.
 ```bash
 $ make clean && make
 ```
-
+### Git
+- gitea `git push`
+- GitHub `git push -u github main`
 
 ---
 Autore: Flavio
