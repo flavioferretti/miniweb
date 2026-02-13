@@ -45,7 +45,7 @@
     }
 
     if (currentTab === 'disk') {
-      const disks = (latest.disks || []).map((d) => panel(d.mount, `<p class="muted">${d.device}</p><p class="stat-value">${d.percent}%</p><div class="progress"><span style="width:${d.percent}%"></span></div>`)).join('');
+      const disks = (latest.disks || []).map((d) => panel(`<p style="font-size: 1rem;">${d.mount}</p>`, `<p class="muted">${d.device}</p><p class="stat-value">${d.percent}%</p><div class="progress"><span style="width:${d.percent}%"></span></div>`)).join('');
       dashboard.innerHTML = disks || panel('Disk', '<p class="muted">No mounted volumes detected.</p>');
       return;
     }
