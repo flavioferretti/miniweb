@@ -1,182 +1,249 @@
 #!/bin/ksh
 #
-# advanced_bench.ksh - Advanced benchmark with detailed graphs
+# benchmark.sh - Build a detailed benchmark report for MiniWeb.
+# Generates static/benchmark.html and per-metric SVG graphs in static/benchmark_assets.
 #
 
-set -e
+set -eu
 
-SERVER_URL="http://localhost:9001/api/metrics"
-TEST_DURATION=30
-THREADS=4
-set -A CONNECTIONS 10 25 50 100 200
-OUTPUT_DIR="benchmark"
-TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+SERVER_URL="${SERVER_URL:-http://localhost:9001/api/metrics}"
+TEST_DURATION="${TEST_DURATION:-30}"
+THREADS="${THREADS:-4}"
+CONNECTIONS="${CONNECTIONS:-10 25 50 100 200}"
+OUTPUT_ROOT="${OUTPUT_ROOT:-static}"
+ASSETS_DIR="${OUTPUT_ROOT}/benchmark_assets"
+TIMESTAMP="$(date '+%Y-%m-%d %H:%M:%S')"
+CSV_FILE="${ASSETS_DIR}/results.csv"
+HTML_FILE="${OUTPUT_ROOT}/benchmark.html"
+GNUPLOT_SCRIPT="${ASSETS_DIR}/plot.gp"
 
-echo "Advanced Benchmark Suite ${TIMESTAMP}"
-echo "====================================================="
-echo " - URL ${SERVER_URL}"
+printf 'MiniWeb Benchmark\n'
+printf '=============================================\n'
+printf 'Server URL  : %s\n' "$SERVER_URL"
+printf 'Threads     : %s\n' "$THREADS"
+printf 'Duration    : %ss\n' "$TEST_DURATION"
+printf 'Connections : %s\n\n' "$CONNECTIONS"
 
-# Check dependencies
-for cmd in wrk gnuplot curl; do
-    if ! command -v $cmd >/dev/null 2>&1; then
-        echo "ERROR: $cmd not found. Install with: pkg_add $cmd"
-        exit 1
-    fi
+for cmd in wrk gnuplot curl awk sed; do
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    echo "ERROR: missing dependency '$cmd'" >&2
+    exit 1
+  fi
 done
 
-# Check server
-if ! curl -s --max-time 2 "${SERVER_URL}" >/dev/null 2>&1; then
-    echo "ERROR: Server not running"
-    exit 1
+if ! curl -s --max-time 3 "$SERVER_URL" >/dev/null 2>&1; then
+  echo "ERROR: server is unreachable at $SERVER_URL" >&2
+  exit 1
 fi
 
-echo "Server OK"
-echo ""
+mkdir -p "$ASSETS_DIR"
 
-# Create output directory
-mkdir -p "${OUTPUT_DIR}"
+cat > "$CSV_FILE" <<'CSV'
+connections,req_sec,latency_avg_ms,latency_stdev_ms,latency_max_ms,transfer_mb_sec,total_requests,errors_non_2xx
+CSV
 
-# CSV file
-CSV="${OUTPUT_DIR}/results_${TIMESTAMP}.csv"
-echo "connections,req_sec,latency_avg_ms,latency_max_ms,latency_stdev_ms,transfer_mb,total_requests" > "$CSV"
+trim_value() {
+  printf '%s' "$1" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
+}
 
-# Run benchmarks
-for conn in "${CONNECTIONS[@]}"; do
-    echo "Testing: $conn connections..."
+to_ms() {
+  typeset raw num unit
+  raw="$(trim_value "$1" | tr -d ',')"
+  num="$(printf '%s' "$raw" | sed 's/[^0-9.]//g')"
+  unit="$(printf '%s' "$raw" | sed 's/[0-9.]//g')"
 
-    output=$(wrk -t${THREADS} -c${conn} -d${TEST_DURATION}s --latency "${SERVER_URL}" 2>&1)
+  [ -z "$num" ] && num="0"
 
-    # Save full output
-    echo "$output" > "${OUTPUT_DIR}/wrk_${conn}_${TIMESTAMP}.txt"
+  case "$unit" in
+    us) awk -v n="$num" 'BEGIN { printf "%.3f", n/1000 }' ;;
+    ms|'') awk -v n="$num" 'BEGIN { printf "%.3f", n }' ;;
+    s) awk -v n="$num" 'BEGIN { printf "%.3f", n*1000 }' ;;
+    m) awk -v n="$num" 'BEGIN { printf "%.3f", n*60000 }' ;;
+    *) awk -v n="$num" 'BEGIN { printf "%.3f", n }' ;;
+  esac
+}
 
-    # Parse metrics
-    req_sec=$(echo "$output" | grep "Requests/sec:" | awk '{print $2}')
+to_mbsec() {
+  typeset raw num unit
+  raw="$(trim_value "$1" | tr -d ',')"
+  num="$(printf '%s' "$raw" | sed 's/[^0-9.]//g')"
+  unit="$(printf '%s' "$raw" | sed 's/[0-9.]//g')"
 
-    # Latency metrics
-    latency_line=$(echo "$output" | grep "Latency" | head -1)
-    latency_avg=$(echo "$latency_line" | awk '{print $2}' | sed 's/ms//')
-    latency_stdev=$(echo "$latency_line" | awk '{print $3}' | sed 's/ms//')
-    latency_max=$(echo "$latency_line" | awk '{print $4}' | sed 's/ms//')
+  [ -z "$num" ] && num="0"
 
-    # Convert if in microseconds or seconds
-    for lat in latency_avg latency_stdev latency_max; do
-        val=$(eval echo \$$lat)
-        if echo "$val" | grep -q "us"; then
-            val=$(echo "$val" | sed 's/us//' | awk '{printf "%.2f", $1/1000}')
-        elif echo "$val" | grep -q "s"; then
-            val=$(echo "$val" | sed 's/s//' | awk '{printf "%.2f", $1*1000}')
-        fi
-        eval $lat="$val"
-    done
+  case "$unit" in
+    B) awk -v n="$num" 'BEGIN { printf "%.3f", n/1048576 }' ;;
+    KB) awk -v n="$num" 'BEGIN { printf "%.3f", n/1024 }' ;;
+    MB|'') awk -v n="$num" 'BEGIN { printf "%.3f", n }' ;;
+    GB) awk -v n="$num" 'BEGIN { printf "%.3f", n*1024 }' ;;
+    *) awk -v n="$num" 'BEGIN { printf "%.3f", n }' ;;
+  esac
+}
 
-    transfer=$(echo "$output" | grep "Transfer/sec:" | awk '{print $2}' | sed 's/MB//')
-    total=$(echo "$output" | grep "requests in" | awk '{print $1}')
+for conn in $CONNECTIONS; do
+  echo "Running test with $conn connections..."
+  run_output="$(wrk -t"$THREADS" -c"$conn" -d"${TEST_DURATION}"s --latency "$SERVER_URL" 2>&1)"
+  echo "$run_output" > "${ASSETS_DIR}/wrk_${conn}.txt"
 
-    echo "$conn,$req_sec,$latency_avg,$latency_max,$latency_stdev,$transfer,$total" >> "$CSV"
+  req_sec="$(echo "$run_output" | awk '/Requests\/sec:/ {print $2; exit}')"
+  transfer_raw="$(echo "$run_output" | awk '/Transfer\/sec:/ {print $2; exit}')"
+  total_requests="$(echo "$run_output" | awk '/requests in/ {print $1; exit}')"
+  non_2xx="$(echo "$run_output" | awk '/Non-2xx or 3xx responses:/ {print $5; exit}')"
+  latency_line="$(echo "$run_output" | awk '/Latency/ {print; exit}')"
 
-    echo "  -> $req_sec req/s, ${latency_avg}ms latency"
-    sleep 6 # lowering cpu temp
+  [ -z "$req_sec" ] && req_sec="0"
+  [ -z "$transfer_raw" ] && transfer_raw="0MB"
+  [ -z "$total_requests" ] && total_requests="0"
+  [ -z "$non_2xx" ] && non_2xx="0"
+
+  latency_avg="$(to_ms "$(echo "$latency_line" | awk '{print $2}')")"
+  latency_stdev="$(to_ms "$(echo "$latency_line" | awk '{print $3}')")"
+  latency_max="$(to_ms "$(echo "$latency_line" | awk '{print $4}')")"
+  transfer_mb="$(to_mbsec "$transfer_raw")"
+
+  printf '%s,%s,%s,%s,%s,%s,%s,%s\n' \
+    "$conn" "$req_sec" "$latency_avg" "$latency_stdev" "$latency_max" "$transfer_mb" "$total_requests" "$non_2xx" \
+    >> "$CSV_FILE"
 done
 
-echo ""
-echo "Generating graphs..."
-
-# Create advanced gnuplot script
-PLOT_SCRIPT="${OUTPUT_DIR}/plot_${TIMESTAMP}.gnuplot"
-
-cat > "$PLOT_SCRIPT" << 'GNUPLOT_EOF'
-#!/usr/local/bin/gnuplot
-
-set terminal svg size 1600,1200 enhanced font 'Arial,11' background rgb 'white'
-set output 'OUTPUT_FILE'
-
+cat > "$GNUPLOT_SCRIPT" <<GP
 set datafile separator ','
-set grid
 set key outside right top
+set grid
+set border lw 1.2
+set style line 1 lc rgb '#2563eb' lw 2 pt 7 ps 1.1
+set style line 2 lc rgb '#dc2626' lw 2 pt 7 ps 1.1
+set style line 3 lc rgb '#d97706' lw 2 pt 7 ps 1.1
+set style line 4 lc rgb '#16a34a' lw 2 pt 7 ps 1.1
+set style line 5 lc rgb '#7c3aed' lw 2 pt 7 ps 1.1
 
-# Color scheme
-throughput_color = "#0066CC"
-latency_color = "#CC0000"
-stdev_color = "#FF9900"
-transfer_color = "#00AA00"
+set terminal svg size 1200,480 dynamic enhanced font 'Arial,11'
 
-set multiplot layout 3,2 title "MiniWeb Server Performance Analysis" font 'Arial,18'
-
-# === Plot 1: Throughput and Latency (dual axis) ===
-set title 'Throughput vs Latency' font 'Arial,14'
-set xlabel 'Concurrent Connections'
-set ylabel 'Requests/sec' textcolor rgb throughput_color
-set y2label 'Latency (ms)' textcolor rgb latency_color
-set ytics nomirror textcolor rgb throughput_color
-set y2tics textcolor rgb latency_color
-set style fill solid 0.3
-plot 'CSV_FILE' using 1:2 skip 1 with linespoints lw 3 pt 7 ps 1.5 lc rgb throughput_color title 'Throughput' axes x1y1, \
-     'CSV_FILE' using 1:3 skip 1 with linespoints lw 3 pt 9 ps 1.5 lc rgb latency_color title 'Avg Latency' axes x1y2
-
-# === Plot 2: Throughput only ===
-unset y2label
-unset y2tics
-set ytics mirror textcolor rgb "black"
-set title 'Server Throughput' font 'Arial,14'
+set output '${ASSETS_DIR}/throughput.svg'
+set title 'Throughput by Concurrent Connections'
+set xlabel 'Concurrent connections'
 set ylabel 'Requests/sec'
-set style fill solid 0.5
-plot 'CSV_FILE' using 1:2 skip 1 with filledcurves x1 lc rgb throughput_color notitle, \
-     'CSV_FILE' using 1:2 skip 1 with linespoints lw 3 pt 7 ps 1.5 lc rgb throughput_color title 'Req/sec'
+plot '${CSV_FILE}' using 1:2 skip 1 with linespoints ls 1 title 'Requests/sec'
 
-# === Plot 3: Latency breakdown ===
-set title 'Latency Analysis' font 'Arial,14'
+set output '${ASSETS_DIR}/latency.svg'
+set title 'Average and Max Latency'
+set xlabel 'Concurrent connections'
 set ylabel 'Latency (ms)'
-plot 'CSV_FILE' using 1:3 skip 1 with linespoints lw 2 pt 7 lc rgb latency_color title 'Average', \
-     'CSV_FILE' using 1:5 skip 1 with linespoints lw 2 pt 11 lc rgb stdev_color title 'Std Dev'
-#'CSV_FILE' using 1:4 skip 1 with linespoints lw 2 pt 9 lc rgb "#FF0000" title 'Maximum', \
+plot '${CSV_FILE}' using 1:3 skip 1 with linespoints ls 2 title 'Average latency', \
+     '${CSV_FILE}' using 1:5 skip 1 with linespoints ls 3 title 'Max latency'
 
+set output '${ASSETS_DIR}/latency_stdev.svg'
+set title 'Latency Stability (Standard Deviation)'
+set xlabel 'Concurrent connections'
+set ylabel 'Std Dev (ms)'
+plot '${CSV_FILE}' using 1:4 skip 1 with linespoints ls 5 title 'Latency stdev'
 
-# === Plot 4: Latency with error bars ===
-set title 'Latency with Standard Deviation' font 'Arial,14'
-set ylabel 'Latency (ms)'
-plot 'CSV_FILE' using 1:3:5 skip 1 with yerrorbars lw 2 pt 7 ps 1.5 lc rgb latency_color title 'Avg ± StdDev', \
-     'CSV_FILE' using 1:3 skip 1 with lines lw 2 lc rgb latency_color notitle
+set output '${ASSETS_DIR}/transfer.svg'
+set title 'Transfer Rate'
+set xlabel 'Concurrent connections'
+set ylabel 'MB/sec'
+plot '${CSV_FILE}' using 1:6 skip 1 with linespoints ls 4 title 'Transfer MB/sec'
 
-# === Plot 5: Transfer rate ===
-set title 'Data Transfer Rate' font 'Arial,14'
-set ylabel 'Transfer (MB/sec)'
-set style fill solid 0.5
-plot 'CSV_FILE' using 1:6 skip 1 with filledcurves x1 lc rgb transfer_color notitle, \
-     'CSV_FILE' using 1:6 skip 1 with linespoints lw 3 pt 7 ps 1.5 lc rgb transfer_color title 'MB/sec'
+set output '${ASSETS_DIR}/efficiency.svg'
+set title 'Connection Efficiency'
+set xlabel 'Concurrent connections'
+set ylabel 'Req/sec per connection'
+plot '${CSV_FILE}' using 1:(\$2/\$1) skip 1 with linespoints ls 1 title 'Efficiency'
+GP
 
-# === Plot 6: Efficiency (req/sec per connection) ===
-set title 'Connection Efficiency' font 'Arial,14'
-set ylabel 'Requests per Connection'
-plot 'CSV_FILE' using 1:($2/$1) skip 1 with linespoints lw 3 pt 7 ps 1.5 lc rgb "#9900CC" title 'Req/sec per Connection'
+gnuplot "$GNUPLOT_SCRIPT"
 
-unset multiplot
-GNUPLOT_EOF
+peak_req="$(awk -F',' 'NR>1{if($2>m){m=$2;c=$1}} END{printf "%.3f|%s", m, c}' "$CSV_FILE")"
+best_latency="$(awk -F',' 'NR>1{if(NR==2||$3<m){m=$3;c=$1}} END{printf "%.3f|%s", m, c}' "$CSV_FILE")"
+worst_latency="$(awk -F',' 'NR>1{if($5>m){m=$5;c=$1}} END{printf "%.3f|%s", m, c}' "$CSV_FILE")"
 
-# Replace placeholders
-OUTPUT_SVG="${OUTPUT_DIR}/benchmark_${TIMESTAMP}.svg"
-sed "s|OUTPUT_FILE|${OUTPUT_SVG}|g" "$PLOT_SCRIPT" | sed "s|CSV_FILE|${CSV}|g" > "${PLOT_SCRIPT}.tmp"
-mv "${PLOT_SCRIPT}.tmp" "$PLOT_SCRIPT"
+peak_req_value="${peak_req%%|*}"
+peak_req_conn="${peak_req##*|}"
+best_lat_value="${best_latency%%|*}"
+best_lat_conn="${best_latency##*|}"
+worst_lat_value="${worst_latency%%|*}"
+worst_lat_conn="${worst_latency##*|}"
 
-# Generate graph
-gnuplot "$PLOT_SCRIPT"
+TABLE_ROWS="$(awk -F',' 'NR>1{printf "            <tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>\n",$1,$2,$3,$4,$5,$6,$7,$8}' "$CSV_FILE")"
 
-echo ""
-echo "====================================="
-echo "Benchmark Complete!"
-echo "====================================="
-echo ""
-echo "Results:"
-echo "  CSV:   $CSV"
-echo "  Graph: $OUTPUT_SVG"
-echo ""
-echo "Summary:"
-tail -n +2 "$CSV" | awk -F',' '{printf "  %3d conn: %8.2f req/s, %6.2f ms latency\n", $1, $2, $3}'
-echo ""
+cat > "$HTML_FILE" <<HTML
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MiniWeb Benchmark Report</title>
+  <link rel="stylesheet" href="/custom.css" />
+  <style>
+    .benchmark-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin: 1rem 0 1.5rem; }
+    .stat-card h3 { margin: 0 0 .35rem; font-size: .95rem; color: var(--text-muted); }
+    .stat-card p { margin: 0; font-size: 1.3rem; font-weight: 700; }
+    .graphs { display:grid; gap: 1rem; }
+    .graph img { width:100%; height:auto; border:1px solid var(--border); border-radius: .8rem; background: var(--surface-2); }
+    .details { overflow:auto; }
+    table { width:100%; border-collapse: collapse; }
+    th, td { text-align:left; padding: .55rem .6rem; border-bottom: 1px solid var(--border); font-size: .95rem; }
+    th { color: var(--text-muted); font-weight: 600; }
+    .meta { font-size: .95rem; color: var(--text-muted); }
+    code { background: var(--surface-2); padding: 0.1rem 0.4rem; border-radius: .4rem; }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-row">
+      <a class="brand" href="/">MiniWeb</a>
+      <nav class="navbar-menu"><a class="nav-link active" href="/benchmark.html">Benchmark</a></nav>
+    </div>
+  </header>
 
-# Find peak performance
-peak_req=$(tail -n +2 "$CSV" | cut -d',' -f2 | sort -n | tail -1)
-best_latency=$(tail -n +2 "$CSV" | cut -d',' -f3 | sort -n | head -1)
+  <main class="app-shell">
+    <div class="container">
+      <section class="panel">
+        <h1>Benchmark Report</h1>
+        <p class="meta">Generated: ${TIMESTAMP} · Target URL: <code>${SERVER_URL}</code> · Duration: ${TEST_DURATION}s · Threads: ${THREADS}</p>
 
-echo "Peak throughput: $peak_req req/s"
-echo "Best latency:    $best_latency ms"
-echo ""
+        <div class="benchmark-grid">
+          <article class="panel stat-card"><h3>Peak throughput</h3><p>${peak_req_value} req/s</p><span class="muted">at ${peak_req_conn} connections</span></article>
+          <article class="panel stat-card"><h3>Best avg latency</h3><p>${best_lat_value} ms</p><span class="muted">at ${best_lat_conn} connections</span></article>
+          <article class="panel stat-card"><h3>Worst max latency</h3><p>${worst_lat_value} ms</p><span class="muted">at ${worst_lat_conn} connections</span></article>
+        </div>
+
+        <div class="graphs">
+          <article class="graph"><h2>Throughput</h2><img src="/benchmark_assets/throughput.svg" alt="Throughput graph"></article>
+          <article class="graph"><h2>Latency (avg vs max)</h2><img src="/benchmark_assets/latency.svg" alt="Latency graph"></article>
+          <article class="graph"><h2>Latency standard deviation</h2><img src="/benchmark_assets/latency_stdev.svg" alt="Latency deviation graph"></article>
+          <article class="graph"><h2>Transfer rate</h2><img src="/benchmark_assets/transfer.svg" alt="Transfer graph"></article>
+          <article class="graph"><h2>Connection efficiency</h2><img src="/benchmark_assets/efficiency.svg" alt="Efficiency graph"></article>
+        </div>
+      </section>
+
+      <section class="panel details" style="margin-top:1rem;">
+        <h2>Detailed run stats</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Connections</th>
+              <th>Req/sec</th>
+              <th>Avg latency (ms)</th>
+              <th>StdDev (ms)</th>
+              <th>Max latency (ms)</th>
+              <th>Transfer (MB/s)</th>
+              <th>Total requests</th>
+              <th>Non-2xx/3xx</th>
+            </tr>
+          </thead>
+          <tbody>
+${TABLE_ROWS}
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </main>
+</body>
+</html>
+HTML
+
+printf '\nBenchmark complete.\n'
+printf '  HTML report : %s\n' "$HTML_FILE"
+printf '  CSV results : %s\n' "$CSV_FILE"
+printf '  Assets dir  : %s\n' "$ASSETS_DIR"
