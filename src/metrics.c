@@ -57,14 +57,6 @@ metrics_get_memory_stats(MemoryStats *stats)
 	int mib[2];
 	size_t len;
 
-	unsigned long physmem;
-	mib[0] = CTL_HW;
-	mib[1] = HW_PHYSMEM64;
-	len = sizeof(physmem);
-	if (sysctl(mib, 2, &physmem, &len, NULL, 0) == -1) {
-		return -1;
-	}
-
 	struct uvmexp uvm;
 	mib[0] = CTL_VM;
 	mib[1] = VM_UVMEXP;
@@ -73,6 +65,8 @@ metrics_get_memory_stats(MemoryStats *stats)
 		return -1;
 
 	unsigned long pagesize = uvm.pagesize;
+	unsigned long long physmem =
+	    (unsigned long long)uvm.npages * (unsigned long long)pagesize;
 	stats->total_mb = physmem / MB;
 	stats->free_mb = (uvm.free * pagesize) / MB;
 	stats->active_mb = (uvm.active * pagesize) / MB;
@@ -347,11 +341,15 @@ metrics_get_top_memory_processes(ProcessInfo *processes, int max_processes)
 	if (processes == NULL || max_processes <= 0)
 		return 0;
 
-	int mib[2] = {CTL_HW, HW_PHYSMEM64};
-	unsigned long long physmem = 0;
-	size_t memlen = sizeof(physmem);
-	if (sysctl(mib, 2, &physmem, &memlen, NULL, 0) == -1 || physmem == 0)
+	int vmib[2] = {CTL_VM, VM_UVMEXP};
+	struct uvmexp uvm;
+	size_t memlen = sizeof(uvm);
+	if (sysctl(vmib, 2, &uvm, &memlen, NULL, 0) == -1 || uvm.pagesize == 0 ||
+	    uvm.npages == 0)
 		return 0;
+
+	unsigned long long physmem =
+	    (unsigned long long)uvm.npages * (unsigned long long)uvm.pagesize;
 
 	int pmib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0};
 	size_t len = 0;
