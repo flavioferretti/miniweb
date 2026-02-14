@@ -107,9 +107,9 @@ unit-tests: ${BUILDDIR}/routes_test ${BUILDDIR}/template_test
 integration-test: ${BUILDDIR}/${PROG}
 	bash ${TESTDIR}/integration_endpoints.sh
 
-${BUILDDIR}/routes_test: ${TESTDIR}/routes_test.c ${SRCDIR}/routes.c ${SRCDIR}/metrics.c ${SRCDIR}/man.c ${SRCDIR}/template_engine.c ${SRCDIR}/http_utils.c
+${BUILDDIR}/routes_test: ${TESTDIR}/routes_test.c ${SRCDIR}/routes.c ${SRCDIR}/metrics.c ${SRCDIR}/man.c ${SRCDIR}/template_engine.c ${SRCDIR}/http_utils.c ${SRCDIR}/urls.c
 	@mkdir -p ${BUILDDIR}
-	${CC} ${CFLAGS} ${LDFLAGS} -I${INCDIR} -o $@ ${TESTDIR}/routes_test.c ${SRCDIR}/routes.c ${SRCDIR}/metrics.c ${SRCDIR}/man.c ${SRCDIR}/template_engine.c ${SRCDIR}/http_utils.c ${LDADD}
+	${CC} ${CFLAGS} ${LDFLAGS} -I${INCDIR} -o $@ ${TESTDIR}/routes_test.c ${SRCDIR}/routes.c ${SRCDIR}/metrics.c ${SRCDIR}/man.c ${SRCDIR}/template_engine.c ${SRCDIR}/http_utils.c ${SRCDIR}/urls.c ${LDADD}
 
 ${BUILDDIR}/template_test: ${TESTDIR}/template_test.c ${SRCDIR}/template_engine.c
 	@mkdir -p ${BUILDDIR}

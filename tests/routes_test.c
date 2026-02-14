@@ -1,6 +1,13 @@
 #include <assert.h>
 #include <stdio.h>
+
+
+#include "../include/config.h"
+// #include "/home/flavio/DEV/miniweb_libmicrohttpd/include/http_utils.h"
 #include "../include/routes.h"
+#include "../include/urls.h"
+
+int config_verbose = 0;
 
 int main(void)
 {
