@@ -180,7 +180,7 @@ cat > "$HTML_FILE" <<HTML
     .stat-card h3 { margin: 0 0 .35rem; font-size: .95rem; color: var(--text-muted); }
     .stat-card p { margin: 0; font-size: 1.3rem; font-weight: 700; }
     .graphs { display:grid; gap: 1rem; }
-    .graph img { width:100%; height:auto; border:1px solid var(--border); border-radius: .8rem; background: var(--surface-2); }
+    .graph img { width:100%; height:auto; border:1px solid var(--border); border-radius: .8rem; background-color: #ccc; }
     .details { overflow:auto; }
     table { width:100%; border-collapse: collapse; }
     th, td { text-align:left; padding: .55rem .6rem; border-bottom: 1px solid var(--border); font-size: .95rem; }

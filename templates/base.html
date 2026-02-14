@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="auto">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -42,27 +42,38 @@
     (() => {
       const root = document.documentElement;
       const toggle = document.getElementById('themeToggle');
-      const menuToggle = document.getElementById('navbarToggle');
-      const menu = document.getElementById('navbarMenu');
 
+      // 1. Funzione per applicare il tema e aggiornare l'attributo HTML
       const applyTheme = (theme) => {
+        let themeToApply = theme;
+
         if (theme === 'auto') {
           const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-          root.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
-        } else {
-          root.setAttribute('data-theme', theme);
+          themeToApply = prefersDark ? 'dark' : 'light';
         }
+
+        root.setAttribute('data-theme', themeToApply);
+        // Salviamo la scelta specifica (dark o light) nel localStorage
+        localStorage.setItem('miniweb-theme', themeToApply);
       };
 
+      // 2. Al caricamento: Recupera dal localStorage o usa il default
+      // Nota: se il localStorage è vuoto, usiamo 'auto' o 'light'
       const savedTheme = localStorage.getItem('miniweb-theme') || 'auto';
       applyTheme(savedTheme);
 
+      // 3. Gestione del Click sul pulsante
       toggle?.addEventListener('click', () => {
-        const current = root.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
-        const next = current === 'dark' ? 'light' : 'dark';
-        localStorage.setItem('miniweb-theme', next);
-        applyTheme(next);
+        // Leggiamo cosa c'è scritto attualmente sull'HTML
+        const currentTheme = root.getAttribute('data-theme');
+        const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+
+        applyTheme(nextTheme);
       });
+
+      /* --- Logica Menu Mobile --- */
+      const menuToggle = document.getElementById('navbarToggle');
+      const menu = document.getElementById('navbarMenu');
 
       menuToggle?.addEventListener('click', () => {
         const expanded = menuToggle.getAttribute('aria-expanded') === 'true';
@@ -70,15 +81,12 @@
         menu.classList.toggle('show', !expanded);
       });
 
+      // Gestione link attivi
       const currentPath = window.location.pathname;
       document.querySelectorAll('.nav-link').forEach((link) => {
-        if (link.dataset.page === currentPath) {
+        if (link.getAttribute('href') === currentPath) {
           link.classList.add('active');
         }
-        link.addEventListener('click', () => {
-          menu.classList.remove('show');
-          menuToggle?.setAttribute('aria-expanded', 'false');
-        });
       });
     })();
   </script>

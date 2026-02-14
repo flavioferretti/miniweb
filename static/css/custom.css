@@ -1,6 +1,7 @@
 @import url('satoshi.css');
 
 :root {
+  /* Variabili Chiaro (Default) */
   --bg: #f4f7fb;
   --surface: #ffffff;
   --surface-2: #f8fafc;
@@ -15,25 +16,8 @@
   --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
 }
 
-/* Rilevamento automatico Tema Scuro dal sistema */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0b1220;
-    --surface: #111b2f;
-    --surface-2: #1a263d;
-    --text: #e2e8f0;
-    --text-muted: #94a3b8;
-    --border: #27344d;
-    --primary: #60a5fa;
-    --primary-soft: rgba(96, 165, 250, 0.18);
-    --success: #4ade80;
-    --warning: #fbbf24;
-    --danger: #f87171;
-    --shadow: 0 12px 32px rgba(2, 8, 23, 0.35);
-  }
-}
-
-:root[data-theme="dark"] {
+/* Questa riga è il segreto: si attiva quando JS cambia l'attributo */
+:root[data-theme='dark'] {
   --bg: #0b1220;
   --surface: #111b2f;
   --surface-2: #1a263d;
@@ -47,6 +31,8 @@
   --danger: #f87171;
   --shadow: 0 12px 32px rgba(2, 8, 23, 0.35);
 }
+
+
 
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
