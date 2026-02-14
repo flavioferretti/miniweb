@@ -1,0 +1,320 @@
+.\" Copyright (c) 2026 MiniWeb Contributors
+.\" BSD 3-Clause License
+.\"
+.Dd February 14, 2026
+.Dt MINIWEB 1
+.Os
+.Sh NAME
+.Nm miniweb
+.Nd lightweight HTTP server for system monitoring
+.Sh SYNOPSIS
+.Nm
+.Op Fl hv
+.Op Fl b Ar address
+.Op Fl c Ar connections
+.Op Fl p Ar port
+.Op Fl t Ar threads
+.Sh DESCRIPTION
+The
+.Nm
+utility is a lightweight HTTP server designed for OpenBSD system monitoring
+and metrics collection.
+It provides a web-based dashboard, RESTful JSON API for system metrics,
+and a manual page browser.
+.Pp
+.Nm
+uses
+.Xr libmicrohttpd 3
+for HTTP serving and leverages OpenBSD's
+.Xr pledge 2
+and
+.Xr unveil 2
+for security sandboxing.
+All system metrics are gathered using native
+.Xr sysctl 2
+interfaces without spawning external processes.
+.Pp
+The options are as follows:
+.Bl -tag -width Ds
+.It Fl b Ar address
+Bind to the specified network address.
+The default is
+.Cm 127.0.0.1
+(localhost only).
+Use
+.Cm 0.0.0.0
+to listen on all IPv4 interfaces.
+.It Fl c Ar connections
+Set the maximum number of concurrent connections.
+The default is
+.Cm 1000 .
+Valid range is 1-10000.
+.It Fl h
+Display usage information and exit.
+.It Fl p Ar port
+Listen on the specified TCP port.
+The default is
+.Cm 9001 .
+Valid range is 1-65535.
+Ports below 1024 require root privileges.
+.It Fl t Ar threads
+Set the thread pool size for handling requests.
+The default is
+.Cm 4 .
+Valid range is 1-32.
+Generally should match CPU core count.
+.It Fl v
+Enable verbose logging to standard error.
+Logs include HTTP requests, security operations, and metric collection details.
+.El
+.Sh ENDPOINTS
+.Nm
+provides the following HTTP endpoints:
+.Ss Web Interface
+.Bl -tag -width Ds
+.It Pa /
+Main dashboard with system overview, tabbed navigation for load, memory,
+disk, network, and process information.
+.It Pa /docs
+Manual page browser with search functionality.
+.El
+.Ss Metrics API
+.Bl -tag -width Ds
+.It Pa /api/metrics
+JSON endpoint providing comprehensive system metrics including:
+.Bl -bullet -compact
+.It
+System information (hostname, OS, uptime, architecture)
+.It
+CPU load averages (1, 5, and 15 minute)
+.It
+Memory statistics (total, free, active, wired, cache)
+.It
+Swap usage
+.It
+Disk usage for all mounted filesystems
+.It
+Network interface status and IP addresses
+.It
+Top 10 processes by CPU usage
+.It
+Top 10 processes by memory usage
+.It
+Process statistics (total, running, sleeping, zombie)
+.El
+.Pp
+Metrics are cached internally to reduce
+.Xr sysctl 2
+overhead.
+.El
+.Ss Manual Pages API
+.Bl -tag -width Ds
+.It Pa /api/man/sections
+List all available manual sections (JSON).
+.It Pa /api/man/pages?section= Ns Ar N
+List manual pages in section
+.Ar N
+(JSON).
+.It Pa /api/man/search?q= Ns Ar query
+Search manual pages matching
+.Ar query
+(JSON).
+.It Pa /man/ Ns Ar area Ns / Ns Ar section Ns / Ns Ar page
+Render the specified manual page in HTML format using
+.Xr mandoc 1 .
+.El
+.Ss Static Files
+.Bl -tag -width Ds
+.It Pa /static/*
+Serve static assets (CSS, JavaScript, images).
+Path traversal attempts are rejected.
+.It Pa /favicon.ico
+Site favicon.
+.El
+.Sh FILES
+.Bl -tag -width "/usr/share/man" -compact
+.It Pa /etc/passwd
+Used for user name lookups in process information.
+Must be unveiled for
+.Xr getpwuid 3 .
+.It Pa /etc/group
+Used for group name lookups.
+Must be unveiled.
+.It Pa templates/
+HTML templates for dashboard and documentation pages.
+.It Pa static/
+Static assets (CSS, JavaScript, images).
+.It Pa /usr/share/man
+.It Pa /usr/local/man
+.It Pa /usr/X11R6/man
+Manual page directories accessed for documentation browser.
+.It Pa /usr/bin/mandoc
+Manual page formatter.
+Must be unveiled for rendering.
+.El
+.Sh EXAMPLES
+Start the server on the default port with verbose logging:
+.Bd -literal -offset indent
+$ miniweb -v
+.Ed
+.Pp
+Start on port 8080, listening on all interfaces with 8 worker threads:
+.Bd -literal -offset indent
+$ miniweb -b 0.0.0.0 -p 8080 -t 8
+.Ed
+.Pp
+Production configuration with high connection limit:
+.Bd -literal -offset indent
+$ miniweb -b 127.0.0.1 -p 9001 -c 5000 -t 4
+.Ed
+.Pp
+Test the metrics endpoint:
+.Bd -literal -offset indent
+$ curl -s http://127.0.0.1:9001/api/metrics | jq .
+.Ed
+.Pp
+Deploy behind
+.Xr relayd 8
+for HTTPS:
+.Bd -literal -offset indent
+# /etc/relayd.conf
+table <miniweb> { 127.0.0.1 }
+
+http protocol "miniweb_https" {
+    tls keypair "example.com"
+    match request path "/*" forward to <miniweb>
+    match request header append "X-Forwarded-For" \e
+        value "$REMOTE_ADDR"
+    match request header append "X-Forwarded-Proto" \e
+        value "https"
+}
+
+relay "miniweb_relay" {
+    listen on 0.0.0.0 port 443 tls
+    protocol miniweb_https
+    forward to <miniweb> port 9001 check tcp
+}
+.Ed
+.Sh DIAGNOSTICS
+.Ex -std
+.Pp
+Common error messages:
+.Bl -tag -width Ds
+.It Qq Failed to start server on port %d
+The specified port is already in use or requires elevated privileges
+(ports < 1024).
+Check with
+.Ql fstat | grep :%d
+or start with a higher port number.
+.It Qq pledge: Operation not permitted
+The process attempted a system call not allowed by the current
+.Xr pledge 2
+promises.
+Verify that the pledge string includes all required promises:
+.Cm stdio rpath inet proc exec vminfo ps getpw .
+.It Qq sysctl data query failed: Cannot allocate memory
+The process list is growing rapidly.
+.Nm
+includes a retry loop to handle this condition.
+If it persists, check for fork bombs or excessive process creation.
+.It Qq Unable to read metrics
+The metrics collection subsystem encountered an error.
+Enable verbose mode with
+.Fl v
+to see detailed error messages.
+.El
+.Sh SEE ALSO
+.Xr curl 1 ,
+.Xr mandoc 1 ,
+.Xr getifaddrs 3 ,
+.Xr getloadavg 3 ,
+.Xr getmntinfo 3 ,
+.Xr getpwuid 3 ,
+.Xr libmicrohttpd 3 ,
+.Xr pledge 2 ,
+.Xr sysctl 2 ,
+.Xr unveil 2 ,
+.Xr relayd 8
+.Sh STANDARDS
+.Nm
+uses standard OpenBSD system interfaces and follows OpenBSD security
+best practices.
+The HTTP implementation uses
+.Xr libmicrohttpd 3 ,
+which implements HTTP/1.1 as specified in RFC 7230-7235.
+.Sh HISTORY
+The
+.Nm
+utility was written as a lightweight alternative to complex monitoring
+solutions, specifically targeting OpenBSD systems.
+.Sh AUTHORS
+.An MiniWeb Contributors
+.Sh CAVEATS
+.Nm
+is designed specifically for OpenBSD and relies heavily on OpenBSD-specific
+APIs including
+.Xr sysctl 2 ,
+.Xr pledge 2 ,
+and
+.Xr unveil 2 .
+Porting to other operating systems requires significant modifications.
+.Pp
+The manual page rendering functionality uses
+.Xr popen 3
+to invoke
+.Xr mandoc 1 .
+While this is isolated via
+.Xr pledge 2
+and
+.Xr unveil 2 ,
+it introduces potential attack surface.
+.Pp
+.Nm
+does not implement TLS/HTTPS directly.
+For production deployments, use a reverse proxy such as
+.Xr relayd 8
+or
+.Xr nginx 8
+to provide TLS termination and authentication.
+.Sh SECURITY CONSIDERATIONS
+.Nm
+implements defense-in-depth security using OpenBSD's security features:
+.Bl -bullet
+.It
+.Xr pledge 2
+restricts the process to only necessary system calls.
+.It
+.Xr unveil 2
+limits filesystem access to required paths only.
+.It
+Path traversal protection rejects attempts to access files outside
+.Pa /static .
+.It
+Process metrics use
+.Xr sysctl 2
+directly instead of spawning
+.Xr ps 1 ,
+eliminating shell injection risks.
+.It
+Connection limits prevent resource exhaustion attacks.
+.El
+.Pp
+For production use, deploy behind an authenticated reverse proxy with
+TLS, rate limiting, and request filtering.
+Never expose
+.Nm
+directly to untrusted networks without additional security controls.
+.Sh BUGS
+The JSON generation uses fixed-size buffers and may truncate output
+if metrics exceed buffer capacity.
+.Pp
+The template engine performs simple string replacement without proper
+escaping, which could allow HTML injection if user input is rendered
+in templates.
+Current implementation only uses trusted input.
+.Pp
+Subprocess timeout handling for
+.Xr mandoc 1
+invocation is not fully implemented, which could cause hangs if
+.Xr mandoc 1
+stalls.

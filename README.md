@@ -222,20 +222,71 @@ Simple placeholder-based templating:
 ### Production Deployment
 
 For production use, run behind a reverse proxy with:
-- TLS termination (nginx, relayd)
+- TLS termination (relayd, nginx)
 - Authentication (HTTP basic auth, OAuth2)
 - Rate limiting
 - Request filtering
 
-Example nginx configuration:
-```nginx
-location / {
-    proxy_pass http://127.0.0.1:9001;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
+#### OpenBSD relayd Configuration
+
+Example relayd configuration for HTTPS termination:
+
+```
+# /etc/relayd.conf
+
+# Define backend server
+table <miniweb> { 127.0.0.1 }
+
+# HTTPS protocol with headers
+http protocol "miniweb_https" {
+    tls keypair "yourdomain.com"
+    
+    # Forward all requests to miniweb
+    match request path "/*" forward to <miniweb>
+    
+    # Add forwarding headers
+    match request header append "X-Forwarded-For" value "$REMOTE_ADDR"
+    match request header append "X-Forwarded-Proto" value "https"
+    match request header append "X-Real-IP" value "$REMOTE_ADDR"
+    match request header set "Connection" value "close"
+}
+
+# Relay configuration
+relay "miniweb_relay" {
+    # Listen on external interface with TLS
+    listen on 0.0.0.0 port 443 tls
+    protocol miniweb_https
+    
+    # Forward to miniweb on localhost
+    forward to <miniweb> port 9001 check tcp
 }
 ```
+
+Generate TLS certificate:
+```bash
+# Self-signed for testing
+openssl req -x509 -newkey rsa:4096 -nodes \
+    -keyout /etc/ssl/private/yourdomain.com.key \
+    -out /etc/ssl/yourdomain.com.crt \
+    -days 365 -subj "/CN=yourdomain.com"
+
+# Let's Encrypt with acme-client
+acme-client yourdomain.com
+```
+
+Enable and start relayd:
+```bash
+# Enable at boot
+rcctl enable relayd
+
+# Start service
+rcctl start relayd
+
+# Check status
+rcctl check relayd
+relayctl show summary
+```
+
 
 ---
 

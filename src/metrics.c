@@ -20,6 +20,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <math.h>
+#include <pthread.h>
 
 #ifdef __OpenBSD__
 #include <sys/mount.h>
@@ -42,6 +43,9 @@ do {                                                                   \
 } while (0)
 
 static struct kinfo_proc *get_procs_snapshot(size_t *nprocs);
+
+/* Mutex per proteggere il buffer statico in get_system_metrics_json() */
+static pthread_mutex_t metrics_lock = PTHREAD_MUTEX_INITIALIZER;
 
 /* Funzione di comparazione per qsort: ordina per RSS decrescente */
 static int
@@ -389,13 +393,17 @@ metrics_get_top_cpu_processes(ProcessInfo *processes, int max_processes)
 				sizeof(temp[valid_count].command));
 
 		/* Ottieni il nome utente dal UID */
-		struct passwd *pw = getpwuid(kp[i].p_uid);
-		if (pw) {
-			strlcpy(temp[valid_count].user, pw->pw_name,
-					sizeof(temp[valid_count].user));
+		struct passwd pwd;
+		struct passwd *result;
+		char pwbuf[1024];
+
+		if (getpwuid_r(kp[i].p_uid, &pwd, pwbuf, sizeof(pwbuf), &result) == 0
+			&& result != NULL) {
+			strlcpy(temp[valid_count].user, pwd.pw_name,
+				sizeof(temp[valid_count].user));
 		} else {
 			snprintf(temp[valid_count].user,
-					 sizeof(temp[valid_count].user), "%d", kp[i].p_uid);
+				sizeof(temp[valid_count].user), "%d", kp[i].p_uid);
 		}
 
 		valid_count++;
@@ -745,13 +753,7 @@ get_system_metrics_json(void)
 	char hostname[256];
 	time_t now;
 
-	time(&now);
-	strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S",
-			 localtime(&now));
-
-	if (metrics_get_hostname(hostname, sizeof(hostname)) == -1)
-		strlcpy(hostname, "localhost", sizeof(hostname));
-
+	/* Dichiarare TUTTE le variabili locali PRIMA del lock */
 	char cpu_json[256];
 	char memory_json[512];
 	char load_json[256];
@@ -764,6 +766,17 @@ get_system_metrics_json(void)
 	char top_mem_json[2048];
 	char proc_stats_json[256];
 
+	/* LOCK: protegge il buffer statico condiviso */
+	pthread_mutex_lock(&metrics_lock);
+
+	time(&now);
+	strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S",
+			 localtime(&now));
+
+	if (metrics_get_hostname(hostname, sizeof(hostname)) == -1)
+		strlcpy(hostname, "localhost", sizeof(hostname));
+
+	/* Popola tutti i buffer JSON usando le funzioni helper */
 	append_cpu_stats_json(cpu_json, sizeof(cpu_json));
 	append_memory_stats_json(memory_json, sizeof(memory_json));
 	append_load_average_json(load_json, sizeof(load_json));
@@ -776,15 +789,19 @@ get_system_metrics_json(void)
 	append_top_memory_processes_json(top_mem_json, sizeof(top_mem_json));
 	append_process_stats_json(proc_stats_json, sizeof(proc_stats_json));
 
+	/* Assembla il JSON finale */
 	snprintf(json, sizeof(json),
 			 "{"
-			 "\"timestamp\": \"%s\"," \
-			 "\"hostname\": \"%s\"," \
+			 "\"timestamp\": \"%s\","
+			 "\"hostname\": \"%s\","
 			 "%s," "%s," "%s," "%s," "%s," "%s," "%s," "%s," "%s," "%s," "%s"
 			 "}",
 		  timestamp, hostname, cpu_json, memory_json, load_json, os_json,
 		  uptime_json, disks_json, ports_json, network_json, top_cpu_json,
 		  top_mem_json, proc_stats_json);
+
+	/* UNLOCK: rilascia il lock prima di ritornare */
+	pthread_mutex_unlock(&metrics_lock);
 
 	return json;
 }
