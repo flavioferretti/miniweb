@@ -311,6 +311,10 @@ man_render_handler(void *cls, struct MHD_Connection *connection, const char *url
 			format = "pdf";
 			mime = "application/pdf";
 			*dot = '\0'; /* Rimuove .pdf per la ricerca del file */
+		} else if (strcmp(dot, ".ps") == 0) {
+			format = "ps";
+			mime = "application/postscript";
+			*dot = '\0'; /* Rimuove .ps per la ricerca del file */
 		} else if (strcmp(dot, ".md") == 0) {
 			format = "markdown";
 			mime = "text/plain; charset=utf-8"; /* Fallback a testo semplice */
