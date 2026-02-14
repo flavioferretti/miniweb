@@ -1,32 +1,33 @@
-<section>
-  <h1>API Reference</h1>
-  <p class="muted">Operational endpoints exposed by MiniWeb for monitoring and documentation services.</p>
-</section>
 
-<section class="api-grid">
-  <article class="panel api-endpoint">
-    <div class="endpoint-top"><span class="method">GET</span><a href="/api/metrics"><code>/api/metrics</code></a></div>
-    <p>Returns consolidated system metrics: load averages, memory, disks, network interfaces and process counters.</p>
-  </article>
+      <section>
+        <h1>API Reference</h1>
+        <p class="muted">Operational endpoints exposed by MiniWeb for monitoring and documentation services.</p>
+      </section>
 
-  <article class="panel api-endpoint">
-    <div class="endpoint-top"><span class="method">GET</span><a href="/api/man/sections"><code>/api/man/sections</code></a></div>
-    <p>Lists available manual areas and sections currently indexed by MiniWeb.</p>
-  </article>
+      <section class="api-grid">
+        <article class="panel api-endpoint">
+          <div class="endpoint-top"><span class="method">GET</span><a href="/api/metrics"><code>/api/metrics</code></a></div>
+          <p>Returns consolidated system metrics: load averages, memory, disks, network interfaces and process counters.</p>
+        </article>
 
-  <article class="panel api-endpoint">
-    <div class="endpoint-top"><span class="method">GET</span><code>/api/man/{area}/{section}</code></div>
-    <p>Returns all pages in a section. Useful for dynamic section explorers.</p>
-  </article>
+        <article class="panel api-endpoint">
+          <div class="endpoint-top"><span class="method">GET</span><a href="/api/man/sections"><code>/api/man/sections</code></a></div>
+          <p>Lists available manual areas and sections currently indexed by MiniWeb.</p>
+        </article>
 
-  <article class="panel api-endpoint">
-    <div class="endpoint-top"><span class="method">GET</span><code>/api/man/search/{query}</code></div>
-    <p>Performs full-text search against manual pages and returns apropos-like results.</p>
-  </article>
+        <article class="panel api-endpoint">
+          <div class="endpoint-top"><span class="method">GET</span><code>/api/man/{area}/{section}</code></div>
+          <p>Returns all pages in a section. Useful for dynamic section explorers.</p>
+        </article>
 
-  <article class="panel api-endpoint">
-    <div class="endpoint-top"><span class="method">GET</span><a href="/static/benchmark.html"><code>/static/benchmark.html</code></a></div>
-    <h4>Benchmarks</h4>
-    <p>Last <code>benchmark.sh</code> execution results.</p>
-  </article>
-</section>
+        <article class="panel api-endpoint">
+          <div class="endpoint-top"><span class="method">GET</span><code>/api/man/search/{query}</code></div>
+          <p>Performs full-text search against manual pages and returns apropos-like results.</p>
+        </article>
+
+        <article class="panel api-endpoint">
+          <div class="endpoint-top"><span class="method">GET</span><a href="/static/benchmark.html"><code>/static/benchmark.html</code></a></div>
+          <h4>Benchmarks</h4>
+          <p>Last <code>benchmark.sh</code> execution results.</p>
+        </article>
+      </section>

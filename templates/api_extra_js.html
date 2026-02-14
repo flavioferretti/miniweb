@@ -1,15 +1,16 @@
-<script>
-(() => {
-  document.querySelectorAll('.api-endpoint code').forEach((el) => {
-    el.title = 'Click to copy endpoint';
-    el.style.cursor = 'pointer';
-    el.addEventListener('click', async () => {
-      try {
-        await navigator.clipboard.writeText(el.textContent.trim());
-        el.dataset.copied = 'true';
-        setTimeout(() => { delete el.dataset.copied; }, 1200);
-      } catch (_) {}
-    });
-  });
-})();
-</script>
+  <!-- api_extra_js.html - Per page custom JS -->
+  <script>
+    (() => {
+      document.querySelectorAll('.api-endpoint code').forEach((el) => {
+        el.title = 'Click to copy endpoint';
+        el.style.cursor = 'pointer';
+        el.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(el.textContent.trim());
+            el.dataset.copied = 'true';
+            setTimeout(() => { delete el.dataset.copied; }, 1200);
+          } catch (_) {}
+        });
+      });
+    })();
+  </script>

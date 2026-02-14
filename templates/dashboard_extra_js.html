@@ -1,129 +1,131 @@
-<script>
-(() => {
-  const dashboard = document.getElementById('dashboard');
-  const tabs = document.getElementById('tabNavigation');
-  const hostInfo = document.getElementById('host-info');
-  const lastUpdate = document.getElementById('last-update');
-  const uptime = document.getElementById('uptime');
 
-  let currentTab = 'overview';
-  let latest = null;
+  <!-- dashboard_extra_js.html - Per page custom JS -->
+  <script>
+    (() => {
+      const dashboard = document.getElementById('dashboard');
+      const tabs = document.getElementById('tabNavigation');
+      const hostInfo = document.getElementById('host-info');
+      const lastUpdate = document.getElementById('last-update');
+      const uptime = document.getElementById('uptime');
 
-  const mbToGb = (mb) => (mb / 1024).toFixed(1);
-  const pct = (n, d) => (d > 0 ? Math.round((n / d) * 100) : 0);
+      let currentTab = 'overview';
+      let latest = null;
 
-  const panel = (title, body) => `<article class="panel stat-card"><h3>${title}</h3>${body}</article>`;
+      const mbToGb = (mb) => (mb / 1024).toFixed(1);
+      const pct = (n, d) => (d > 0 ? Math.round((n / d) * 100) : 0);
 
-  const processTable = (processes, type) => {
-    if (!processes || processes.length === 0) {
-      return '<p class="muted">No processes found.</p>';
-    }
+      const panel = (title, body) => `<article class="panel stat-card"><h3>${title}</h3>${body}</article>`;
 
-    const headers = type === 'cpu'
-      ? `<tr><th>User</th><th>PID</th><th>CPU%</th><th>Command</th></tr>`
-      : `<tr><th>User</th><th>PID</th><th>MEM%</th><th>Memory</th><th>Command</th></tr>`;
+      const processTable = (processes, type) => {
+        if (!processes || processes.length === 0) {
+          return '<p class="muted">No processes found.</p>';
+        }
 
-    const rows = processes.map(p => {
-      if (type === 'cpu') {
-        return `<tr>
-          <td>${p.user}</td>
-          <td>${p.pid}</td>
-          <td><strong>${p.cpu_percent.toFixed(1)}%</strong></td>
-          <td class="process-cmd">${p.command}</td>
-        </tr>`;
-      } else {
-        return `<tr>
-          <td>${p.user}</td>
-          <td>${p.pid}</td>
-          <td><strong>${p.memory_percent.toFixed(1)}%</strong></td>
-          <td>${p.memory_mb} MB</td>
-          <td class="process-cmd">${p.command}</td>
-        </tr>`;
-      }
-    }).join('');
+        const headers = type === 'cpu'
+          ? `<tr><th>User</th><th>PID</th><th>CPU%</th><th>Command</th></tr>`
+          : `<tr><th>User</th><th>PID</th><th>MEM%</th><th>Memory</th><th>Command</th></tr>`;
 
-    return `<div class="process-table-wrapper"><table class="process-table">${headers}${rows}</table></div>`;
-  };
+        const rows = processes.map(p => {
+          if (type === 'cpu') {
+            return `<tr>
+              <td>${p.user}</td>
+              <td>${p.pid}</td>
+              <td><strong>${p.cpu_percent.toFixed(1)}%</strong></td>
+              <td class="process-cmd">${p.command}</td>
+            </tr>`;
+          } else {
+            return `<tr>
+              <td>${p.user}</td>
+              <td>${p.pid}</td>
+              <td><strong>${p.memory_percent.toFixed(1)}%</strong></td>
+              <td>${p.memory_mb} MB</td>
+              <td class="process-cmd">${p.command}</td>
+            </tr>`;
+          }
+        }).join('');
 
-  const render = () => {
-    if (!latest) return;
-    const m = latest.memory || {};
-    const swap = latest.swap || {};
-    const load = latest.load || {};
+        return `<div class="process-table-wrapper"><table class="process-table">${headers}${rows}</table></div>`;
+      };
 
-    if (currentTab === 'overview') {
-      const memUsed = (m.total_mb || 0) - (m.free_mb || 0);
-      dashboard.innerHTML = [
-        panel('Load Average', `<p class="stat-value">${(load['1min'] ?? 0).toFixed(2)}</p><p class="muted">1m · ${(load['5min'] ?? 0).toFixed(2)} (5m) · ${(load['15min'] ?? 0).toFixed(2)} (15m)</p>`),
-        panel('Memory Usage', `<p class="stat-value">${mbToGb(memUsed)} / ${mbToGb(m.total_mb || 0)} GB</p><div class="progress"><span style="width:${pct(memUsed, m.total_mb || 0)}%"></span></div>`),
-        panel('Swap Usage', `<p class="stat-value">${mbToGb(swap.used_mb || 0)} / ${mbToGb(swap.total_mb || 0)} GB</p><div class="progress"><span style="width:${pct(swap.used_mb || 0, swap.total_mb || 0)}%"></span></div>`),
-        panel('OS', `<p>${latest.os?.type || 'Unknown'} ${latest.os?.release || ''}</p><p class="muted">${latest.os?.machine || ''}</p>`),
-      ].join('');
-      return;
-    }
+      const render = () => {
+        if (!latest) return;
+        const m = latest.memory || {};
+        const swap = latest.swap || {};
+        const load = latest.load || {};
 
-    if (currentTab === 'load') {
-      dashboard.innerHTML = panel('Load Breakdown', `<div class="kv"><span>1 minute</span><strong>${(load['1min'] ?? 0).toFixed(2)}</strong></div><div class="kv"><span>5 minutes</span><strong>${(load['5min'] ?? 0).toFixed(2)}</strong></div><div class="kv"><span>15 minutes</span><strong>${(load['15min'] ?? 0).toFixed(2)}</strong></div>`);
-      return;
-    }
+        if (currentTab === 'overview') {
+          const memUsed = (m.total_mb || 0) - (m.free_mb || 0);
+          dashboard.innerHTML = [
+            panel('Load Average', `<p class="stat-value">${(load['1min'] ?? 0).toFixed(2)}</p><p class="muted">1m · ${(load['5min'] ?? 0).toFixed(2)} (5m) · ${(load['15min'] ?? 0).toFixed(2)} (15m)</p>`),
+            panel('Memory Usage', `<p class="stat-value">${mbToGb(memUsed)} / ${mbToGb(m.total_mb || 0)} GB</p><div class="progress"><span style="width:${pct(memUsed, m.total_mb || 0)}%"></span></div>`),
+            panel('Swap Usage', `<p class="stat-value">${mbToGb(swap.used_mb || 0)} / ${mbToGb(swap.total_mb || 0)} GB</p><div class="progress"><span style="width:${pct(swap.used_mb || 0, swap.total_mb || 0)}%"></span></div>`),
+            panel('OS', `<p>${latest.os?.type || 'Unknown'} ${latest.os?.release || ''}</p><p class="muted">${latest.os?.machine || ''}</p>`),
+          ].join('');
+          return;
+        }
 
-    if (currentTab === 'memory') {
-      dashboard.innerHTML = [
-        panel('Memory Detail', `<div class="kv"><span>Total</span><strong>${mbToGb(m.total_mb || 0)} GB</strong></div><div class="kv"><span>Free</span><strong>${mbToGb(m.free_mb || 0)} GB</strong></div><div class="kv"><span>Active</span><strong>${mbToGb(m.active_mb || 0)} GB</strong></div><div class="kv"><span>Wired</span><strong>${mbToGb(m.wired_mb || 0)} GB</strong></div>`),
-        panel('Swap Detail', `<div class="kv"><span>Total</span><strong>${mbToGb(swap.total_mb || 0)} GB</strong></div><div class="kv"><span>Used</span><strong>${mbToGb(swap.used_mb || 0)} GB</strong></div>`),
-      ].join('');
-      return;
-    }
+        if (currentTab === 'load') {
+          dashboard.innerHTML = panel('Load Breakdown', `<div class="kv"><span>1 minute</span><strong>${(load['1min'] ?? 0).toFixed(2)}</strong></div><div class="kv"><span>5 minutes</span><strong>${(load['5min'] ?? 0).toFixed(2)}</strong></div><div class="kv"><span>15 minutes</span><strong>${(load['15min'] ?? 0).toFixed(2)}</strong></div>`);
+          return;
+        }
 
-    if (currentTab === 'disk') {
-      const disks = (latest.disks || []).map((d) => panel(`<p style="font-size: 1rem;">${d.mount}</p>`, `<p class="muted">${d.device}</p><p class="stat-value">${d.percent}%</p><div class="progress"><span style="width:${d.percent}%"></span></div>`)).join('');
-      dashboard.innerHTML = disks || panel('Disk', '<p class="muted">No mounted volumes detected.</p>');
-      return;
-    }
+        if (currentTab === 'memory') {
+          dashboard.innerHTML = [
+            panel('Memory Detail', `<div class="kv"><span>Total</span><strong>${mbToGb(m.total_mb || 0)} GB</strong></div><div class="kv"><span>Free</span><strong>${mbToGb(m.free_mb || 0)} GB</strong></div><div class="kv"><span>Active</span><strong>${mbToGb(m.active_mb || 0)} GB</strong></div><div class="kv"><span>Wired</span><strong>${mbToGb(m.wired_mb || 0)} GB</strong></div>`),
+            panel('Swap Detail', `<div class="kv"><span>Total</span><strong>${mbToGb(swap.total_mb || 0)} GB</strong></div><div class="kv"><span>Used</span><strong>${mbToGb(swap.used_mb || 0)} GB</strong></div>`),
+          ].join('');
+          return;
+        }
 
-    if (currentTab === 'network') {
-      const net = (latest.network || []).map((n) => panel(n.name, `<p>${n.ip || '-'}</p><p class="muted">status: ${n.status}</p>`)).join('');
-      dashboard.innerHTML = net || panel('Network', '<p class="muted">No interfaces detected.</p>');
-      return;
-    }
+        if (currentTab === 'disk') {
+          const disks = (latest.disks || []).map((d) => panel(`<p style="font-size: 1rem;">${d.mount}</p>`, `<p class="muted">${d.device}</p><p class="stat-value">${d.percent}%</p><div class="progress"><span style="width:${d.percent}%"></span></div>`)).join('');
+          dashboard.innerHTML = disks || panel('Disk', '<p class="muted">No mounted volumes detected.</p>');
+          return;
+        }
 
-    if (currentTab === 'processes') {
-      const ps = latest.process_stats || {};
-      const cpuProcs = latest.top_cpu_processes || [];
-      const memProcs = latest.top_memory_processes || [];
+        if (currentTab === 'network') {
+          const net = (latest.network || []).map((n) => panel(n.name, `<p>${n.ip || '-'}</p><p class="muted">status: ${n.status}</p>`)).join('');
+          dashboard.innerHTML = net || panel('Network', '<p class="muted">No interfaces detected.</p>');
+          return;
+        }
 
-      dashboard.innerHTML = [
-        panel('Process Summary', `<div class="kv"><span>Total</span><strong>${ps.total ?? 0}</strong></div><div class="kv"><span>Running</span><strong>${ps.running ?? 0}</strong></div><div class="kv"><span>Sleeping</span><strong>${ps.sleeping ?? 0}</strong></div><div class="kv"><span>Zombie</span><strong>${ps.zombie ?? 0}</strong></div>`),
-        panel('Top CPU Processes', processTable(cpuProcs, 'cpu')),
-        panel('Top Memory Processes', processTable(memProcs, 'memory')),
-      ].join('');
-      return;
-    }
-  };
+        if (currentTab === 'processes') {
+          const ps = latest.process_stats || {};
+          const cpuProcs = latest.top_cpu_processes || [];
+          const memProcs = latest.top_memory_processes || [];
 
-  tabs?.addEventListener('click', (event) => {
-    const button = event.target.closest('.tab-button');
-    if (!button) return;
-    currentTab = button.dataset.tab;
-    tabs.querySelectorAll('.tab-button').forEach((b) => b.classList.toggle('active', b === button));
-    render();
-  });
+          dashboard.innerHTML = [
+            panel('Process Summary', `<div class="kv"><span>Total</span><strong>${ps.total ?? 0}</strong></div><div class="kv"><span>Running</span><strong>${ps.running ?? 0}</strong></div><div class="kv"><span>Sleeping</span><strong>${ps.sleeping ?? 0}</strong></div><div class="kv"><span>Zombie</span><strong>${ps.zombie ?? 0}</strong></div>`),
+            panel('Top CPU Processes', processTable(cpuProcs, 'cpu')),
+            panel('Top Memory Processes', processTable(memProcs, 'memory')),
+          ].join('');
+          return;
+        }
+      };
 
-  const refresh = async () => {
-    try {
-      const response = await fetch('/api/metrics', { cache: 'no-store' });
-      if (!response.ok) throw new Error('request failed');
-      latest = await response.json();
-      hostInfo.textContent = `${latest.hostname || 'localhost'} · ${latest.os?.type || ''} ${latest.os?.release || ''}`;
-      lastUpdate.textContent = latest.timestamp || '-';
-      uptime.textContent = latest.uptime || '-';
-      render();
-    } catch {
-      dashboard.innerHTML = '<article class="panel stat-card"><p class="muted">Unable to read metrics at the moment.</p></article>';
-    }
-  };
+      tabs?.addEventListener('click', (event) => {
+        const button = event.target.closest('.tab-button');
+        if (!button) return;
+        currentTab = button.dataset.tab;
+        tabs.querySelectorAll('.tab-button').forEach((b) => b.classList.toggle('active', b === button));
+        render();
+      });
 
-  refresh();
-  setInterval(refresh, 4000);
-})();
-</script>
+      const refresh = async () => {
+        try {
+          const response = await fetch('/api/metrics', { cache: 'no-store' });
+          if (!response.ok) throw new Error('request failed');
+          latest = await response.json();
+          hostInfo.textContent = `${latest.hostname || 'localhost'} · ${latest.os?.type || ''} ${latest.os?.release || ''}`;
+          lastUpdate.textContent = latest.timestamp || '-';
+          uptime.textContent = latest.uptime || '-';
+          render();
+        } catch {
+          dashboard.innerHTML = '<article class="panel stat-card"><p class="muted">Unable to read metrics at the moment.</p></article>';
+        }
+      };
+
+      refresh();
+      setInterval(refresh, 4000);
+    })();
+  </script>

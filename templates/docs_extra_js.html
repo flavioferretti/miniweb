@@ -1,87 +1,89 @@
-<script>
-(() => {
-  const sectionsContainer = document.getElementById('sectionsContainer');
-  const pagesViewer = document.getElementById('pagesViewer');
-  const pagesList = document.getElementById('pagesList');
-  const sectionTitle = document.getElementById('currentSectionTitle');
-  const closeViewer = document.getElementById('closeViewer');
-  const searchInput = document.getElementById('manSearch');
-  const searchResults = document.getElementById('searchResults');
 
-  const areaIcon = (area) => (area === 'system' ? 'System' : area === 'x11' ? 'X11' : 'Local');
+  <!-- docs_extra_js.html - Per page custom JS -->
+  <script>
+    (() => {
+      const sectionsContainer = document.getElementById('sectionsContainer');
+      const pagesViewer = document.getElementById('pagesViewer');
+      const pagesList = document.getElementById('pagesList');
+      const sectionTitle = document.getElementById('currentSectionTitle');
+      const closeViewer = document.getElementById('closeViewer');
+      const searchInput = document.getElementById('manSearch');
+      const searchResults = document.getElementById('searchResults');
 
-  const openSection = async (area, sectionId, sectionName) => {
-    sectionsContainer.classList.add('hidden');
-    pagesViewer.classList.remove('hidden');
-    sectionTitle.textContent = `${areaIcon(area)} · Section ${sectionId} · ${sectionName}`;
-    pagesList.innerHTML = '<p class="muted">Loading pages...</p>';
+      const areaIcon = (area) => (area === 'system' ? 'System' : area === 'x11' ? 'X11' : 'Local');
 
-    const response = await fetch(`/api/man/${area}/${sectionId}`);
-    const data = await response.json();
-    const pages = data.pages || [];
-    if (!pages.length) {
-      pagesList.innerHTML = '<p class="muted">No pages found for this section.</p>';
-      return;
-    }
+      const openSection = async (area, sectionId, sectionName) => {
+        sectionsContainer.classList.add('hidden');
+        pagesViewer.classList.remove('hidden');
+        sectionTitle.textContent = `${areaIcon(area)} · Section ${sectionId} · ${sectionName}`;
+        pagesList.innerHTML = '<p class="muted">Loading pages...</p>';
 
-    pagesList.innerHTML = pages.map((name) => `
-      <div class="page-item">
-        <strong>${name}</strong>
-        <div class="page-links">
-          <a href="/man/${area}/${sectionId}/${name}" target="_blank" rel="noopener">html</a>
-          <a href="/man/${area}/${sectionId}/${name}.md" target="_blank" rel="noopener">md</a>
-          <a href="/man/${area}/${sectionId}/${name}.ps" target="_blank" rel="noopener">ps</a>
-          <a href="/man/${area}/${sectionId}/${name}.pdf" target="_blank" rel="noopener">pdf</a>
-        </div>
-      </div>`).join('');
-  };
+        const response = await fetch(`/api/man/${area}/${sectionId}`);
+        const data = await response.json();
+        const pages = data.pages || [];
+        if (!pages.length) {
+          pagesList.innerHTML = '<p class="muted">No pages found for this section.</p>';
+          return;
+        }
 
-  const loadSections = async () => {
-    const response = await fetch('/api/man/sections');
-    const data = await response.json();
-    sectionsContainer.innerHTML = Object.entries(data).map(([key, area]) => `
-      <div class="area-section">
-        <h3>${areaIcon(key)} (${area.name})</h3>
-        <div class="section-grid">
-          ${area.sections.map((s) => `<button class="section-card" data-area="${key}" data-id="${s.id}" data-name="${s.name}" type="button"><strong>Section ${s.id}</strong><p class="muted">${s.name}</p></button>`).join('')}
-        </div>
-      </div>`).join('');
-  };
+        pagesList.innerHTML = pages.map((name) => `
+          <div class="page-item">
+            <strong>${name}</strong>
+            <div class="page-links">
+              <a href="/man/${area}/${sectionId}/${name}" target="_blank" rel="noopener">html</a>
+              <a href="/man/${area}/${sectionId}/${name}.md" target="_blank" rel="noopener">md</a>
+              <a href="/man/${area}/${sectionId}/${name}.ps" target="_blank" rel="noopener">ps</a>
+              <a href="/man/${area}/${sectionId}/${name}.pdf" target="_blank" rel="noopener">pdf</a>
+            </div>
+          </div>`).join('');
+      };
 
-  sectionsContainer.addEventListener('click', (event) => {
-    const card = event.target.closest('.section-card');
-    if (!card) return;
-    openSection(card.dataset.area, card.dataset.id, card.dataset.name);
-  });
+      const loadSections = async () => {
+        const response = await fetch('/api/man/sections');
+        const data = await response.json();
+        sectionsContainer.innerHTML = Object.entries(data).map(([key, area]) => `
+          <div class="area-section">
+            <h3>${areaIcon(key)} (${area.name})</h3>
+            <div class="section-grid">
+              ${area.sections.map((s) => `<button class="section-card" data-area="${key}" data-id="${s.id}" data-name="${s.name}" type="button"><strong>Section ${s.id}</strong><p class="muted">${s.name}</p></button>`).join('')}
+            </div>
+          </div>`).join('');
+      };
 
-  closeViewer.addEventListener('click', () => {
-    pagesViewer.classList.add('hidden');
-    sectionsContainer.classList.remove('hidden');
-  });
+      sectionsContainer.addEventListener('click', (event) => {
+        const card = event.target.closest('.section-card');
+        if (!card) return;
+        openSection(card.dataset.area, card.dataset.id, card.dataset.name);
+      });
 
-  let timer;
-  searchInput.addEventListener('input', () => {
-    clearTimeout(timer);
-    const q = searchInput.value.trim();
-    if (q.length < 2) {
-      searchResults.classList.add('hidden');
-      return;
-    }
-    timer = setTimeout(async () => {
-      const response = await fetch(`/api/man/search/${encodeURIComponent(q)}`);
-      const text = await response.text();
-      const rows = text.split('\n').filter(Boolean);
-      searchResults.innerHTML = rows.map((line) => {
-        const m = line.match(/^([a-zA-Z0-9_.:-]+)\(([^)]+)\)\s+-\s+(.*)$/);
-        if (!m) return '';
-        return `<a class="search-item" href="/man/system/${m[2]}/${m[1]}" target="_blank" rel="noopener"><strong>${m[1]}(${m[2]})</strong><br><span class="muted">${m[3]}</span></a>`;
-      }).join('') || '<div class="search-item">No results.</div>';
-      searchResults.classList.remove('hidden');
-    }, 280);
-  });
+      closeViewer.addEventListener('click', () => {
+        pagesViewer.classList.add('hidden');
+        sectionsContainer.classList.remove('hidden');
+      });
 
-  loadSections().catch(() => {
-    sectionsContainer.innerHTML = '<p class="muted">Unable to load sections.</p>';
-  });
-})();
-</script>
+      let timer;
+      searchInput.addEventListener('input', () => {
+        clearTimeout(timer);
+        const q = searchInput.value.trim();
+        if (q.length < 2) {
+          searchResults.classList.add('hidden');
+          return;
+        }
+        timer = setTimeout(async () => {
+          const response = await fetch(`/api/man/search/${encodeURIComponent(q)}`);
+          const text = await response.text();
+          const rows = text.split('\n').filter(Boolean);
+          searchResults.innerHTML = rows.map((line) => {
+            const m = line.match(/^([a-zA-Z0-9_.:-]+)\(([^)]+)\)\s+-\s+(.*)$/);
+            if (!m) return '';
+            return `<a class="search-item" href="/man/system/${m[2]}/${m[1]}" target="_blank" rel="noopener"><strong>${m[1]}(${m[2]})</strong><br><span class="muted">${m[3]}</span></a>`;
+          }).join('') || '<div class="search-item">No results.</div>';
+          searchResults.classList.remove('hidden');
+        }, 280);
+      });
+
+      loadSections().catch(() => {
+        sectionsContainer.innerHTML = '<p class="muted">Unable to load sections.</p>';
+      });
+    })();
+  </script>

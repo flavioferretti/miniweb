@@ -69,9 +69,9 @@ typedef struct {
 /* Main API functions */
 char *get_system_metrics_json(void);
 int metrics_handler(void *cls, struct MHD_Connection *connection,
-					const char *url, const char *method, const char *version,
-					const char *upload_data, size_t *upload_data_size,
-					void **con_cls);
+		    const char *url, const char *method, const char *version,
+		    const char *upload_data, size_t *upload_data_size,
+		    void **con_cls);
 
 /* Metric collection functions */
 int metrics_get_cpu_stats(CpuStats *stats);
@@ -83,10 +83,10 @@ int metrics_get_hostname(char *hostname, size_t size);
 int metrics_get_disk_usage(DiskInfo *disks, int max_disks);
 int metrics_get_top_ports(PortInfo *ports, int max_ports);
 int metrics_get_network_interfaces(NetworkInterface *interfaces,
-								   int max_interfaces);
+				   int max_interfaces);
 int metrics_get_top_cpu_processes(ProcessInfo *processes, int max_processes);
 int metrics_get_top_memory_processes(ProcessInfo *processes, int max_processes);
 int metrics_get_process_stats(int *total, int *running, int *sleeping,
-							  int *zombie);
+			      int *zombie);
 
 #endif /* METRICS_H */
