@@ -9,7 +9,7 @@ set -eu
 SERVER_URL="${SERVER_URL:-http://localhost:9001/static/custom.css}"
 TEST_DURATION="${TEST_DURATION:-30}"
 THREADS="${THREADS:-4}"
-CONNECTIONS="${CONNECTIONS:-5 10 25 50 100 200 500}"
+CONNECTIONS="${CONNECTIONS:-4 8 16 32 64 128 256}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-static}"
 ASSETS_DIR="${OUTPUT_ROOT}/benchmark_assets"
 TIMESTAMP="$(date '+%Y-%m-%d %H:%M:%S')"
@@ -213,7 +213,7 @@ cat > "$HTML_FILE" <<HTML
           <article class="graph"><h2>Throughput</h2><img src="/static/benchmark_assets/throughput.svg" alt="Throughput graph"></article>
           <article class="graph"><h2>Latency (avg vs max)</h2><img src="/static/benchmark_assets/latency.svg" alt="Latency graph"></article>
           <article class="graph"><h2>Latency standard deviation</h2><img src="/static/benchmark_assets/latency_stdev.svg" alt="Latency deviation graph"></article>
-          <article class="graph"><h2>Transfer rate</h2><img src="/benchmark_assets/transfer.svg" alt="Transfer graph"></article>
+          <article class="graph"><h2>Transfer rate</h2><img src="/static/benchmark_assets/transfer.svg" alt="Transfer graph"></article>
           <article class="graph"><h2>Connection efficiency</h2><img src="/static/benchmark_assets/efficiency.svg" alt="Efficiency graph"></article>
         </div>
       </section>
