@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MiniWeb Benchmark Report</title>
+  <link rel="stylesheet" href="/static/custom.css" />
+  <style>
+    .benchmark-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin: 1rem 0 1.5rem; }
+    .stat-card h3 { margin: 0 0 .35rem; font-size: .95rem; color: var(--text-muted); }
+    .stat-card p { margin: 0; font-size: 1.3rem; font-weight: 700; }
+    .graphs { display:grid; gap: 1rem; }
+    .graph img { width:100%; height:auto; border:1px solid var(--border); border-radius: .8rem; background: var(--surface-2); }
+    .details { overflow:auto; }
+    table { width:100%; border-collapse: collapse; }
+    th, td { text-align:left; padding: .55rem .6rem; border-bottom: 1px solid var(--border); font-size: .95rem; }
+    th { color: var(--text-muted); font-weight: 600; }
+    .meta { font-size: .95rem; color: var(--text-muted); }
+    code { background: var(--surface-2); padding: 0.1rem 0.4rem; border-radius: .4rem; }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-row">
+      <a class="brand" href="/">MiniWeb</a>
+      <nav class="navbar-menu"><a class="nav-link active" href="/static/benchmark.html">Benchmark</a></nav>
+    </div>
+  </header>
+
+  <main class="app-shell">
+    <div class="container">
+      <section class="panel">
+        <h1>Benchmark Report</h1>
+        <p class="meta">Generated: 2026-02-14 01:03:29 · Target URL: <code>http://localhost:9001/api/metrics</code> · Duration: 10s · Threads: 4</p>
+
+        <div class="benchmark-grid">
+          <article class="panel stat-card"><h3>Peak throughput</h3><p>3710.64 req/s</p><span class="muted">at  connections</span></article>
+          <article class="panel stat-card"><h3>Best avg latency</h3><p>1.850 ms</p><span class="muted">at  connections</span></article>
+          <article class="panel stat-card"><h3>Worst max latency</h3><p>209.900 ms</p><span class="muted">at  connections</span></article>
+        </div>
+
+        <div class="graphs">
+          <article class="graph"><h2>Throughput</h2><img src="/static/benchmark_assets/throughput.svg" alt="Throughput graph"></article>
+          <article class="graph"><h2>Latency (avg vs max)</h2><img src="/static/benchmark_assets/latency.svg" alt="Latency graph"></article>
+          <article class="graph"><h2>Latency standard deviation</h2><img src="/static/benchmark_assets/latency_stdev.svg" alt="Latency deviation graph"></article>
+          <article class="graph"><h2>Transfer rate</h2><img src="/benchmark_assets/transfer.svg" alt="Transfer graph"></article>
+          <article class="graph"><h2>Connection efficiency</h2><img src="/static/benchmark_assets/efficiency.svg" alt="Efficiency graph"></article>
+        </div>
+      </section>
+
+      <section class="panel details" style="margin-top:1rem;">
+        <h2>Detailed run stats</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Connections</th>
+              <th>Req/sec</th>
+              <th>Avg latency (ms)</th>
+              <th>StdDev (ms)</th>
+              <th>Max latency (ms)</th>
+              <th>Transfer (MB/s)</th>
+              <th>Total requests</th>
+              <th>Non-2xx/3xx</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>10</td><td>3710.64</td><td>1.850</td><td>0.920</td><td>12.850</td><td>7.570</td><td>37225</td><td>0</td></tr>
+            <tr><td>25</td><td>2699.45</td><td>8.580</td><td>3.760</td><td>80.930</td><td>5.510</td><td>27229</td><td>0</td></tr>
+            <tr><td>50</td><td>3122.34</td><td>15.000</td><td>2.670</td><td>45.290</td><td>6.370</td><td>31468</td><td>0</td></tr>
+            <tr><td>100</td><td>2893.72</td><td>33.050</td><td>9.230</td><td>76.330</td><td>5.900</td><td>29201</td><td>0</td></tr>
+            <tr><td>200</td><td>141.35</td><td>96.010</td><td>16.100</td><td>209.900</td><td>0.288</td><td>1423</td><td>0</td></tr>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

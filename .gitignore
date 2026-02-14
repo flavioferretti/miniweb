@@ -108,6 +108,7 @@ scratch.txt
 build/
 benchmark_advanced/
 benchmark/
+benchmark_assets/
 
 # Kate
 *.kate-swp

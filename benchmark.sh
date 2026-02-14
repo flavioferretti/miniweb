@@ -6,10 +6,10 @@
 
 set -eu
 
-SERVER_URL="${SERVER_URL:-http://localhost:9001/api/metrics}"
+SERVER_URL="${SERVER_URL:-http://localhost:9001/static/custom.css}"
 TEST_DURATION="${TEST_DURATION:-30}"
 THREADS="${THREADS:-4}"
-CONNECTIONS="${CONNECTIONS:-10 25 50 100 200}"
+CONNECTIONS="${CONNECTIONS:-5 10 25 50 100 200 500}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-static}"
 ASSETS_DIR="${OUTPUT_ROOT}/benchmark_assets"
 TIMESTAMP="$(date '+%Y-%m-%d %H:%M:%S')"
@@ -104,6 +104,7 @@ for conn in $CONNECTIONS; do
   printf '%s,%s,%s,%s,%s,%s,%s,%s\n' \
     "$conn" "$req_sec" "$latency_avg" "$latency_stdev" "$latency_max" "$transfer_mb" "$total_requests" "$non_2xx" \
     >> "$CSV_FILE"
+  sleep 5
 done
 
 cat > "$GNUPLOT_SCRIPT" <<GP
@@ -153,15 +154,15 @@ GP
 
 gnuplot "$GNUPLOT_SCRIPT"
 
-peak_req="$(awk -F',' 'NR>1{if($2>m){m=$2;c=$1}} END{printf "%.3f|%s", m, c}' "$CSV_FILE")"
-best_latency="$(awk -F',' 'NR>1{if(NR==2||$3<m){m=$3;c=$1}} END{printf "%.3f|%s", m, c}' "$CSV_FILE")"
-worst_latency="$(awk -F',' 'NR>1{if($5>m){m=$5;c=$1}} END{printf "%.3f|%s", m, c}' "$CSV_FILE")"
+peak_req=$(tail -n +2 "$CSV_FILE" | cut -d',' -f2 | sort -n | tail -1)
+best_latency=$(tail -n +2 "$CSV_FILE" | cut -d',' -f3 | sort -n | head -1)
+worst_latency=$(tail -n +2 "$CSV_FILE" | cut -d',' -f5 | sort -n -r | head -1)
 
-peak_req_value="${peak_req%%|*}"
+peak_req_value="${peak_req}"
 peak_req_conn="${peak_req##*|}"
-best_lat_value="${best_latency%%|*}"
+best_lat_value="${best_latency}"
 best_lat_conn="${best_latency##*|}"
-worst_lat_value="${worst_latency%%|*}"
+worst_lat_value="${worst_latency}"
 worst_lat_conn="${worst_latency##*|}"
 
 TABLE_ROWS="$(awk -F',' 'NR>1{printf "            <tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>\n",$1,$2,$3,$4,$5,$6,$7,$8}' "$CSV_FILE")"
@@ -173,7 +174,7 @@ cat > "$HTML_FILE" <<HTML
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>MiniWeb Benchmark Report</title>
-  <link rel="stylesheet" href="/custom.css" />
+  <link rel="stylesheet" href="/static/custom.css" />
   <style>
     .benchmark-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin: 1rem 0 1.5rem; }
     .stat-card h3 { margin: 0 0 .35rem; font-size: .95rem; color: var(--text-muted); }
@@ -192,7 +193,7 @@ cat > "$HTML_FILE" <<HTML
   <header class="site-header">
     <div class="container header-row">
       <a class="brand" href="/">MiniWeb</a>
-      <nav class="navbar-menu"><a class="nav-link active" href="/benchmark.html">Benchmark</a></nav>
+      <nav class="navbar-menu"><a class="nav-link active" href="/static/benchmark.html">Benchmark</a></nav>
     </div>
   </header>
 
@@ -209,11 +210,11 @@ cat > "$HTML_FILE" <<HTML
         </div>
 
         <div class="graphs">
-          <article class="graph"><h2>Throughput</h2><img src="/benchmark_assets/throughput.svg" alt="Throughput graph"></article>
-          <article class="graph"><h2>Latency (avg vs max)</h2><img src="/benchmark_assets/latency.svg" alt="Latency graph"></article>
-          <article class="graph"><h2>Latency standard deviation</h2><img src="/benchmark_assets/latency_stdev.svg" alt="Latency deviation graph"></article>
+          <article class="graph"><h2>Throughput</h2><img src="/static/benchmark_assets/throughput.svg" alt="Throughput graph"></article>
+          <article class="graph"><h2>Latency (avg vs max)</h2><img src="/static/benchmark_assets/latency.svg" alt="Latency graph"></article>
+          <article class="graph"><h2>Latency standard deviation</h2><img src="/static/benchmark_assets/latency_stdev.svg" alt="Latency deviation graph"></article>
           <article class="graph"><h2>Transfer rate</h2><img src="/benchmark_assets/transfer.svg" alt="Transfer graph"></article>
-          <article class="graph"><h2>Connection efficiency</h2><img src="/benchmark_assets/efficiency.svg" alt="Efficiency graph"></article>
+          <article class="graph"><h2>Connection efficiency</h2><img src="/static/benchmark_assets/efficiency.svg" alt="Efficiency graph"></article>
         </div>
       </section>
 
