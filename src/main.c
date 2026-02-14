@@ -12,9 +12,8 @@
 
 #include "../include/config.h"
 #include "../include/http_utils.h"
-#include "../include/urls.h"
 #include "../include/routes.h"
-
+#include "../include/urls.h"
 
 /* Configuration */
 struct server_config {
@@ -32,7 +31,7 @@ static struct server_config config = {.port = 9001,
 				      .verbose = 0};
 
 /* Define the global verbose flag for other modules */
-int config_verbose = 0;  /* Add this line */
+int config_verbose = 0; /* Add this line */
 
 static volatile sig_atomic_t running = 1;
 
@@ -153,7 +152,7 @@ parse_args(int argc, char *argv[])
 			break;
 		case 'v':
 			config.verbose = 1;
-			config_verbose = 1;  /* Add this line */
+			config_verbose = 1; /* Add this line */
 			break;
 		case 'h':
 			usage(argv[0]);
@@ -184,9 +183,11 @@ apply_openbsd_security(void)
 	unveil("/usr/bin/netstat", "x");
 	unveil("/bin/sh", "x");
 	unveil("/etc/man.conf", "r");
+	unveil("/etc/passwd", "r");
+	unveil("/etc/group", "r");
 	unveil(NULL, NULL);
 
-	const char *promises = "stdio rpath inet proc exec vminfo ps";
+	const char *promises = "stdio rpath inet proc exec vminfo ps getpw";
 	if (pledge(promises, NULL) == -1) {
 		perror("pledge");
 		fprintf(stderr, "Continuing without pledge...\n");
@@ -195,7 +196,8 @@ apply_openbsd_security(void)
 	}
 #else
 	if (config.verbose)
-		printf("OpenBSD security features disabled on this platform.\n");
+		printf(
+		    "OpenBSD security features disabled on this platform.\n");
 #endif
 }
 

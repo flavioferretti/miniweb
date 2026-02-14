@@ -14,6 +14,37 @@
 
   const panel = (title, body) => `<article class="panel stat-card"><h3>${title}</h3>${body}</article>`;
 
+  const processTable = (processes, type) => {
+    if (!processes || processes.length === 0) {
+      return '<p class="muted">No processes found.</p>';
+    }
+
+    const headers = type === 'cpu'
+      ? `<tr><th>User</th><th>PID</th><th>CPU%</th><th>Command</th></tr>`
+      : `<tr><th>User</th><th>PID</th><th>MEM%</th><th>Memory</th><th>Command</th></tr>`;
+
+    const rows = processes.map(p => {
+      if (type === 'cpu') {
+        return `<tr>
+          <td>${p.user}</td>
+          <td>${p.pid}</td>
+          <td><strong>${p.cpu_percent.toFixed(1)}%</strong></td>
+          <td class="process-cmd">${p.command}</td>
+        </tr>`;
+      } else {
+        return `<tr>
+          <td>${p.user}</td>
+          <td>${p.pid}</td>
+          <td><strong>${p.memory_percent.toFixed(1)}%</strong></td>
+          <td>${p.memory_mb} MB</td>
+          <td class="process-cmd">${p.command}</td>
+        </tr>`;
+      }
+    }).join('');
+
+    return `<div class="process-table-wrapper"><table class="process-table">${headers}${rows}</table></div>`;
+  };
+
   const render = () => {
     if (!latest) return;
     const m = latest.memory || {};
@@ -56,8 +87,18 @@
       return;
     }
 
-    const ps = latest.process_stats || {};
-    dashboard.innerHTML = panel('Process Summary', `<div class="kv"><span>Total</span><strong>${ps.total ?? 0}</strong></div><div class="kv"><span>Running</span><strong>${ps.running ?? 0}</strong></div><div class="kv"><span>Sleeping</span><strong>${ps.sleeping ?? 0}</strong></div><div class="kv"><span>Zombie</span><strong>${ps.zombie ?? 0}</strong></div>`);
+    if (currentTab === 'processes') {
+      const ps = latest.process_stats || {};
+      const cpuProcs = latest.top_cpu_processes || [];
+      const memProcs = latest.top_memory_processes || [];
+
+      dashboard.innerHTML = [
+        panel('Process Summary', `<div class="kv"><span>Total</span><strong>${ps.total ?? 0}</strong></div><div class="kv"><span>Running</span><strong>${ps.running ?? 0}</strong></div><div class="kv"><span>Sleeping</span><strong>${ps.sleeping ?? 0}</strong></div><div class="kv"><span>Zombie</span><strong>${ps.zombie ?? 0}</strong></div>`),
+        panel('Top CPU Processes', processTable(cpuProcs, 'cpu')),
+        panel('Top Memory Processes', processTable(memProcs, 'memory')),
+      ].join('');
+      return;
+    }
   };
 
   tabs?.addEventListener('click', (event) => {

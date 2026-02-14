@@ -47,4 +47,62 @@
 }
 .kv { display: flex; justify-content: space-between; gap: 1rem; }
 .dashboard-meta { margin-top: 1rem; }
+
+/* Process table styles */
+.process-table-wrapper {
+  overflow-x: auto;
+  margin-top: 0.75rem;
+}
+
+.process-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.process-table th {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 2px solid var(--border);
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.process-table td {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--surface-2);
+}
+
+.process-table tr:last-child td {
+  border-bottom: none;
+}
+
+.process-table tr:hover {
+  background: var(--surface-2);
+}
+
+.process-cmd {
+  font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+/* Make process panels span full width when in processes tab */
+.dashboard-grid:has(.process-table) {
+  grid-template-columns: 1fr;
+}
+
+.dashboard-grid:has(.process-table) > article:first-child {
+  grid-column: 1;
+}
+
+@media (min-width: 768px) {
+  .dashboard-grid:has(.process-table) > article:nth-child(2),
+  .dashboard-grid:has(.process-table) > article:nth-child(3) {
+    grid-column: 1;
+  }
+}
 </style>
