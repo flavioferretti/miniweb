@@ -11,18 +11,18 @@ typedef int (*route_handler_t)(void *cls, struct MHD_Connection *connection,
 			       size_t *upload_data_size, void **con_cls);
 
 /* Route structure */
-struct route {
-	const char *method;
-	const char *path;
-	route_handler_t handler;
-	void *handler_cls;
-};
+// struct route {
+// 	const char *method;
+// 	const char *path;
+// 	route_handler_t handler;
+// 	void *handler_cls;
+// };
 
 /* Route matching */
 route_handler_t route_match(const char *method, const char *path);
 
 /* Route initialization */
-void init_routes(void);
+// void init_routes(void);
 
 /* Handler declarations */
 int dashboard_handler(void *cls, struct MHD_Connection *connection,

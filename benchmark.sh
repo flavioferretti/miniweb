@@ -6,7 +6,7 @@
 
 set -eu
 SERVER_PORT=9001
-SERVER_URL="${SERVER_URL:-http://localhost:9001/static/custom.css}"
+SERVER_URL="${SERVER_URL:-http://localhost:9001/static/css/custom.css}"
 TEST_DURATION="${TEST_DURATION:-30}"
 THREADS="${THREADS:-4}"
 CONNECTIONS="${CONNECTIONS:-4 8 16 32 64 128 256}"
@@ -174,7 +174,7 @@ cat > "$HTML_FILE" <<HTML
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>MiniWeb Benchmark Report</title>
-  <link rel="stylesheet" href="/static/custom.css" />
+  <link rel="stylesheet" href="/static/css/custom.css" />
   <style>
     .benchmark-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin: 1rem 0 1.5rem; }
     .stat-card h3 { margin: 0 0 .35rem; font-size: .95rem; color: var(--text-muted); }
@@ -241,7 +241,7 @@ ${TABLE_ROWS}
       </section>
     </div>
   </main>
-  <script src="/static/theme_toggler.js"></script>
+  <script src="/static/js/theme_toggler.js"></script>
 </body>
 </html>
 HTML

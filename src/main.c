@@ -12,7 +12,9 @@
 
 #include "../include/config.h"
 #include "../include/http_utils.h"
+#include "../include/urls.h"
 #include "../include/routes.h"
+
 
 /* Configuration */
 struct server_config {

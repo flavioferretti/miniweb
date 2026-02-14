@@ -11,7 +11,8 @@ SRCS=      ${SRCDIR}/main.c \
            ${SRCDIR}/template_engine.c \
            ${SRCDIR}/metrics.c \
            ${SRCDIR}/man.c \
-           ${SRCDIR}/http_utils.c
+           ${SRCDIR}/http_utils.c \
+            ${SRCDIR}/urls.c
 
 # Object files (placed in build directory)
 OBJS=      ${BUILDDIR}/main.o \
@@ -19,7 +20,8 @@ OBJS=      ${BUILDDIR}/main.o \
            ${BUILDDIR}/template_engine.o \
            ${BUILDDIR}/metrics.o \
            ${BUILDDIR}/man.o \
-           ${BUILDDIR}/http_utils.o
+           ${BUILDDIR}/http_utils.o \
+           ${BUILDDIR}/urls.o
 
 CC?=       cc
 
@@ -92,6 +94,9 @@ ${BUILDDIR}/template_engine.o: ${SRCDIR}/template_engine.c
 	@mkdir -p ${BUILDDIR}
 	${CC} ${CFLAGS} -c ${SRCDIR}/template_engine.c -o $@
 
+${BUILDDIR}/urls.o: ${SRCDIR}/urls.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/urls.c -o $@
 
 TESTDIR=    tests
 

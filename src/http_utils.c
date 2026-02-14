@@ -16,7 +16,7 @@
 static const char *ERROR_404_HTML =
     "<!DOCTYPE html><html><head><meta charset=\"UTF-8\">"
     "<title>404 Not Found</title>"
-    "<link rel=\"stylesheet\" type=\"text/css\" href=\"/static/custom.css\" />"
+    "<link rel=\"stylesheet\" type=\"text/css\" href=\"/static/css/custom.css\" />"
     "</head><body>"
     "<h1>404 - Page Not Found</h1>"
     "<p>The requested resource <code>%s</code> was not found on this "
@@ -27,7 +27,7 @@ static const char *ERROR_404_HTML =
 static const char *ERROR_500_HTML =
     "<!DOCTYPE html><html><head><meta charset=\"UTF-8\">"
     "<title>500 Internal Server Error</title>"
-    "<link rel=\"stylesheet\" type=\"text/css\" href=\"/static/custom.css\" />"
+    "<link rel=\"stylesheet\" type=\"text/css\" href=\"/static/css/custom.css\" />"
     "</head><body>"
     "<h1>500 - Internal Server Error</h1>"
     "<p>Something went wrong processing your request.</p>"
@@ -38,7 +38,7 @@ static const char *ERROR_500_HTML =
 static const char *ERROR_400_HTML =
     "<!DOCTYPE html><html><head><meta charset=\"UTF-8\">"
     "<title>400 Bad Request</title>"
-    "<link rel=\"stylesheet\" type=\"text/css\" href=\"/static/custom.css\" />"
+    "<link rel=\"stylesheet\" type=\"text/css\" href=\"/static/css/custom.css\" />"
     "</head><body>"
     "<h1>400 - Bad Request</h1>"
     "<p>%s</p>"
@@ -48,7 +48,7 @@ static const char *ERROR_400_HTML =
 static const char *ERROR_403_HTML =
     "<!DOCTYPE html><html><head><meta charset=\"UTF-8\">"
     "<title>403 Forbidden</title>"
-    "<link rel=\"stylesheet\" type=\"text/css\" href=\"/static/custom.css\" />"
+    "<link rel=\"stylesheet\" type=\"text/css\" href=\"/static/css/custom.css\" />"
     "</head><body>"
     "<h1>403 - Forbidden</h1>"
     "<p>You don't have permission to access this resource.</p>"
