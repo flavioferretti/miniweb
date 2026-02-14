@@ -45,7 +45,7 @@ do {                                                                   \
 static struct kinfo_proc *get_procs_snapshot(size_t *nprocs);
 
 /* Mutex per proteggere il buffer statico in get_system_metrics_json() */
-static pthread_mutex_t metrics_lock = PTHREAD_MUTEX_INITIALIZER;
+// static pthread_mutex_t metrics_lock = PTHREAD_MUTEX_INITIALIZER;
 
 /* Funzione di comparazione per qsort: ordina per RSS decrescente */
 static int
@@ -66,7 +66,7 @@ get_procs_snapshot(size_t *nprocs)
 {
 	int mib[6];
 	size_t size;
-	struct kinfo_proc *kp = NULL;
+	struct kinfo_proc *kp = NULL;  /* Inizializza a NULL */
 	int retry = 0;
 	size_t elem_size;
 	int nelem;
@@ -80,27 +80,15 @@ get_procs_snapshot(size_t *nprocs)
 
 	elem_size = sizeof(struct kinfo_proc);
 
-	/* Retry loop: la lista dei processi può crescere rapidamente.
-	 * Se falliamo con ENOMEM, ritenta con più spazio */
 	for (retry = 0; retry < 4; retry++) {
-		/* Ottieni la dimensione attuale */
 		if (sysctl(mib, 6, NULL, &size, NULL, 0) == -1) {
 			LOG("sysctl size query failed: %s", strerror(errno));
 			return NULL;
 		}
 
-		/* Calcola il numero di elementi necessari */
 		nelem = size / elem_size;
-
-		/* Aggiungi buffer progressivamente più grande ad ogni retry:
-		 * retry 0: +25%
-		 * retry 1: +50%
-		 * retry 2: +75%
-		 * retry 3: +100% (doppia dimensione) */
 		nelem = nelem * (5 + retry) / 4;
 		size = nelem * elem_size;
-
-		/* IMPORTANTE: mib[5] deve essere il numero di elementi richiesti */
 		mib[5] = nelem;
 
 		kp = malloc(size);
@@ -109,31 +97,28 @@ get_procs_snapshot(size_t *nprocs)
 			return NULL;
 		}
 
-		/* Prova a ottenere i dati */
 		if (sysctl(mib, 6, kp, &size, NULL, 0) == 0) {
-			/* Successo! */
 			*nprocs = size / elem_size;
 			LOG("Successfully retrieved %zu processes (retry %d, requested %d)",
 				*nprocs, retry, nelem);
 			return kp;
 		}
 
-		/* Se non è ENOMEM, è un errore diverso - esci */
 		if (errno != ENOMEM) {
 			LOG("sysctl data query failed: %s", strerror(errno));
 			free(kp);
+			kp = NULL;  /* CRITICO: Reset a NULL dopo free */
 			return NULL;
 		}
 
-		/* ENOMEM: libera e riprova con più spazio */
-		LOG("ENOMEM on retry %d (requested %d elements), trying again with more space...",
+		LOG("ENOMEM on retry %d (requested %d elements), trying again...",
 			retry, nelem);
 		free(kp);
-		kp = NULL;
+		kp = NULL;  /* CRITICO: Reset a NULL dopo free */
 	}
 
-	/* Tutti i retry falliti */
 	LOG("Failed to get process list after %d retries", retry);
+	/* kp è garantito NULL qui */
 	return NULL;
 }
 
@@ -372,11 +357,16 @@ metrics_get_network_interfaces(NetworkInterface *interfaces, int max_interfaces)
 int
 metrics_get_top_cpu_processes(ProcessInfo *processes, int max_processes)
 {
+	LOG("Getting top CPU processes (max: %d)...", max_processes);
 	size_t nprocs = 0;
 	struct kinfo_proc *kp = get_procs_snapshot(&nprocs);
-	if (!kp) return 0;
+	if (!kp) {
+		LOG("ERROR: get_procs_snapshot returned NULL");
+		return 0;
+	}
 
-	/* Prima filtra i processi validi e calcola le percentuali */
+	LOG("Processing %zu processes for CPU stats...", nprocs);
+
 	ProcessInfo *temp = calloc(nprocs, sizeof(ProcessInfo));
 	if (!temp) {
 		free(kp);
@@ -392,7 +382,7 @@ metrics_get_top_cpu_processes(ProcessInfo *processes, int max_processes)
 		strlcpy(temp[valid_count].command, kp[i].p_comm,
 				sizeof(temp[valid_count].command));
 
-		/* Ottieni il nome utente dal UID */
+		/* CRITICO: Usa getpwuid_r() invece di getpwuid() */
 		struct passwd pwd;
 		struct passwd *result;
 		char pwbuf[1024];
@@ -400,16 +390,16 @@ metrics_get_top_cpu_processes(ProcessInfo *processes, int max_processes)
 		if (getpwuid_r(kp[i].p_uid, &pwd, pwbuf, sizeof(pwbuf), &result) == 0
 			&& result != NULL) {
 			strlcpy(temp[valid_count].user, pwd.pw_name,
-				sizeof(temp[valid_count].user));
-		} else {
-			snprintf(temp[valid_count].user,
-				sizeof(temp[valid_count].user), "%d", kp[i].p_uid);
-		}
+					sizeof(temp[valid_count].user));
+			} else {
+				snprintf(temp[valid_count].user,
+						 sizeof(temp[valid_count].user), "%d", kp[i].p_uid);
+			}
 
-		valid_count++;
+			valid_count++;
 	}
 
-	/* Ordina per CPU decrescente usando bubble sort semplice */
+	/* Ordina per CPU decrescente */
 	for (int i = 0; i < valid_count - 1; i++) {
 		for (int j = 0; j < valid_count - i - 1; j++) {
 			if (temp[j].cpu_percent < temp[j + 1].cpu_percent) {
@@ -420,12 +410,12 @@ metrics_get_top_cpu_processes(ProcessInfo *processes, int max_processes)
 		}
 	}
 
-	/* Copia i primi max_processes risultati */
 	int count = (valid_count < max_processes) ? valid_count : max_processes;
 	for (int i = 0; i < count; i++) {
 		processes[i] = temp[i];
 	}
 
+	LOG("Returning %d CPU processes (valid: %d, total: %zu)", count, valid_count, nprocs);
 	free(temp);
 	free(kp);
 	return count;
@@ -435,14 +425,18 @@ metrics_get_top_cpu_processes(ProcessInfo *processes, int max_processes)
 int
 metrics_get_top_memory_processes(ProcessInfo *processes, int max_processes)
 {
+	LOG("Getting top memory processes (max: %d)...", max_processes);
 	size_t nprocs = 0;
 	struct kinfo_proc *kp = get_procs_snapshot(&nprocs);
-	if (!kp) return 0;
+	if (!kp) {
+		LOG("ERROR: get_procs_snapshot returned NULL");
+		return 0;
+	}
 
-	/* Ordina per memoria (RSS) decrescente */
+	LOG("Processing %zu processes for memory stats...", nprocs);
+
 	qsort(kp, nprocs, sizeof(struct kinfo_proc), compare_memory);
 
-	/* Ottieni la memoria totale per calcolare le percentuali */
 	MemoryStats mem_stats;
 	long total_memory_kb = 0;
 	if (metrics_get_memory_stats(&mem_stats) == 0) {
@@ -458,7 +452,6 @@ metrics_get_top_memory_processes(ProcessInfo *processes, int max_processes)
 		processes[count].pid = kp[i].p_pid;
 		processes[count].memory_mb = (kp[i].p_vm_rssize * page_size) / (1024 * 1024);
 
-		/* Calcola la percentuale di memoria */
 		if (total_memory_kb > 0) {
 			long mem_kb = (kp[i].p_vm_rssize * page_size) / 1024;
 			processes[count].memory_percent = (100.0 * mem_kb) / total_memory_kb;
@@ -469,19 +462,24 @@ metrics_get_top_memory_processes(ProcessInfo *processes, int max_processes)
 		strlcpy(processes[count].command, kp[i].p_comm,
 				sizeof(processes[count].command));
 
-		/* Ottieni il nome utente dal UID */
-		struct passwd *pw = getpwuid(kp[i].p_uid);
-		if (pw) {
-			strlcpy(processes[count].user, pw->pw_name,
-					sizeof(processes[count].user));
-		} else {
-			snprintf(processes[count].user,
-					 sizeof(processes[count].user), "%d", kp[i].p_uid);
-		}
+		/* CRITICO: Usa getpwuid_r() invece di getpwuid() */
+		struct passwd pwd;
+		struct passwd *result;
+		char pwbuf[1024];
 
-		count++;
+		if (getpwuid_r(kp[i].p_uid, &pwd, pwbuf, sizeof(pwbuf), &result) == 0
+			&& result != NULL) {
+			strlcpy(processes[count].user, pwd.pw_name,
+					sizeof(processes[count].user));
+			} else {
+				snprintf(processes[count].user,
+						 sizeof(processes[count].user), "%d", kp[i].p_uid);
+			}
+
+			count++;
 	}
 
+	LOG("Returning %d memory processes (total: %zu)", count, nprocs);
 	free(kp);
 	return count;
 }
@@ -748,12 +746,17 @@ append_process_stats_json(char *json, size_t size)
 char *
 get_system_metrics_json(void)
 {
-	static char json[JSON_BUFFER_SIZE];
+	char *json = malloc(JSON_BUFFER_SIZE);
+	if (!json) {
+		LOG("Failed to allocate JSON buffer");
+		return NULL;
+	}
+
 	char timestamp[64];
 	char hostname[256];
 	time_t now;
+	struct tm tm_buf;  /* Buffer per localtime_r */
 
-	/* Dichiarare TUTTE le variabili locali PRIMA del lock */
 	char cpu_json[256];
 	char memory_json[512];
 	char load_json[256];
@@ -766,17 +769,19 @@ get_system_metrics_json(void)
 	char top_mem_json[2048];
 	char proc_stats_json[256];
 
-	/* LOCK: protegge il buffer statico condiviso */
-	pthread_mutex_lock(&metrics_lock);
-
 	time(&now);
-	strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S",
-			 localtime(&now));
+
+	/* CRITICO: Usa localtime_r() invece di localtime() */
+	struct tm *tm_ptr = localtime_r(&now, &tm_buf);
+	if (tm_ptr) {
+		strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", tm_ptr);
+	} else {
+		strlcpy(timestamp, "unknown", sizeof(timestamp));
+	}
 
 	if (metrics_get_hostname(hostname, sizeof(hostname)) == -1)
 		strlcpy(hostname, "localhost", sizeof(hostname));
 
-	/* Popola tutti i buffer JSON usando le funzioni helper */
 	append_cpu_stats_json(cpu_json, sizeof(cpu_json));
 	append_memory_stats_json(memory_json, sizeof(memory_json));
 	append_load_average_json(load_json, sizeof(load_json));
@@ -789,8 +794,7 @@ get_system_metrics_json(void)
 	append_top_memory_processes_json(top_mem_json, sizeof(top_mem_json));
 	append_process_stats_json(proc_stats_json, sizeof(proc_stats_json));
 
-	/* Assembla il JSON finale */
-	snprintf(json, sizeof(json),
+	snprintf(json, JSON_BUFFER_SIZE,
 			 "{"
 			 "\"timestamp\": \"%s\","
 			 "\"hostname\": \"%s\","
@@ -800,12 +804,58 @@ get_system_metrics_json(void)
 		  uptime_json, disks_json, ports_json, network_json, top_cpu_json,
 		  top_mem_json, proc_stats_json);
 
-	/* UNLOCK: rilascia il lock prima di ritornare */
-	pthread_mutex_unlock(&metrics_lock);
-
 	return json;
 }
 
+
+int
+metrics_handler(void *cls, struct MHD_Connection *connection, const char *url,
+				const char *method, const char *version,
+				const char *upload_data, size_t *upload_data_size,
+				void **con_cls)
+{
+	(void)cls;
+	(void)url;
+	(void)method;
+	(void)version;
+	(void)upload_data;
+	(void)upload_data_size;
+	(void)con_cls;
+
+	char *json_response = get_system_metrics_json();
+
+	/* Se l'allocazione fallisce, ritorna errore 500 */
+	if (!json_response) {
+		const char *error = "{\"error\":\"memory allocation failed\"}";
+		struct MHD_Response *response = MHD_create_response_from_buffer(
+			strlen(error), (void *)error, MHD_RESPMEM_PERSISTENT);
+
+		MHD_add_response_header(response, "Content-Type", "application/json");
+		int ret = MHD_queue_response(connection, MHD_HTTP_INTERNAL_SERVER_ERROR, response);
+		MHD_destroy_response(response);
+		return ret;
+	}
+
+	struct MHD_Response *response;
+	int ret;
+
+	/* MHD_RESPMEM_MUST_FREE = libmicrohttpd chiamerà free() quando finisce
+	 * Questo è FONDAMENTALE - libmicrohttpd gestisce la memoria per noi! */
+	response = MHD_create_response_from_buffer(strlen(json_response),
+											   json_response, MHD_RESPMEM_MUST_FREE);
+
+	MHD_add_response_header(response, "Content-Type", "application/json");
+	MHD_add_response_header(response, "Cache-Control",
+							"no-cache, no-store, must-revalidate");
+	MHD_add_response_header(response, "Access-Control-Allow-Origin", "*");
+
+	ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
+	MHD_destroy_response(response);
+
+	return ret;
+}
+
+/*
 int
 metrics_handler(void *cls, struct MHD_Connection *connection, const char *url,
 				const char *method, const char *version,
@@ -837,4 +887,4 @@ metrics_handler(void *cls, struct MHD_Connection *connection, const char *url,
 	MHD_destroy_response(response);
 
 	return ret;
-}
+}*/

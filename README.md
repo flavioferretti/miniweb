@@ -85,6 +85,7 @@ Options:
 |----------|-------------|
 | `GET /` | Main dashboard with system overview |
 | `GET /docs` | Manual page browser and search |
+| `GET /apiroot` | MiniWeb API root page |
 
 ### Metrics API
 
@@ -156,7 +157,16 @@ Uses OpenBSD's `sysctl(2)` API to gather system information without spawning ext
 - **Processes**: `sysctl(KERN_PROC, KERN_PROC_ALL)` for process list
 - **Network**: `getifaddrs(3)` for interface information
 
-**Critical Implementation Detail**: Process list retrieval uses a retry loop with progressive buffer allocation to handle the race condition where processes spawn between size query and data retrieval.
+**Critical Implementation Details**: 
+
+1. **Process List Retry Loop**: Uses progressive buffer allocation (25%, 50%, 75%, 100% extra space) to handle the race condition where processes spawn between size query and data retrieval. Each request allocates ~130-160 elements with the `mib[5]` parameter set to the requested element count.
+
+2. **Thread Safety**: All metric collection functions use thread-safe variants:
+   - `localtime_r()` instead of `localtime()` for timestamp generation
+   - `getpwuid_r()` instead of `getpwuid()` for username lookups
+   - Dynamic memory allocation per request (via `malloc()`) with automatic cleanup by libmicrohttpd (`MHD_RESPMEM_MUST_FREE`)
+
+3. **Performance**: Each JSON buffer is allocated dynamically (~8KB per request) and freed automatically by libmicrohttpd after transmission, eliminating lock contention and enabling full parallel processing across all worker threads.
 
 #### Security (`main.c`)
 
@@ -333,17 +343,18 @@ ab -n 1000 -c 10 http://127.0.0.1:9001/
 
 On OpenBSD 7.8 / AMD64 / 4-core CPU:
 
-- **Metrics endpoint**: ~500 req/sec (includes sysctl overhead)
+- **Metrics endpoint**: 250-350 req/sec (includes sysctl + JSON generation)
 - **Static files**: ~2000 req/sec
 - **Memory footprint**: ~8-12 MB resident
-- **CPU usage**: <1% idle, ~15% under load
+- **CPU usage**: <1% idle, ~50-80% under heavy load (4 threads active)
 
 ### Optimization Notes
 
-- Metrics are cached internally to reduce sysctl overhead
-- Process list retrieval uses efficient sysctl interface (no fork/exec)
-- Connection pooling reduces TCP overhead
-- Multi-threaded request handling
+- Dynamic memory allocation per request eliminates lock contention
+- Thread-safe functions (`localtime_r()`, `getpwuid_r()`) enable full parallelism
+- Process list retrieval uses efficient sysctl interface with retry loop (no fork/exec)
+- libmicrohttpd handles connection pooling and automatic memory cleanup
+- Multi-threaded request handling with 4 worker threads (default)
 
 ---
 
@@ -353,11 +364,20 @@ On OpenBSD 7.8 / AMD64 / 4-core CPU:
 
 **Problem**: `sysctl data query failed: Cannot allocate memory`
 
-**Solution**: This is a known OpenBSD issue with `KERN_PROC_ALL`. The code includes a retry loop with progressive buffer allocation. If it persists, your system might be extremely busy with processes spawning rapidly.
+**Solution**: This is handled by the retry loop with progressive buffer allocation (up to 100% extra space). The code sets `mib[5]` to the requested element count and retries with larger buffers. If it still persists after 4 retries, your system might have extremely high process churn.
 
 **Problem**: `pledge: Operation not permitted`
 
-**Solution**: Ensure all required promises are in the pledge string. Check the security section above for the complete list.
+**Solution**: Ensure all required promises are in the pledge string. Required: `stdio rpath inet proc exec vminfo ps getpw`. The `ps` promise enables process metrics, and `getpw` enables username lookups via `/etc/passwd`.
+
+**Problem**: Segmentation fault under load
+
+**Solution**: Ensure you're using the thread-safe versions of functions:
+- `localtime_r()` instead of `localtime()` 
+- `getpwuid_r()` instead of `getpwuid()`
+- Dynamic allocation with `MHD_RESPMEM_MUST_FREE` instead of static buffers
+
+These changes are required for multi-threaded operation with libmicrohttpd.
 
 **Problem**: Process data is empty (`top_cpu_processes: []`)
 
@@ -387,11 +407,13 @@ On OpenBSD 7.8 / AMD64 / 4-core CPU:
 ### Technical Debt
 
 - [ ] Replace remaining `popen()` calls with safer alternatives
-- [ ] Implement actual timeout handling in subprocess execution
 - [ ] Add comprehensive test suite
 - [ ] Improve JSON generation (streaming, proper escaping)
 - [ ] Add configuration file support
 - [ ] Port to other BSD systems (FreeBSD, NetBSD)
+- [x] ~~Implement thread-safe metric collection~~ ✓ Completed
+- [x] ~~Fix KERN_PROC_ALL memory allocation issues~~ ✓ Completed
+- [x] ~~Replace static buffers with dynamic allocation~~ ✓ Completed
 
 ---
 
