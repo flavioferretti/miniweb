@@ -199,7 +199,7 @@ favicon_handler(void *cls, struct MHD_Connection *connection, const char *url,
 	(void)upload_data_size;
 	(void)con_cls;
 
-	const char *path = "static/favicon.svg";
+	const char *path = "static/assets/favicon.svg";
 	FILE *f = fopen(path, "rb");
 
 	if (!f) {
