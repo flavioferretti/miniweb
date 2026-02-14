@@ -55,7 +55,8 @@ Options:
 ## HTTP surface
 
 ### Dashboard + docs
-- `GET /` — main dashboard rendered through templates.
+- `GET /` — main dashboard (rendered through templates).
+- `GET /docs` — OpenBSD man pages in html/pdf/md formats (rendered through templates).
 
 ### Metrics API
 - `GET /api/metrics` — runtime system metrics (CPU, memory, swap, load, disk, network, ports).

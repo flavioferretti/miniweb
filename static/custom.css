@@ -135,6 +135,11 @@ footer {
 }
 
 @media (max-width: 860px) {
+
+  .site-header {
+    margin-top: 0.1rem;
+  }
+
   .header-row {
     grid-template-columns: auto auto auto;
   }

@@ -5,7 +5,7 @@
 #
 
 set -eu
-
+SERVER_PORT=9001
 SERVER_URL="${SERVER_URL:-http://localhost:9001/static/custom.css}"
 TEST_DURATION="${TEST_DURATION:-30}"
 THREADS="${THREADS:-4}"
@@ -194,6 +194,7 @@ cat > "$HTML_FILE" <<HTML
     <div class="container header-row">
       <a class="brand" href="/">MiniWeb</a>
       <nav class="navbar-menu"><a class="nav-link active" href="/static/benchmark.html">Benchmark</a></nav>
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle theme">◐</button>
     </div>
   </header>
 
@@ -240,11 +241,12 @@ ${TABLE_ROWS}
       </section>
     </div>
   </main>
+  <script src="/static/theme_toggler.js"></script>
 </body>
 </html>
 HTML
 
 printf '\nBenchmark complete.\n'
-printf '  HTML report : %s\n' "$HTML_FILE"
+printf '  HTML report : %s%s%s\n' "http://localhost:" "$SERVER_PORT/" "$HTML_FILE"
 printf '  CSV results : %s\n' "$CSV_FILE"
 printf '  Assets dir  : %s\n' "$ASSETS_DIR"

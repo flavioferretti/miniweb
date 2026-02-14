@@ -24,6 +24,7 @@
     <div class="container header-row">
       <a class="brand" href="/">MiniWeb</a>
       <nav class="navbar-menu"><a class="nav-link active" href="/static/benchmark.html">Benchmark</a></nav>
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle theme">◐</button>
     </div>
   </header>
 
@@ -31,19 +32,19 @@
     <div class="container">
       <section class="panel">
         <h1>Benchmark Report</h1>
-        <p class="meta">Generated: 2026-02-14 01:13:41 · Target URL: <code>http://localhost:9001/static/custom.css</code> · Duration: 30s · Threads: 4</p>
+        <p class="meta">Generated: 2026-02-14 02:08:40 · Target URL: <code>http://localhost:9001/static/custom.css</code> · Duration: 30s · Threads: 4</p>
 
         <div class="benchmark-grid">
-          <article class="panel stat-card"><h3>Peak throughput</h3><p>7019.20 req/s</p><span class="muted">at  connections</span></article>
-          <article class="panel stat-card"><h3>Best avg latency</h3><p>0.745 ms</p><span class="muted">at  connections</span></article>
-          <article class="panel stat-card"><h3>Worst max latency</h3><p>69.020 ms</p><span class="muted">at  connections</span></article>
+          <article class="panel stat-card"><h3>Peak throughput</h3><p>7760.32 req/s</p><span class="muted">at  connections</span></article>
+          <article class="panel stat-card"><h3>Best avg latency</h3><p>1.160 ms</p><span class="muted">at  connections</span></article>
+          <article class="panel stat-card"><h3>Worst max latency</h3><p>139.220 ms</p><span class="muted">at  connections</span></article>
         </div>
 
         <div class="graphs">
           <article class="graph"><h2>Throughput</h2><img src="/static/benchmark_assets/throughput.svg" alt="Throughput graph"></article>
           <article class="graph"><h2>Latency (avg vs max)</h2><img src="/static/benchmark_assets/latency.svg" alt="Latency graph"></article>
           <article class="graph"><h2>Latency standard deviation</h2><img src="/static/benchmark_assets/latency_stdev.svg" alt="Latency deviation graph"></article>
-          <article class="graph"><h2>Transfer rate</h2><img src="/benchmark_assets/transfer.svg" alt="Transfer graph"></article>
+          <article class="graph"><h2>Transfer rate</h2><img src="/static/benchmark_assets/transfer.svg" alt="Transfer graph"></article>
           <article class="graph"><h2>Connection efficiency</h2><img src="/static/benchmark_assets/efficiency.svg" alt="Efficiency graph"></article>
         </div>
       </section>
@@ -64,17 +65,18 @@
             </tr>
           </thead>
           <tbody>
-            <tr><td>4</td><td>3802.19</td><td>0.745</td><td>0.676</td><td>28.870</td><td>11.370</td><td>114145</td><td>0</td></tr>
-            <tr><td>8</td><td>2955.12</td><td>1.810</td><td>3.150</td><td>36.080</td><td>8.840</td><td>88968</td><td>0</td></tr>
-            <tr><td>16</td><td>4035.59</td><td>3.120</td><td>1.550</td><td>48.760</td><td>12.070</td><td>121408</td><td>0</td></tr>
-            <tr><td>32</td><td>6157.77</td><td>4.230</td><td>2.050</td><td>36.610</td><td>18.410</td><td>185310</td><td>0</td></tr>
-            <tr><td>64</td><td>3650.13</td><td>14.670</td><td>3.220</td><td>42.470</td><td>10.910</td><td>109874</td><td>0</td></tr>
-            <tr><td>128</td><td>7019.20</td><td>15.670</td><td>2.280</td><td>46.600</td><td>20.990</td><td>211004</td><td>0</td></tr>
-            <tr><td>256</td><td>371.88</td><td>35.650</td><td>6.240</td><td>69.020</td><td>1.110</td><td>11185</td><td>0</td></tr>
+            <tr><td>4</td><td>4507.37</td><td>1.160</td><td>2.940</td><td>41.990</td><td>13.480</td><td>135527</td><td>0</td></tr>
+            <tr><td>8</td><td>764.46</td><td>8.120</td><td>15.590</td><td>139.220</td><td>2.290</td><td>22963</td><td>0</td></tr>
+            <tr><td>16</td><td>7523.97</td><td>1.650</td><td>0.809</td><td>33.700</td><td>22.490</td><td>225927</td><td>0</td></tr>
+            <tr><td>32</td><td>1891.77</td><td>10.930</td><td>5.760</td><td>59.460</td><td>5.660</td><td>56925</td><td>0</td></tr>
+            <tr><td>64</td><td>7760.32</td><td>7.120</td><td>1.380</td><td>40.840</td><td>23.200</td><td>233229</td><td>0</td></tr>
+            <tr><td>128</td><td>3284.46</td><td>31.240</td><td>4.890</td><td>74.410</td><td>9.820</td><td>98860</td><td>0</td></tr>
+            <tr><td>256</td><td>2976.88</td><td>26.540</td><td>3.790</td><td>57.880</td><td>8.900</td><td>89387</td><td>0</td></tr>
           </tbody>
         </table>
       </section>
     </div>
   </main>
+  <script src="/static/theme_toggler.js"></script>
 </body>
 </html>
