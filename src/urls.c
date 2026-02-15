@@ -2,6 +2,7 @@
 #include "../include/urls.h"
 #include "../include/man.h"
 #include "../include/metrics.h"
+#include "../include/networking.h"
 
 static struct route routes[MAX_ROUTES];
 static size_t route_count = 0;
@@ -27,6 +28,8 @@ init_routes(void)
     register_route("GET", "/favicon.ico", favicon_handler, NULL);
     register_route("GET", "/api/metrics", metrics_handler, NULL);
     register_route("GET", "/apiroot", apiroot_handler, NULL);
+    register_route("GET", "/networking", networking_page_handler, NULL);
+    register_route("GET", "/api/networking", networking_api_handler, NULL);
 }
 
 route_handler_t

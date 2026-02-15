@@ -1,0 +1,178 @@
+<script>
+(() => {
+  const dashboard = document.getElementById('dashboard');
+  const tabs = document.getElementById('tabNavigation');
+  const netInfo = document.getElementById('net-info');
+  const lastUpdate = document.getElementById('last-update');
+
+  let currentTab = 'overview';
+  let latest = null;
+
+  const panel = (title, body) => `<article class="panel stat-card"><h3>${title}</h3>${body}</article>`;
+
+  const formatBytes = (bytes) => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const formatNumber = (num) => {
+    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  };
+
+  const routeTable = (routes) => {
+    if (!routes || routes.length === 0) {
+      return '<p class="muted">No routes found.</p>';
+    }
+
+    const headers = `<tr><th>Destination</th><th>Gateway</th><th>Netmask</th><th>Interface</th><th>Flags</th></tr>`;
+    
+    const rows = routes.map(r => `<tr>
+      <td>${r.destination}</td>
+      <td>${r.gateway}</td>
+      <td>${r.netmask}</td>
+      <td><span class="badge badge-info">${r.interface}</span></td>
+      <td>${r.flags}</td>
+    </tr>`).join('');
+
+    return `<div class="network-table-wrapper"><table class="network-table">${headers}${rows}</table></div>`;
+  };
+
+  const dnsInfo = (dns) => {
+    if (!dns) return '<p class="muted">No DNS configuration found.</p>';
+
+    let html = '<div class="code-block">';
+    
+    if (dns.nameservers && dns.nameservers.length > 0) {
+      html += '<strong>Nameservers:</strong><br>';
+      dns.nameservers.forEach(ns => {
+        html += `nameserver ${ns}<br>`;
+      });
+    }
+    
+    if (dns.domain) {
+      html += `<br><strong>Domain:</strong> ${dns.domain}<br>`;
+    }
+    
+    if (dns.search) {
+      html += `<strong>Search:</strong> ${dns.search}<br>`;
+    }
+    
+    html += '</div>';
+    return html;
+  };
+
+  const interfaceStats = (interfaces) => {
+    if (!interfaces || interfaces.length === 0) {
+      return '<p class="muted">No interface statistics available.</p>';
+    }
+
+    const headers = `<tr><th>Interface</th><th>RX Packets</th><th>RX Bytes</th><th>RX Errors</th><th>TX Packets</th><th>TX Bytes</th><th>TX Errors</th></tr>`;
+    
+    const rows = interfaces.map(iface => `<tr>
+      <td><span class="badge badge-info">${iface.interface}</span></td>
+      <td>${formatNumber(iface.rx_packets)}</td>
+      <td>${formatBytes(iface.rx_bytes)}</td>
+      <td>${iface.rx_errors > 0 ? '<span class="badge badge-warning">' + iface.rx_errors + '</span>' : iface.rx_errors}</td>
+      <td>${formatNumber(iface.tx_packets)}</td>
+      <td>${formatBytes(iface.tx_bytes)}</td>
+      <td>${iface.tx_errors > 0 ? '<span class="badge badge-warning">' + iface.tx_errors + '</span>' : iface.tx_errors}</td>
+    </tr>`).join('');
+
+    return `<div class="network-table-wrapper"><table class="network-table">${headers}${rows}</table></div>`;
+  };
+
+  const render = () => {
+    if (!latest) return;
+
+    if (currentTab === 'overview') {
+      const routeCount = latest.routes ? latest.routes.length : 0;
+      const dnsCount = latest.dns && latest.dns.nameservers ? latest.dns.nameservers.length : 0;
+      const ifaceCount = latest.interfaces ? latest.interfaces.length : 0;
+      
+      // Calculate total traffic
+      let totalRx = 0, totalTx = 0;
+      if (latest.interfaces) {
+        latest.interfaces.forEach(iface => {
+          totalRx += iface.rx_bytes || 0;
+          totalTx += iface.tx_bytes || 0;
+        });
+      }
+
+      dashboard.innerHTML = [
+        panel('Network Summary', `
+          <div class="stats-grid">
+            <div class="stat-box">
+              <div class="label">Routes</div>
+              <div class="value">${routeCount}</div>
+            </div>
+            <div class="stat-box">
+              <div class="label">DNS Servers</div>
+              <div class="value">${dnsCount}</div>
+            </div>
+            <div class="stat-box">
+              <div class="label">Interfaces</div>
+              <div class="value">${ifaceCount}</div>
+            </div>
+            <div class="stat-box">
+              <div class="label">Total RX</div>
+              <div class="value" style="font-size:1.2rem">${formatBytes(totalRx)}</div>
+            </div>
+            <div class="stat-box">
+              <div class="label">Total TX</div>
+              <div class="value" style="font-size:1.2rem">${formatBytes(totalTx)}</div>
+            </div>
+          </div>
+        `),
+      ].join('');
+      return;
+    }
+
+    if (currentTab === 'routes') {
+      dashboard.innerHTML = panel('Routing Table', routeTable(latest.routes));
+      return;
+    }
+
+    if (currentTab === 'dns') {
+      dashboard.innerHTML = panel('DNS Configuration', dnsInfo(latest.dns));
+      return;
+    }
+
+    if (currentTab === 'interfaces') {
+      dashboard.innerHTML = panel('Interface Statistics', interfaceStats(latest.interfaces));
+      return;
+    }
+  };
+
+  tabs?.addEventListener('click', (event) => {
+    const button = event.target.closest('.tab-button');
+    if (!button) return;
+    currentTab = button.dataset.tab;
+    tabs.querySelectorAll('.tab-button').forEach((b) => b.classList.toggle('active', b === button));
+    render();
+  });
+
+  const refresh = async () => {
+    try {
+      const response = await fetch('/api/networking', { cache: 'no-store' });
+      if (!response.ok) throw new Error('request failed');
+      latest = await response.json();
+      
+      const routeCount = latest.routes ? latest.routes.length : 0;
+      const ifaceCount = latest.interfaces ? latest.interfaces.length : 0;
+      netInfo.textContent = `${routeCount} routes · ${ifaceCount} interfaces`;
+      
+      lastUpdate.textContent = latest.timestamp || new Date().toLocaleTimeString();
+      render();
+    } catch (err) {
+      console.error('Failed to fetch network data:', err);
+      dashboard.innerHTML = '<article class="panel stat-card"><p class="muted">Unable to read network data at the moment.</p></article>';
+    }
+  };
+
+  refresh();
+  setInterval(refresh, 10000); // Update every 10 seconds
+})();
+</script>

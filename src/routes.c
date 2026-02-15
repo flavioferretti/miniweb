@@ -13,11 +13,6 @@
 #include "../include/urls.h"
 #include "../include/template_engine.h"
 
-/* Route table */
-// #define MAX_ROUTES 32
-// static struct route routes[MAX_ROUTES];
-// static size_t route_count = 0;
-
 /* Route matching function */
 route_handler_t
 route_match(const char *method, const char *path)

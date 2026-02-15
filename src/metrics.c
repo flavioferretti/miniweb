@@ -892,3 +892,4 @@ metrics_handler(void *cls, struct MHD_Connection *connection, const char *url,
 
 	return ret;
 }
+

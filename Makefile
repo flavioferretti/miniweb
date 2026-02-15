@@ -12,7 +12,8 @@ SRCS=      ${SRCDIR}/main.c \
            ${SRCDIR}/metrics.c \
            ${SRCDIR}/man.c \
            ${SRCDIR}/http_utils.c \
-            ${SRCDIR}/urls.c
+           ${SRCDIR}/urls.c \
+           ${SRCDIR}/networking.c
 
 # Object files (placed in build directory)
 OBJS=      ${BUILDDIR}/main.o \
@@ -21,7 +22,8 @@ OBJS=      ${BUILDDIR}/main.o \
            ${BUILDDIR}/metrics.o \
            ${BUILDDIR}/man.o \
            ${BUILDDIR}/http_utils.o \
-           ${BUILDDIR}/urls.o
+           ${BUILDDIR}/urls.o \
+           ${BUILDDIR}/networking.o
 
 CC?=       cc
 
@@ -85,6 +87,10 @@ ${BUILDDIR}/man.o: ${SRCDIR}/man.c
 ${BUILDDIR}/metrics.o: ${SRCDIR}/metrics.c
 	@mkdir -p ${BUILDDIR}
 	${CC} ${CFLAGS} -c ${SRCDIR}/metrics.c -o $@
+
+${BUILDDIR}/networking.o: ${SRCDIR}/networking.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/networking.c -o $@
 
 ${BUILDDIR}/routes.o: ${SRCDIR}/routes.c
 	@mkdir -p ${BUILDDIR}

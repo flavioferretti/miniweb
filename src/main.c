@@ -185,9 +185,10 @@ apply_openbsd_security(void)
 	unveil("/etc/man.conf", "r");
 	unveil("/etc/passwd", "r");
 	unveil("/etc/group", "r");
+	unveil("/etc/resolv.conf", "r");
 	unveil(NULL, NULL);
 
-	const char *promises = "stdio rpath inet proc exec vminfo ps getpw";
+	const char *promises = "stdio rpath inet route proc exec vminfo ps getpw";
 	if (pledge(promises, NULL) == -1) {
 		perror("pledge");
 		fprintf(stderr, "Continuing without pledge...\n");
