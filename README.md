@@ -85,6 +85,7 @@ Options:
 |----------|-------------|
 | `GET /` | Main dashboard with system overview |
 | `GET /docs` | Manual page browser and search |
+| `GET /networking` | Network interfaces overview with routes and DNS |
 | `GET /apiroot` | MiniWeb API root page |
 
 ### Metrics API
