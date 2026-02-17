@@ -11,6 +11,7 @@
 
 #include "../include/man.h"
 #include "../include/http_utils.h"
+#include "../include/http_handler.h" // Aggiunto per le nuove struct
 
 #define MAX_JSON_SIZE (256 * 1024)
 #define MAX_OUTPUT_SIZE (2 * 1024 * 1024)
@@ -50,15 +51,15 @@ resolve_man_path(const char *name, const char *section)
 	char *const argv[] = {"man", "-M",
 		"/usr/share/man:/usr/local/man:/usr/X11R6/man",
 		"-w", (char *)section, (char *)name, NULL};
-	char *path = safe_popen_read_argv("/usr/bin/man", argv, 512, 5);
-	if (path) {
-		path[strcspn(path, "\r\n")] = 0;
-		if (strlen(path) == 0) {
-			free(path);
-			return NULL;
+		char *path = safe_popen_read_argv("/usr/bin/man", argv, 512, 5);
+		if (path) {
+			path[strcspn(path, "\r\n")] = 0;
+			if (strlen(path) == 0) {
+				free(path);
+				return NULL;
+			}
 		}
-	}
-	return path;
+		return path;
 }
 
 
@@ -182,12 +183,17 @@ char *
 man_get_page_metadata_json(const char *area, const char *section, const char *name)
 {
 	char *filepath = resolve_man_path(name, section);
-	if (!filepath) return strdup("{\"error\":\"Not found\"}");
+	if (!filepath)
+		return strdup("{\"error\":\"Not found\"}");
 
 	char *json = malloc(1024);
-	/* Usiamo 'area' qui sotto per includerlo nel JSON */
-	snprintf(json, 1024, "{\"name\":\"%s\",\"section\":\"%s\",\"area\":\"%s\",\"path\":\"%s\"}",
-			 name, section, area, filepath);
+	if (!json) {
+		free(filepath);
+		return strdup("{\"error\":\"OOM\"}");
+	}
+	snprintf(json, 1024,
+			 "{\"name\":\"%s\",\"section\":\"%s\",\"area\":\"%s\",\"path\":\"%s\"}",
+		  name, section, area, filepath);
 
 	free(filepath);
 	return json;
@@ -202,187 +208,238 @@ man_api_search(const char *query)
 	char *const argv[] = {"apropos", "-M",
 		"/usr/share/man:/usr/local/man:/usr/X11R6/man",
 		(char *)query, NULL};
-	char *output = safe_popen_read_argv("/usr/bin/apropos", argv,
-		MAX_OUTPUT_SIZE, 5);
-	if (!output)
-		return strdup("");
+		char *output = safe_popen_read_argv("/usr/bin/apropos", argv,
+											MAX_OUTPUT_SIZE, 5);
+		if (!output)
+			return strdup("");
+
+	return output;
+}
+
+/* util for search */
+char *
+man_api_search_raw(const char *query)
+{
+	if (!query || strlen(query) < 2) return strdup("");
+
+	/* Esegue: apropos -M /usr/share/man query */
+	char *const argv[] = {"apropos", "-M", "/usr/share/man", (char *)query, NULL};
+
+	/* safe_popen_read_argv restituisce già una stringa allocata con l'output */
+	char *output = safe_popen_read_argv("/usr/bin/apropos", argv, MAX_OUTPUT_SIZE, 5);
+
+	if (!output) return strdup("");
 
 	return output;
 }
 
 /* --- Handlers HTTP (Usano http_queue_* dal tuo http_utils.h) --- */
-
+/**
+ * Gestisce le chiamate API JSON per le pagine man
+ */
 int
-man_api_handler(void *cls, struct MHD_Connection *connection, const char *url,
-				const char *method, const char *version, const char *upload_data,
-				size_t *upload_data_size, void **con_cls)
+man_api_handler(http_request_t *req)
 {
-	(void)cls; (void)method; (void)version; (void)upload_data; (void)upload_data_size; (void)con_cls;
 	char *json = NULL;
 
-	/* 1. Endpoint: Elenco Sezioni (ora include system, x11, packages) */
-	if (strcmp(url, "/api/man/sections") == 0 || strcmp(url, "/api/man") == 0) {
+	/* 1. Trova l'inizio del comando dopo /api/man */
+	const char *api_base = "/api/man";
+	const char *path = strstr(req->url, api_base);
+	if (!path) {
+		return http_send_error(req, 400, "Bad Request");
+	}
+	path += strlen(api_base);
+
+	/* 2. Isola la query string dal path principale */
+	const char *query_string = strchr(path, '?');
+	size_t path_len = query_string ? (size_t)(query_string - path) : strlen(path);
+
+	/* --- ROUTING LOGIC --- */
+
+	/* Casi semplici: stringhe esatte senza parametri nel path */
+	if (strncmp(path, "/sections", path_len) == 0 && path_len == 9) {
 		json = man_get_sections_json();
 	}
-	/* 2. Endpoint: Ricerca (Apropos) */
-	else if (strncmp(url, "/api/man/search/", 16) == 0) {
-		json = man_api_search(url + 16);
+	else if (strncmp(path, "/pages", path_len) == 0) {
+		/* Estrazione "section=" dalla query string */
+		const char *q = query_string ? strstr(query_string, "section=") : NULL;
+		if (q) {
+			q += 8;
+			char section[16] = {0};
+			for (int i = 0; *q && *q != '&' && i < 15; i++) section[i++] = *q++;
+			json = man_get_section_pages_json("system", section);
+		} else {
+			json = strdup("{\"error\":\"Missing section parameter\"}");
+		}
 	}
-	/* 3. Endpoint: Navigazione Aree/Sezioni/Pagine */
+	else if (strncmp(path, "/search", 7) == 0) {
+		const char *query = NULL;
+		char query_buf[256] = {0};
+
+		/* Controllo se è /api/man/search/open (formato JS) */
+		if (path[7] == '/') {
+			query = path + 8; // Prende tutto quello dopo lo slash
+		}
+		/* Controllo se è /api/man/search?q=open (formato curl) */
+		else {
+			const char *q_param = strstr(path, "q=");
+			if (q_param) {
+				q_param += 2;
+				int i = 0;
+				while (*q_param && *q_param != '&' && i < 255) {
+					query_buf[i++] = *q_param++;
+				}
+				query = query_buf;
+			}
+		}
+
+		if (query && *query != '\0') {
+			/* IMPORTANTE: qui chiamiamo la funzione che restituisce TESTO, non JSON */
+			json = man_api_search_raw(query);
+		} else {
+			json = strdup("");
+		}
+	}
+	/* Caso dinamico: /api/man/system/1 */
 	else {
-		char area[16], section[16], name[128];
-
-		/* Caso A: Metadati pagina specifica -> /api/man/{area}/{section}/{name} */
-		if (sscanf(url, "/api/man/%15[^/]/%15[^/]/%127s", area, section, name) == 3) {
-			// Validazione area per sicurezza
-			if (strcmp(area, "system") == 0 || strcmp(area, "packages") == 0 || strcmp(area, "x11") == 0) {
-				if (!is_valid_section(section) || !is_valid_token(name)) {
-				return http_queue_400(connection, "Invalid section or page name");
-			}
-			json = man_get_page_metadata_json(area, section, name);
-			} else {
-				return http_queue_400(connection, "Invalid area: use system, packages, or x11");
+		char area[32] = {0};
+		char section[16] = {0};
+		/* Usiamo una copia locale del path limitata a path_len per sscanf */
+		char path_tmp[64] = {0};
+		if (path_len < sizeof(path_tmp)) {
+			strncpy(path_tmp, path, path_len);
+			if (sscanf(path_tmp, "/%31[^/]/%15s", area, section) == 2) {
+				json = man_get_section_pages_json(area, section);
 			}
 		}
-		/* Caso B: Elenco pagine in una sezione -> /api/man/{area}/{section} */
-		else if (sscanf(url, "/api/man/%15[^/]/%15[^/]", area, section) == 2) {
-			if (strcmp(area, "system") == 0 || strcmp(area, "packages") == 0 || strcmp(area, "x11") == 0) {
-				if (!is_valid_section(section)) {
-				return http_queue_400(connection, "Invalid section");
-			}
-			json = man_get_section_pages_json(area, section);
-			} else {
-				return http_queue_400(connection, "Invalid area: use system, packages, or x11");
-			}
+
+		if (!json) {
+			json = strdup("{\"error\":\"Unknown API endpoint or malformed path\"}");
 		}
 	}
 
-	/* Gestione errore se l'URL non ha prodotto JSON o non è stato riconosciuto */
+	/* 3. Invio della risposta */
 	if (!json) {
-		return http_queue_404(connection, url);
+		return http_send_error(req, 500, "Internal Server Error");
 	}
 
-	/* Invio della risposta JSON */
-	struct MHD_Response *response = MHD_create_response_from_buffer(
-		strlen(json),
-																	json,
-																 MHD_RESPMEM_MUST_FREE
-	);
+	http_response_t *resp = http_response_create();
+	http_response_set_status(resp, 200);
+	/* Se stiamo rispondendo a una ricerca, usiamo text/plain per il JS */
+	if (strncmp(path, "/search", 7) == 0) {
+		resp->content_type = "text/plain; charset=utf-8";
+	} else {
+		resp->content_type = "application/json";
+	}
+	http_response_add_header(resp, "Access-Control-Allow-Origin", "*");
 
-	MHD_add_response_header(response, "Content-Type", "application/json");
-	/* Opzionale: aggiungi header CORS se vuoi testare il FE da un altro server */
-	MHD_add_response_header(response, "Access-Control-Allow-Origin", "*");
+	http_response_set_body(resp, json, strlen(json), 1); /* 1 = libera json */
 
-	int ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
-	MHD_destroy_response(response);
+	int ret = http_response_send(req, resp);
+	http_response_free(resp);
 
 	return ret;
 }
 
+
+/**
+ * Gestisce il rendering visuale dei manuali (HTML, PDF, etc.)
+ * URL atteso: /man/area/sezione/pagina.estensione
+ */
+/* In src/routes.c - Modifica il tuo man_render_handler o la funzione di invio */
 int
-man_render_handler(void *cls, struct MHD_Connection *connection, const char *url,
-				   const char *method, const char *version, const char *upload_data,
-				   size_t *upload_data_size, void **con_cls)
+man_render_handler(http_request_t *req)
 {
-	(void)cls; (void)method; (void)version; (void)upload_data; (void)upload_data_size; (void)con_cls;
+	char area[32], section[32], page[128], format[16];
 
-	char area[16], section[16], page_raw[128];
-	/* Parsing dell'URL: /man/area/section/page */
-	if (sscanf(url, "/man/%15[^/]/%15[^/]/%127s", area, section, page_raw) != 3) {
-		return http_queue_400(connection, "Formato URL non valido. Usa /man/area/sezione/pagina");
-	}
-
-	if ((strcmp(area, "system") != 0 && strcmp(area, "packages") != 0 && strcmp(area, "x11") != 0) ||
-	    !is_valid_section(section) || !is_valid_token(page_raw)) {
-		return http_queue_400(connection, "Invalid section or page name");
-	}
-
-	const char *mime = "text/html; charset=utf-8";
-	const char *format = "html";
-	char name[128];
-	strlcpy(name, page_raw, sizeof(name));
-
-	/* 1. Gestione estensioni e determinazione formato */
-	char *dot = strrchr(name, '.');
-	int is_markdown_request = 0;
-
-	if (dot) {
-		if (strcmp(dot, ".pdf") == 0) {
-			format = "pdf";
-			mime = "application/pdf";
-			*dot = '\0'; /* Rimuove .pdf per la ricerca del file */
-		} else if (strcmp(dot, ".ps") == 0) {
-			format = "ps";
-			mime = "application/postscript";
-			*dot = '\0'; /* Rimuove .ps per la ricerca del file */
-		} else if (strcmp(dot, ".md") == 0) {
-			format = "markdown";
-			mime = "text/plain; charset=utf-8"; /* Fallback a testo semplice */
-			is_markdown_request = 1;
-			*dot = '\0'; /* Rimuove .md per la ricerca del file */
-		} else if (strcmp(dot, ".html") == 0) {
-			format = "html";
-			*dot = '\0'; /* Rimuove .html per la ricerca del file */
+	/* 1. Estrazione parametri dall'URL (es: /man/system/1/ls.pdf) */
+	if (sscanf(req->url, "/man/%31[^/]/%31[^/]/%127[^.].%15s",
+		area, section, page, format) != 4) {
+		/* Se non c'è estensione, usiamo html come default */
+		if (sscanf(req->url, "/man/%31[^/]/%31[^/]/%127s", area, section, page) == 3) {
+			strcpy(format, "html");
+		} else {
+			return http_send_error(req, 400, "Formato URL manuale non valido");
 		}
-	}
+		}
 
-	/* 2. Risoluzione del path reale del manuale tramite man -w */
-	/* resolve_man_path userà internamente l'area corretta per invocare man -w */
-	char *filepath = resolve_man_path(name, section);
-	if (!filepath) {
-		return http_queue_404(connection, name);
-	}
+		/* 2. Logica di rendering (chiama mandoc o legge il file) */
+		size_t out_len = 0;
+		// Assicurati che man_render_page sia implementata per gestire il formato "pdf"
+		char *output = man_render_page(area, section, page, format, &out_len);
 
-	/* 3. Esecuzione di mandoc con argv sicuro */
-	char *output = NULL;
-	if (is_markdown_request) {
-		char *const md_argv[] = {"mandoc", "-Tmarkdown", filepath, NULL};
-		output = safe_popen_read_argv("/usr/bin/mandoc", md_argv,
-			MAX_OUTPUT_SIZE, 10);
 		if (!output) {
-			char *const ascii_argv[] = {"mandoc", "-Tascii", filepath, NULL};
-			output = safe_popen_read_argv("/usr/bin/mandoc", ascii_argv,
-				MAX_OUTPUT_SIZE, 10);
+			return http_send_error(req, 404, "Pagina man non trovata o errore rendering");
 		}
-	} else {
-		char fmt[32];
-		snprintf(fmt, sizeof(fmt), "-T%s", format);
-		char *const argv[] = {"mandoc", fmt, filepath, NULL};
-		output = safe_popen_read_argv("/usr/bin/mandoc", argv,
-			MAX_OUTPUT_SIZE, 10);
+
+		/* 3. Creazione della risposta HTTP */
+		http_response_t *resp = http_response_create();
+
+		/* Mappatura MIME Type */
+		if (strcmp(format, "pdf") == 0) {
+			resp->content_type = "application/pdf";
+			/* FONDAMENTALE: 'inline' dice al browser di aprirlo internamente */
+			http_response_add_header(resp, "Content-Disposition", "inline");
+		} else if (strcmp(format, "ps") == 0) {
+			resp->content_type = "application/postscript";
+		} else if (strcmp(format, "md") == 0) {
+			resp->content_type = "text/markdown";
+		} else {
+			resp->content_type = "text/html; charset=utf-8";
+		}
+
+		/* Imposta il corpo della risposta */
+		http_response_set_body(resp, output, out_len, 1); // 1 = libera la memoria di 'output'
+
+		/* 4. Invio e ritorno del risultato */
+		int ret = http_response_send(req, resp);
+		http_response_free(resp);
+
+		return ret;
+}
+
+/**
+ * Esegue il rendering di una pagina man usando mandoc
+ */
+char *
+man_render_page(const char *area, const char *section, const char *page,
+				const char *format, size_t *out_len)
+{
+	const char *manpath = "/usr/share/man";
+	if (area && strcmp(area, "x11") == 0) manpath = "/usr/X11R6/man";
+	else if (area && strcmp(area, "packages") == 0) manpath = "/usr/local/man";
+
+	/* 1. Trova il path del file sorgente con 'man -w' */
+	char *const argv_w[] = {"man", "-M", (char *)manpath, "-w", (char *)section, (char *)page, NULL};
+	char *filepath = safe_popen_read_argv("/usr/bin/man", argv_w, 512, 5);
+	if (!filepath) return NULL;
+	filepath[strcspn(filepath, "\r\n")] = 0;
+
+	/* 2. Mappatura estensione -> formato mandoc */
+	const char *mandoc_fmt = "html";
+	if (format) {
+		if (strcmp(format, "md") == 0 || strcmp(format, "markdown") == 0)
+			mandoc_fmt = "markdown";
+		else if (strcmp(format, "pdf") == 0)
+			mandoc_fmt = "pdf";
+		else if (strcmp(format, "ps") == 0)
+			mandoc_fmt = "ps";
+		else if (strcmp(format, "txt") == 0)
+			mandoc_fmt = "utf8";
+	}
+
+	/* 3. Esecuzione mandoc */
+	char *const mandoc_argv[] = {"mandoc", "-T", (char *)mandoc_fmt, filepath, NULL};
+
+	/* Nota: safe_popen_read_argv deve gestire dati binari per il PDF.
+	 *      Se la tua implementazione si ferma al primo \0, il PDF risulterà corrotto. */
+	char *output = safe_popen_read_argv("/usr/bin/mandoc", mandoc_argv, MAX_OUTPUT_SIZE, 10);
+
+	if (output && out_len) {
+		/* Se è un formato testuale, usiamo strlen, altrimenti serve la dimensione reale dal popen */
+		*out_len = strlen(output);
 	}
 
 	free(filepath);
-
-	/* 4. Lettura output */
-	if (!output) {
-		return http_queue_500(connection, "Errore durante il rendering del manuale");
-	}
-
-	/* 5. Creazione della risposta MHD */
-	struct MHD_Response *response = MHD_create_response_from_buffer(
-		strlen(output),
-																	(void *)output,
-																	MHD_RESPMEM_MUST_FREE
-	);
-
-	if (!response) {
-		free(output);
-		return MHD_NO;
-	}
-
-	/* Set Header Content-Type */
-	MHD_add_response_header(response, "Content-Type", mime);
-
-	/* Se è un PDF, forziamo la visualizzazione inline con nome file corretto */
-	if (strcmp(format, "pdf") == 0) {
-		char content_disp[128];
-		snprintf(content_disp, sizeof(content_disp), "inline; filename=\"%s.pdf\"", name);
-		MHD_add_response_header(response, "Content-Disposition", content_disp);
-	}
-
-	int ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
-	MHD_destroy_response(response);
-
-	return ret;
+	return output;
 }

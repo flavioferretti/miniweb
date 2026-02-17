@@ -1,33 +1,34 @@
+/* man.h - Manual pages handler (Native kqueue version) */
 #ifndef MAN_H
 #define MAN_H
 
-#include <microhttpd.h>
+#include "http_handler.h"
 #include <stddef.h>
 
-/**
- * Core JSON API Functions
- * Restituiscono stringhe JSON allocate dinamicamente (da liberare con free())
- */
+/* --- Core API Functions --- */
 char *man_get_sections_json(void);
 char *man_get_section_pages_json(const char *area, const char *section);
 char *man_get_page_metadata_json(const char *area, const char *section, const char *name);
 char *man_api_search(const char *query);
 
 /**
- * HTTP Handlers
- * Gestiscono le richieste dirette da libmicrohttpd
+ * Renders a man page using mandoc.
+ * @return Dynamically allocated string with the output.
  */
+// char *man_render_page(const char *area, const char *section, const char *page, const char *format);
 
-/* Gestisce il rendering della pagina nei vari formati (.html, .pdf, .md, .ps) */
-int man_render_handler(void *cls, struct MHD_Connection *connection,
-                       const char *url, const char *method, const char *version,
-                       const char *upload_data, size_t *upload_data_size,
-                       void **con_cls);
+/* --- HTTP Handlers (kqueue compatible) --- */
 
-/* Gestisce le chiamate API sotto /api/man/ */
-int man_api_handler(void *cls, struct MHD_Connection *connection,
-                    const char *url, const char *method, const char *version,
-                    const char *upload_data, size_t *upload_data_size,
-                    void **con_cls);
+/**
+ * Handles the visual rendering of man pages (HTML, etc.)
+ */
+int man_render_handler(http_request_t *req);
+
+/**
+ * Handles JSON API requests for man pages.
+ */
+int man_api_handler(http_request_t *req);
+
+char *man_render_page(const char *area, const char *section, const char *page, const char *format, size_t *out_len);
 
 #endif /* MAN_H */

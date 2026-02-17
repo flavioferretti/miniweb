@@ -1,4 +1,4 @@
-# Makefile for MiniWeb with libmicrohttpd (OpenBSD/BSD make)
+# Makefile for MiniWeb (kqueue, no libmicrohttpd) (OpenBSD/BSD make)
 
 # --- Project Structure and Program Name ---
 PROG=      miniweb
@@ -15,7 +15,8 @@ SRCS=      ${SRCDIR}/main.c \
            ${SRCDIR}/man.c \
            ${SRCDIR}/http_utils.c \
            ${SRCDIR}/urls.c \
-           ${SRCDIR}/networking.c
+           ${SRCDIR}/networking.c \
+           ${SRCDIR}/http_handler.c
 
 # --- Object Files Mapping ---
 # Maps source files to their respective object files in the build directory
@@ -26,8 +27,8 @@ OBJS=      ${BUILDDIR}/main.o \
            ${BUILDDIR}/man.o \
            ${BUILDDIR}/http_utils.o \
            ${BUILDDIR}/urls.o \
-           ${BUILDDIR}/networking.o
-
+           ${BUILDDIR}/networking.o \
+           ${BUILDDIR}/http_handler.o
 # --- Compiler Configuration ---
 CC?=       cc
 
@@ -38,15 +39,15 @@ CFLAGS+=   -D_FORTIFY_SOURCE=2
 CFLAGS+=   -Wformat -Wformat-security
 CFLAGS+=   -g
 
-# libmicrohttpd specific flags and local include paths for OpenBSD
-CFLAGS+=   -D_DEFAULT_SOURCE -I/usr/local/include
+# Local include paths for OpenBSD
+CFLAGS+=   -D_DEFAULT_SOURCE
 
 # --- Linker Configuration ---
 # LDFLAGS: Hardening options (Relro/Now) and library search paths
 LDFLAGS+=  -Wl,-z,relro,-z,now -fno-plt -L/usr/local/lib
 
-# LDADD: Libraries linked to the project (microhttpd, math, threads, ssl/crypto, zlib)
-LDADD=     -Wl,-rpath,/usr/local/lib -lmicrohttpd -lm -lpthread -lssl -lcrypto -lz
+# LDADD: Libraries linked to the project (math, threads)
+LDADD=     -lm -lpthread
 
 # --- Installation Paths ---
 PREFIX?=   /usr/local
@@ -87,6 +88,12 @@ clean:
 
 # --- Individual Compilation Rules ---
 # These rules handle the compilation of each .c file into its .o counterpart
+
+
+
+${BUILDDIR}/http_handler.o: ${SRCDIR}/http_handler.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/http_handler.c -o $@
 
 ${BUILDDIR}/http_utils.o: ${SRCDIR}/http_utils.c
 	@mkdir -p ${BUILDDIR}

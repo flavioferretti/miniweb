@@ -3,8 +3,6 @@
 #ifndef TEMPLATE_ENGINE_H
 #define TEMPLATE_ENGINE_H
 
-#include <microhttpd.h>
-
 struct template_data {
 	const char *title;	     /* Page Title (mandatory) */
 	const char *page_content;    /* Main content file (mandatory) */
