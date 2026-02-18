@@ -19,8 +19,8 @@ A lightweight HTTP server written in C99 for OpenBSD. Provides a system monitori
 - **High Performance** — kqueue dispatcher + worker thread pool, >7000 req/s on a 4-core system
 - **RESTful JSON API** — clean endpoints for integration with external monitoring tools
 - **No TLS, by design** — intended to run behind `relayd(8)` for TLS termination
-
 ---
+
 
 ## Quick Start
 
@@ -131,7 +131,7 @@ One directive per line, keys case-insensitive, unknown keys produce a warning bu
 | `trusted_proxy` | `127.0.0.1` | IP from which `X-Forwarded-*` headers are trusted |
 | `verbose` | `no` | Verbose logging (`yes`/`no`/`true`/`false`/`1`/`0`) |
 
-A fully commented example is provided in `miniweb.conf` at the project root.
+A fully commented example is provided in `docs/miniweb.conf` at the project root.
 
 ### `/etc/rc.d/miniweb`
 
@@ -230,6 +230,11 @@ rcctl start miniweb
     ├── routes_test.c
     └── template_test.c
 ```
+
+## Codebase diagram
+
+![Diagram](docs/miniweb_diagram.svg)
+---
 
 ### Request Lifecycle
 
