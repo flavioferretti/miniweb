@@ -1,58 +1,30 @@
+/* routes.h - Route mapping for native kqueue engine */
+
 #ifndef ROUTES_H
 #define ROUTES_H
 
-#include "http_utils.h"
-#include <microhttpd.h>
+#include "http_handler.h"
 
-/* Handler function type */
-typedef int (*route_handler_t)(void *cls, struct MHD_Connection *connection,
-			       const char *url, const char *method,
-			       const char *version, const char *upload_data,
-			       size_t *upload_data_size, void **con_cls);
+/* route_handler_t is an alias for http_handler_t — same signature,
+ * one canonical type defined in http_handler.h. */
+typedef http_handler_t route_handler_t;
 
-/* Route structure */
-// struct route {
-// 	const char *method;
-// 	const char *path;
-// 	route_handler_t handler;
-// 	void *handler_cls;
-// };
-
-/* Route matching */
+/* ── Route management ───────────────────────────────────────────── */
+void            init_routes(void);
 route_handler_t route_match(const char *method, const char *path);
 
-/* Handler declarations */
-int dashboard_handler(void *cls, struct MHD_Connection *connection,
-		      const char *url, const char *method, const char *version,
-		      const char *upload_data, size_t *upload_data_size,
-		      void **con_cls);
+/* ── Handler declarations ───────────────────────────────────────── */
+int dashboard_handler     (http_request_t *req);
+int apiroot_handler       (http_request_t *req);
+int man_handler           (http_request_t *req);
+int networking_handler    (http_request_t *req);
+int favicon_handler       (http_request_t *req);
+int static_handler        (http_request_t *req);
+int metrics_handler       (http_request_t *req);
+int networking_api_handler(http_request_t *req);
+int man_render_handler    (http_request_t *req);
+int man_api_handler       (http_request_t *req);
 
-int apiroot_handler(void *cls, struct MHD_Connection *connection,
-		    const char *url, const char *method, const char *version,
-		    const char *upload_data, size_t *upload_data_size,
-		    void **con_cls);
+int render_template_response(http_request_t *req, struct template_data *data);
 
-int man_handler(void *cls, struct MHD_Connection *connection, const char *url,
-		const char *method, const char *version,
-		const char *upload_data, size_t *upload_data_size,
-		void **con_cls);
-
-int favicon_handler(void *cls, struct MHD_Connection *connection,
-		    const char *url, const char *method, const char *version,
-		    const char *upload_data, size_t *upload_data_size,
-		    void **con_cls);
-
-int static_handler(void *cls, struct MHD_Connection *connection,
-		   const char *url, const char *method, const char *version,
-		   const char *upload_data, size_t *upload_data_size,
-		   void **con_cls);
-
-int metrics_handler(void *cls, struct MHD_Connection *connection,
-		    const char *url, const char *method, const char *version,
-		    const char *upload_data, size_t *upload_data_size,
-		    void **con_cls);
-
-/* Man handlers (declared in man.h) */
-#include "man.h"
-
-#endif
+#endif /* ROUTES_H */

@@ -1,6 +1,5 @@
 /* template_engine.c - Template Engine Implementation */
 
-#include <microhttpd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -58,7 +57,7 @@ read_template_file(const char *filename, char **content)
 
 /* Forward declaration for the single placeholder replacement logic */
 static char *replace_single(const char *str, const char *needle,
-			    const char *value);
+							const char *value);
 
 /*
  * Orchestrate the replacement of all template tags with dynamic data.
@@ -66,8 +65,8 @@ static char *replace_single(const char *str, const char *needle,
  */
 static char *
 replace_all(const char *template_str, const char *title,
-	    const char *page_content, const char *extra_head,
-	    const char *extra_js)
+			const char *page_content, const char *extra_head,
+			const char *extra_js)
 {
 	char *result = NULL;
 	char *temp1 = NULL, *temp2 = NULL, *temp3 = NULL;
@@ -88,7 +87,7 @@ replace_all(const char *template_str, const char *title,
 
 	/* Replace {{page_content}} tag */
 	temp2 = replace_single(result, "{{page_content}}",
-			       page_content ? page_content : "");
+						   page_content ? page_content : "");
 	if (!temp2) {
 		free(result);
 		return NULL;
@@ -98,7 +97,7 @@ replace_all(const char *template_str, const char *title,
 
 	/* Replace {{extra_head}} tag */
 	temp3 = replace_single(result, "{{extra_head}}",
-			       extra_head ? extra_head : "");
+						   extra_head ? extra_head : "");
 	if (!temp3) {
 		free(result);
 		return NULL;
@@ -108,7 +107,7 @@ replace_all(const char *template_str, const char *title,
 
 	/* Replace {{extra_js}} tag */
 	temp1 =
-	    replace_single(result, "{{extra_js}}", extra_js ? extra_js : "");
+	replace_single(result, "{{extra_js}}", extra_js ? extra_js : "");
 	if (!temp1) {
 		free(result);
 		return NULL;
@@ -145,7 +144,7 @@ replace_single(const char *str, const char *needle, const char *value)
 	memcpy(result, str, before_len);
 	memcpy(result + before_len, value, value_len);
 	memcpy(result + before_len + value_len, pos + needle_len,
-	       after_len + 1);
+		   after_len + 1);
 
 	return result;
 }
@@ -177,7 +176,7 @@ template_render_with_data(struct template_data *data, char **output)
 	/* Load the specific inner page content */
 	char page_path[256];
 	snprintf(page_path, sizeof(page_path), "templates/%s",
-		 data->page_content);
+			 data->page_content);
 	if (read_file_content(page_path, &page_content) != 0) {
 		goto cleanup;
 	}
@@ -185,10 +184,10 @@ template_render_with_data(struct template_data *data, char **output)
 	/* Load optional header file if specified in template_data */
 	if (data->extra_head_file) {
 		if (read_template_file(data->extra_head_file, &extra_head) !=
-		    0) {
+			0) {
 			/* Fail silently if file is missing, keeping it empty */
 			extra_head = NULL;
-		}
+			}
 	}
 
 	/* Load optional JS file if specified in template_data */
@@ -200,8 +199,8 @@ template_render_with_data(struct template_data *data, char **output)
 
 	/* Execute placeholder replacements */
 	result =
-	    replace_all(base_template, data->title, page_content,
-			extra_head ? extra_head : "", extra_js ? extra_js : "");
+	replace_all(base_template, data->title, page_content,
+				extra_head ? extra_head : "", extra_js ? extra_js : "");
 	if (!result) {
 		goto cleanup;
 	}
@@ -209,7 +208,7 @@ template_render_with_data(struct template_data *data, char **output)
 	*output = result;
 	ret = 0;
 
-cleanup:
+	cleanup:
 	/* Ensure all intermediate buffers are freed */
 	if (base_template)
 		free(base_template);
@@ -228,9 +227,9 @@ int
 template_render(const char *page, char **output)
 {
 	struct template_data data = {.title = "MiniWeb",
-				     .page_content = page,
-				     .extra_head_file = NULL,
-				     .extra_js_file = NULL};
+		.page_content = page,
+		.extra_head_file = NULL,
+		.extra_js_file = NULL};
 
-	return template_render_with_data(&data, output);
+		return template_render_with_data(&data, output);
 }

@@ -24,8 +24,9 @@ and a manual page browser.
 .Pp
 .Nm
 uses
-.Xr libmicrohttpd 3
-for HTTP serving and leverages OpenBSD's
+.Xr kqueue 2
+instance and a pool of worker threads. When a connection is ready, it is
+dispatched to a worker that parses the HTTP request into a
 .Xr pledge 2
 and
 .Xr unveil 2
@@ -111,33 +112,26 @@ Metrics are cached internally to reduce
 .Xr sysctl 2
 overhead.
 .El
-.Ss Network API
-.Bl -tag -width Ds
-.It Pa /api/networking
-JSON endpoint providing comprehensive network subsystem metrics including:
-.Bl -bullet -compact
-.It
-Network interfaces
-.It
-Routes
-.It
-DNS
-.El
-.Ss Manual Pages API
-.Bl -tag -width Ds
-.It Pa /api/man/sections
-List all available manual sections (JSON).
-.It Pa /api/man/pages?section= Ns Ar N
-List manual pages in section
-.Ar N
-(JSON).
-.It Pa /api/man/search?q= Ns Ar query
-Search manual pages matching
-.Ar query
-(JSON).
-.It Pa /man/ Ns Ar area Ns / Ns Ar section Ns / Ns Ar page
-Render the specified manual page in HTML format using
-.Xr mandoc 1 .
+.Sh Documentation API AND ROUTES
+.Nm
+maps requests to specific handlers:
+.Bl -tag -width "/api/man/search"
+.It Pa /api/metrics
+Returns system statistics (CPU, Memory, Disk, Network) in JSON format.
+.It Pa /api/man/search
+.Sy Exception :
+Unlike other API endpoints, the search handler returns raw text
+(one entry per line) compatible with the output of
+.Xr apropos 1 ,
+allowing the frontend to perform line-based regex parsing.
+.It Pa /man/{area}/{section}/{page}[.ext]
+Renders manual pages. Supported extensions include
+.Cm .html ,
+.Cm .pdf ,
+.Cm .ps ,
+.Cm .md
+(Markdown), and
+.Cm .txt .
 .El
 .Ss Static Files
 .Bl -tag -width Ds
@@ -334,3 +328,13 @@ Subprocess timeout handling for
 invocation is not fully implemented, which could cause hangs if
 .Xr mandoc 1
 stalls.
+.Sh SEE ALSO
+.Xr apropos 1 ,
+.Xr mandoc 1 ,
+.Xr kqueue 2 ,
+.Xr pledge 2 ,
+.Xr unveil 2
+.Sh HISTORY
+.Nm
+originally used libmicrohttpd but was rewritten in 2026 to use a native
+kqueue engine for better integration with OpenBSD.

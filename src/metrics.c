@@ -1,46 +1,45 @@
-/* metrics.c - System metrics collection */
+/* metrics.c - System metrics collection (Native kqueue version) */
 
-#include "metrics.h"
-#include "config.h"
-
-#include <arpa/inet.h>
-#include <errno.h>
-#include <ifaddrs.h>
-#include <math.h>
-#include <microhttpd.h>
-#include <net/if.h>
-#include <netinet/in.h>
-#include <pthread.h>
-#include <pwd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <sys/types.h>
 #include <sys/param.h>
 #include <sys/socket.h>
-#include <sys/types.h>
-#include <sys/utsname.h>
-#include <time.h>
-#include <unistd.h>
-
-#ifdef __OpenBSD__
+#include <sys/sysctl.h>
 #include <sys/mount.h>
 #include <sys/proc.h>
 #include <sys/swap.h>
-#include <sys/sysctl.h>
-#include <sys/user.h>
-#include <uvm/uvmexp.h>
-#endif
+#include <sys/utsname.h>  /* INDISPENSABILE per uname e struct utsname */
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <net/if.h>
+#include <ifaddrs.h>      /* INDISPENSABILE per getifaddrs e struct ifaddrs */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <errno.h>
+#include <time.h>
+#include <pwd.h>          /* Per struct passwd (nomi utenti processi) */
+
+#include "../include/metrics.h"
+#include "../include/config.h"
+#include "../include/http_handler.h"
+#include "../include/http_utils.h"
 
 #define JSON_BUFFER_SIZE 8192
 #define MB (1024 * 1024)
 
-#define LOG(...)                                                               \
-	do {                                                                   \
-		if (config_verbose) {                                          \
-			fprintf(stderr, "[METRICS] " __VA_ARGS__);             \
-			fprintf(stderr, "\n");                                 \
-		}                                                              \
-	} while (0)
+
+
+/* Macro per il logging basata sulla config globale */
+#define LOG(...)                                            \
+do {                                                        \
+	if (config_verbose) {                                   \
+		fprintf(stderr, "[METRICS] " __VA_ARGS__);          \
+		fprintf(stderr, "\n");                              \
+	}                                                       \
+} while (0)
+
 
 static struct kinfo_proc *get_procs_snapshot(size_t *nprocs);
 
@@ -844,51 +843,34 @@ get_system_metrics_json(void)
 	return json;
 }
 
+/**
+ * HTTP HANDLER BONIFICATO
+ * Sostituisce la vecchia funzione che usava MHD_Connection
+ */
+/**
+ * Handler HTTP Bonificato (Sostituisci la vecchia metrics_handler)
+ */
 int
-metrics_handler(void *cls, struct MHD_Connection *connection, const char *url,
-		const char *method, const char *version,
-		const char *upload_data, size_t *upload_data_size,
-		void **con_cls)
+metrics_handler(http_request_t *req)
 {
-	(void)cls;
-	(void)url;
-	(void)method;
-	(void)version;
-	(void)upload_data;
-	(void)upload_data_size;
-	(void)con_cls;
-
-	char *json_response = get_system_metrics_json();
-
-	/* Se l'allocazione fallisce, ritorna errore 500 */
-	if (!json_response) {
-		const char *error = "{\"error\":\"memory allocation failed\"}";
-		struct MHD_Response *response = MHD_create_response_from_buffer(
-		    strlen(error), (void *)error, MHD_RESPMEM_PERSISTENT);
-
-		MHD_add_response_header(response, "Content-Type",
-					"application/json");
-		int ret = MHD_queue_response(
-		    connection, MHD_HTTP_INTERNAL_SERVER_ERROR, response);
-		MHD_destroy_response(response);
-		return ret;
+	char *json = get_system_metrics_json();
+	if (!json) {
+		return http_send_error(req, 500, "Incapace di generare le metriche");
 	}
 
-	struct MHD_Response *response;
-	int ret;
+	http_response_t *resp = http_response_create();
+	resp->status_code = 200;
+	resp->content_type = "application/json";
 
-	/* MHD_RESPMEM_MUST_FREE = libmicrohttpd chiamerà free() quando finisce
-	 * Questo è FONDAMENTALE - libmicrohttpd gestisce la memoria per noi! */
-	response = MHD_create_response_from_buffer(
-	    strlen(json_response), json_response, MHD_RESPMEM_MUST_FREE);
+	/* Permettiamo l'accesso da dashboard esterne */
+	http_response_add_header(resp, "Access-Control-Allow-Origin", "*");
 
-	MHD_add_response_header(response, "Content-Type", "application/json");
-	MHD_add_response_header(response, "Cache-Control",
-				"no-cache, no-store, must-revalidate");
-	MHD_add_response_header(response, "Access-Control-Allow-Origin", "*");
+	/* Passiamo il JSON al corpo della risposta.
+	 *      Il flag '1' dice al sistema di liberare la memoria automaticamente. */
+	http_response_set_body(resp, json, strlen(json), 1);
 
-	ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
-	MHD_destroy_response(response);
+	int ret = http_response_send(req, resp);
+	http_response_free(resp);
 
 	return ret;
 }

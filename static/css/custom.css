@@ -137,7 +137,7 @@ body {
 .panel {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 0.9rem;
+  border-radius: 0.5rem;
   box-shadow: var(--shadow);
   padding: 1rem;
 }
@@ -178,7 +178,7 @@ footer {
     top: calc(100% + 0.35rem);
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 0.75rem;
+    border-radius: 0.5rem;
     padding: 0.5rem;
     flex-direction: column;
   }

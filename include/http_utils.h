@@ -1,36 +1,21 @@
+/* http_utils.h - HTTP utility functions (no MHD dependency) */
+
 #ifndef HTTP_UTILS_H
 #define HTTP_UTILS_H
 
-#include <microhttpd.h>
-#include <stdarg.h>
 #include <stddef.h>
 
-/* Create error responses */
-struct MHD_Response *http_error_response(unsigned int status_code,
-					 const char *format, ...)
-    __attribute__((format(printf, 2, 3)));
-struct MHD_Response *http_error_text(unsigned int status_code,
-				     const char *message);
-struct MHD_Response *http_error_json(unsigned int status_code,
-				     const char *error_msg, int errno_val);
-
-/* Queue error responses directly */
-int http_queue_error(struct MHD_Connection *connection,
-		     unsigned int status_code, const char *message);
-int http_queue_400(struct MHD_Connection *connection, const char *message);
-int http_queue_403(struct MHD_Connection *connection, const char *message);
-int http_queue_404(struct MHD_Connection *connection, const char *path);
-int http_queue_500(struct MHD_Connection *connection, const char *details);
-
-/* JSON helper */
+/* JSON string escaping — caller must free() the result */
 char *json_escape_string(const char *src);
 
-/* Command execution helper with cleanup */
-char *safe_popen_read(const char *cmd, size_t max_size);
-char *safe_popen_read_argv(const char *path, char *const argv[],
-			   size_t max_size, int timeout_seconds);
-
-/* Safe string copy with sanitization */
+/* Replace characters unsafe for filesystem use with '_' */
 void sanitize_string(char *s);
 
-#endif
+/* Execute a command via fork+execv, capture stdout+stderr.
+ * Returns a malloc'd NUL-terminated string, or NULL on error/timeout.
+ * Caller must free(). */
+char *safe_popen_read(const char *cmd, size_t max_size);
+char *safe_popen_read_argv(const char *path, char *const argv[],
+						   size_t max_size, int timeout_seconds, size_t *out_len);
+
+#endif /* HTTP_UTILS_H */

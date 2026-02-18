@@ -4,7 +4,7 @@
 [![License](https://img.shields.io/badge/license-BSD%203--Clause-blue.svg)](LICENSE)
 [![C](https://img.shields.io/badge/language-C99-brightgreen.svg)](https://en.wikipedia.org/wiki/C99)
 
-A lightweight, secure HTTP server written in C for OpenBSD, built on [libmicrohttpd](https://www.gnu.org/software/libmicrohttpd/). Designed for system monitoring, metrics collection, and manual page browsing with OpenBSD's security-first approach.
+A lightweight, secure HTTP server written in C for OpenBSD, built on [OpenBSD](https://www.openbsd.org). Designed for system monitoring, metrics collection, and manual page browsing with OpenBSD's security-first approach.
 
 ![Dashboard Screenshot](docs/screenshot.png)
 
@@ -27,13 +27,25 @@ A lightweight, secure HTTP server written in C for OpenBSD, built on [libmicroht
 ### Prerequisites
 
 - OpenBSD 7.8 or later
-- `libmicrohttpd` installed: `pkg_add libmicrohttpd`
+- `gnuplot` installed: `pkg_add gnuplot` #Optional used in `benchmark.sh`
+- `wrk` installed: `pkg_add wrk` #Optional used in `benchmark.sh`
 - Standard OpenBSD development tools (`clang`, `make`)
 
 ### Build
 
 ```bash
 make clean && make
+```
+
+## Build documentation
+
+```bash
+make man
+```
+
+## Build unit-tests
+```bash
+make unit-tests
 ```
 
 ### Run
@@ -107,12 +119,12 @@ Options:
 
 ### Manual Pages API
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /api/man/sections` | List all man sections |
-| `GET /api/man/pages?section=X` | List pages in section X |
-| `GET /api/man/search?q=query` | Search manual pages |
-| `GET /man/{area}/{section}/{page}` | Render specific man page |
+| Endpoint | Description | Format |
+|----------|-------------|--------|
+| `GET /api/man/sections` | List all man sections | JSON |
+| `GET /api/man/pages?section=X` | List pages in section X | JSON |
+| `GET /api/man/search?q=query` | Search manual pages | TEXT |
+| `GET /man/{area}/{section}/{page}` | Render specific man page | JSON |
 
 ### Static Files
 
@@ -128,22 +140,38 @@ Options:
 ### Project Structure
 
 ```
-miniweb/
-├── src/
-│   ├── main.c              # Server entrypoint, CLI parsing, security
-│   ├── routes.c            # Route dispatcher and URL matching
-│   ├── metrics.c           # System metrics collection via sysctl
-│   ├── man.c               # Manual page search and rendering
-│   ├── template_engine.c   # HTML template processor
-│   ├── http_utils.c        # HTTP response helpers
-│   └── urls.c              # URL parsing utilities
-├── include/
-│   ├── config.h            # Configuration constants
-│   ├── metrics.h           # Metrics data structures
-│   └── *.h                 # Module headers
-├── templates/              # HTML templates
-├── static/                 # CSS, JavaScript, images
-└── build/                  # Compiled binaries
+|-- Makefile                # BSD make
+|-- README.md
+|-- benchmark.sh            # Simple benchmark
+|-- build/                  # Compiled binaries
+|-- docs/                   # Documentation
+|-- include
+|   |-- config.h
+|   |-- http_handler.h
+|   |-- http_utils.h
+|   |-- man.h
+|   |-- metrics.h
+|   |-- networking.h
+|   |-- routes.h
+|   |-- template_engine.h
+|   `-- urls.h
+|-- src
+|   |-- http_handler.c
+|   |-- http_utils.c
+|   |-- main.c
+|   |-- man.c
+|   |-- metrics.c
+|   |-- networking.c
+|   |-- routes.c
+|   |-- template_engine.c
+|   `-- urls.c
+|-- static/                 # CSS, JavaScript, images
+|-- templates/              # HTML templates
+`-- tests
+    |-- integration_endpoints.sh
+    |-- routes_test.c
+    `-- template_test.c
+
 ```
 
 ### Key Components
@@ -408,7 +436,7 @@ These changes are required for multi-threaded operation with libmicrohttpd.
 ### Technical Debt
 
 - [ ] Replace remaining `popen()` calls with safer alternatives
-- [ ] Add comprehensive test suite
+- [x] Add comprehensive test suite
 - [ ] Improve JSON generation (streaming, proper escaping)
 - [ ] Add configuration file support
 - [ ] Port to other BSD systems (FreeBSD, NetBSD)
@@ -426,18 +454,67 @@ BSD 3-Clause License - See [LICENSE](LICENSE) file for details.
 
 ## 🙏 Acknowledgments
 
-- Built with [libmicrohttpd](https://www.gnu.org/software/libmicrohttpd/)
 - Inspired by OpenBSD's security-first philosophy
 - Uses OpenBSD's excellent system APIs and documentation
 
 ---
 
-## 📧 Contact & Contributing
+# SECURITY CONSIDERATIONS
 
-Issues and pull requests are welcome on the project repository.
+**miniweb**
+implements defense-in-depth security using OpenBSD's security features:
 
-For security issues, please contact the maintainer directly.
+*	pledge(2)
+	restricts the process to only necessary system calls.
 
----
+*	unveil(2)
+	limits filesystem access to required paths only.
 
-**Note**: This project is specifically designed for OpenBSD. While it may be portable to other systems with modifications, OpenBSD is the primary and tested platform.
+*	Path traversal protection rejects attempts to access files outside
+	*/static*.
+
+*	Process metrics use
+	sysctl(2)
+	directly instead of spawning
+	ps(1),
+	eliminating shell injection risks.
+
+*	Connection limits prevent resource exhaustion attacks.
+
+For production use, deploy behind an authenticated reverse proxy with
+TLS, rate limiting, and request filtering.
+Never expose
+**miniweb**
+directly to untrusted networks without additional security controls.
+
+# BUGS
+
+The JSON generation uses fixed-size buffers and may truncate output
+if metrics exceed buffer capacity.
+
+The template engine performs simple string replacement without proper
+escaping, which could allow HTML injection if user input is rendered
+in templates.
+Current implementation only uses trusted input.
+
+Subprocess timeout handling for
+mandoc(1)
+invocation is not fully implemented, which could cause hangs if
+mandoc(1)
+stalls.
+
+# SEE ALSO
+
+apropos(1),
+mandoc(1),
+kqueue(2),
+pledge(2),
+unveil(2)
+
+# HISTORY
+
+**miniweb**
+originally used libmicrohttpd but was rewritten in 2026 to use a native
+kqueue engine for better integration with OpenBSD.
+
+OpenBSD 7.8 - February 14, 2026 - MINIWEB(1)

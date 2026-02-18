@@ -76,7 +76,7 @@
           searchResults.innerHTML = rows.map((line) => {
             const m = line.match(/^([a-zA-Z0-9_.:-]+)\(([^)]+)\)\s+-\s+(.*)$/);
             if (!m) return '';
-            return `<a class="search-item" href="/man/system/${m[2]}/${m[1]}" target="_blank" rel="noopener"><strong>${m[1]}(${m[2]})</strong><br><span class="muted">${m[3]}</span></a>`;
+            return `<a class="search-item" href="/man/all/${m[2]}/${m[1]}" target="_blank" rel="noopener"><strong>${m[1]}(${m[2]})</strong><br><span class="muted">${m[3]}</span></a>`;
           }).join('') || '<div class="search-item">No results.</div>';
           searchResults.classList.remove('hidden');
         }, 280);

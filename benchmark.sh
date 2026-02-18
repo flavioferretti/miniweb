@@ -6,16 +6,19 @@
 
 set -eu
 SERVER_PORT=9001
-SERVER_URL="${SERVER_URL:-http://localhost:9001/static/test.html}"
+SERVER_URL="${SERVER_URL:-http://localhost:9001/static/benchmark.html}"
 TEST_DURATION="${TEST_DURATION:-30}"
 THREADS="${THREADS:-4}"
-CONNECTIONS="${CONNECTIONS:-4 8 16 32 64 128 256}"
+CONNECTIONS="${CONNECTIONS:-4 8 16 32 64}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-static}"
 ASSETS_DIR="${OUTPUT_ROOT}/benchmark_assets"
 TIMESTAMP="$(date '+%Y-%m-%d %H:%M:%S')"
-CSV_FILE="${ASSETS_DIR}/results.csv"
+CSV_FILE="${OUTPUT_ROOT}/${ASSETS_DIR}/results.csv"
 HTML_FILE="${OUTPUT_ROOT}/benchmark.html"
 GNUPLOT_SCRIPT="${ASSETS_DIR}/plot.gp"
+
+
+test -e "${OUTPUT_ROOT}/${ASSETS_DIR}" || mkdir -p "${OUTPUT_ROOT}/${ASSETS_DIR}"
 
 printf 'MiniWeb Benchmark\n'
 printf '=============================================\n'
