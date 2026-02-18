@@ -1,5 +1,6 @@
 /* http_handler.c - HTTP handler utilities */
 
+#include "../include/config.h"
 #include "http_handler.h"
 #include <arpa/inet.h>
 #include <errno.h>
@@ -74,8 +75,8 @@ write_all(int fd, const void *buf, size_t n)
 			if (errno == EAGAIN || errno == EWOULDBLOCK) {
 				/* Socket buffer pieno, aspettiamo un po' */
 				if (retries++ > 100) { /* Evita loop infinito */
-					fprintf(stderr, "[write_all] Too many "
-							"EAGAIN retries\n");
+					//fprintf(stderr, "[write_all] Too many "
+					//		"EAGAIN retries\n");
 					return -1;
 				}
 				struct pollfd pfd = {.fd = fd,
@@ -83,12 +84,12 @@ write_all(int fd, const void *buf, size_t n)
 				poll(&pfd, 1, 10); /* Aspetta 10ms */
 				continue;
 			}
-			fprintf(stderr, "[write_all] Error: %s\n",
-				strerror(errno));
+			//fprintf(stderr, "[write_all] Error: %s\n",
+			//	strerror(errno));
 			return -1;
 		}
 		if (w == 0) {
-			fprintf(stderr, "[write_all] Connection closed\n");
+			//fprintf(stderr, "[write_all] Connection closed\n");
 			return -1;
 		}
 		p += w;
@@ -96,9 +97,9 @@ write_all(int fd, const void *buf, size_t n)
 		retries = 0; /* Reset retries dopo un write riuscito */
 	}
 
-	if (n > 0) { /* Log solo se abbiamo scritto qualcosa */
-		fprintf(stderr, "[write_all] Wrote %zu bytes\n", n);
-	}
+	//if (n > 0) { /* Log solo se abbiamo scritto qualcosa */
+		//fprintf(stderr, "[write_all] Wrote %zu bytes\n", n);
+	//}
 	return 0;
 }
 
@@ -144,8 +145,8 @@ int http_response_send(http_request_t *req, http_response_t *resp)
 	header_len += snprintf(header + header_len,
 						   sizeof(header) - header_len, "\r\n");
 
-	fprintf(stderr, "[HTTP] Sending response: status=%d, type=%s, length=%zu\n",
-			resp->status_code, resp->content_type, resp->body_len);
+	//fprintf(stderr, "[HTTP] Sending response: status=%d, type=%s, length=%zu\n",
+	//		resp->status_code, resp->content_type, resp->body_len);
 
 	/* Invia header */
 	if (write_all(req->fd, header, header_len) < 0) {
@@ -168,57 +169,6 @@ int http_response_send(http_request_t *req, http_response_t *resp)
 
 	return 0;
 }
-// int
-// http_response_send(http_request_t *req, http_response_t *resp)
-// {
-// 	char header[4096];
-// 	int header_len;
-//
-// 	const char *status_text;
-// 	switch (resp->status_code) {
-// 		case 200: status_text = "OK"; break;
-// 		case 400: status_text = "Bad Request"; break;
-// 		case 403: status_text = "Forbidden"; break;
-// 		case 404: status_text = "Not Found"; break;
-// 		case 500: status_text = "Internal Server Error"; break;
-// 		case 503: status_text = "Service Unavailable"; break;
-// 		default:  status_text = "Unknown"; break;
-// 	}
-//
-// 	/* Build HTTP header */
-// 	header_len = snprintf(header, sizeof(header),
-// 						  "HTTP/1.1 %d %s\r\n"
-// 						  "Content-Type: %s\r\n"
-// 						  "Content-Length: %zu\r\n"
-// 						  "Connection: close\r\n"
-// 						  "Server: MiniWeb/kqueue\r\n",
-// 					   resp->status_code, status_text,
-// 					   resp->content_type,
-// 					   resp->body_len);
-//
-// 	/* Append custom headers if they fit */
-// 	if (resp->headers_len > 0) {
-// 		int space = (int)sizeof(header) - header_len;
-// 		if ((int)resp->headers_len < space) {
-// 			memcpy(header + header_len, resp->headers,
-// resp->headers_len); 			header_len += (int)resp->headers_len;
-// 		}
-// 	}
-//
-// 	/* Terminate header section */
-// 	header_len += snprintf(header + header_len,
-// 						   sizeof(header) - header_len,
-// "\r\n");
-//
-// 	if (write_all(req->fd, header, header_len) < 0)
-// 		return -1;
-//
-// 	if (resp->body && resp->body_len > 0)
-// 		if (write_all(req->fd, resp->body, resp->body_len) < 0)
-// 			return -1;
-//
-// 	return 0;
-// }
 
 /* Free response */
 void
@@ -331,9 +281,10 @@ http_send_error(http_request_t *req, int status_code, const char *message)
 	    "<title>%d Error</title>"
 	    "<link rel=\"stylesheet\" href=\"/static/css/custom.css\">"
 	    "</head><body>"
+		"<div class=\"container\">"
 	    "<h1>%d Error</h1>"
 	    "<p>%s</p>"
-	    "<hr><p><a href=\"/\">MiniWeb</a> on OpenBSD</p>"
+	    "<hr><p><a href=\"/\">MiniWeb</a> on OpenBSD</p></div>"
 	    "</body></html>",
 	    status_code, status_code, message ? message : "An error occurred");
 
@@ -421,7 +372,7 @@ http_send_file(http_request_t *req, const char *path, const char *mime)
 		return -1;
 	}
 
-	char file_buf[8192];
+	char file_buf[32768];
 	ssize_t n;
 	while ((n = read(fd, file_buf, sizeof(file_buf))) > 0) {
 		ssize_t total = 0;
