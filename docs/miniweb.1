@@ -12,6 +12,7 @@
 .Op Fl hv
 .Op Fl b Ar address
 .Op Fl c Ar connections
+.Op Fl f Ar file
 .Op Fl p Ar port
 .Op Fl t Ar threads
 .Sh DESCRIPTION
@@ -56,6 +57,12 @@ for a working
 .Xr relayd 8
 configuration.
 .Pp
+At startup
+.Nm
+loads a configuration file if one is found
+.Pq see Sx CONFIGURATION FILE .
+Command-line flags always override file values.
+.Pp
 The options are as follows:
 .Bl -tag -width Ds
 .It Fl b Ar address
@@ -75,6 +82,16 @@ The default is
 .Cm 1280 .
 Connections beyond this limit receive a 503 response and are closed
 immediately.
+.It Fl f Ar file
+Load configuration from
+.Ar file
+instead of searching the default locations.
+If the specified file does not exist or cannot be parsed,
+.Nm
+exits with an error.
+See
+.Sx CONFIGURATION FILE
+for the file format and default search order.
 .It Fl h
 Print a usage summary and exit.
 .It Fl p Ar port
@@ -229,8 +246,121 @@ not be accepted from untrusted clients.
 Configure
 .Xr relayd 8
 to overwrite rather than append them.
+.Sh CONFIGURATION FILE
+.Nm
+reads a configuration file at startup before applying command-line flags.
+The file is searched in the following order; the first match is used:
+.Bl -enum -compact
+.It
+Path supplied with
+.Fl f Ar file
+.Pq explicit, failure is fatal .
+.It
+.Pa ./miniweb.conf
+.Pq current working directory .
+.It
+.Pa $HOME/.miniweb.conf
+.It
+.Pa /etc/miniweb.conf
+.El
+.Pp
+If no file is found, compiled-in defaults are used.
+Command-line flags always take precedence over file values.
+.Pp
+The file format is one directive per line:
+.Bd -literal -offset indent
+key    value
+.Ed
+.Pp
+Lines beginning with
+.Sq #
+are comments.
+Blank lines are ignored.
+Keys are case-insensitive.
+.Pp
+Recognised directives:
+.Bl -tag -width "mandoc_timeout"
+.It Cm port Ar n
+TCP port to listen on.
+Range 1\(en65535.
+Default:
+.Cm 9001 .
+.It Cm bind Ar address
+IPv4 address to bind to.
+Default:
+.Cm 127.0.0.1 .
+.It Cm threads Ar n
+Number of worker threads.
+Range 1\(en64.
+Default:
+.Cm 4 .
+.It Cm max_conns Ar n
+Maximum concurrent connections.
+Range 1\(en65535.
+Default:
+.Cm 1280 .
+.It Cm conn_timeout Ar seconds
+Idle connection timeout.
+Range 1\(en3600.
+Default:
+.Cm 30 .
+.It Cm max_req_size Ar bytes
+Maximum HTTP request size in bytes.
+Range 1024\(en1048576.
+Default:
+.Cm 16384 .
+.It Cm mandoc_timeout Ar seconds
+Timeout for
+.Xr mandoc 1
+subprocess invocations.
+Range 1\(en120.
+Default:
+.Cm 10 .
+.It Cm static_dir Ar path
+Directory from which static assets are served.
+Default:
+.Cm static .
+.It Cm templates_dir Ar path
+Directory containing HTML templates.
+Default:
+.Cm templates .
+.It Cm mandoc_path Ar path
+Absolute path to the
+.Xr mandoc 1
+binary.
+Default:
+.Cm /usr/bin/mandoc .
+.It Cm trusted_proxy Ar address
+IPv4 address of the reverse proxy from which
+.Cm X-Forwarded-For ,
+.Cm X-Forwarded-Proto ,
+and
+.Cm X-Real-IP
+headers are accepted.
+Default:
+.Cm 127.0.0.1 .
+.It Cm verbose Ar bool
+Enable verbose logging.
+Accepted values:
+.Cm yes ,
+.Cm no ,
+.Cm true ,
+.Cm false ,
+.Cm 1 ,
+.Cm 0 .
+Default:
+.Cm no .
+.El
+.Pp
+Unknown directives produce a warning on standard error but do not abort startup.
 .Sh FILES
 .Bl -tag -width "templates/" -compact
+.It Pa ./miniweb.conf
+.It Pa $HOME/.miniweb.conf
+.It Pa /etc/miniweb.conf
+Configuration files searched in order at startup.
+See
+.Sx CONFIGURATION FILE .
 .It Pa templates/
 HTML templates for dashboard and documentation pages.
 Must be unveiled read-only.
@@ -274,6 +404,16 @@ Start the server on the default port with verbose logging:
 $ miniweb -v
 .Ed
 .Pp
+Load an explicit configuration file:
+.Bd -literal -offset indent
+$ miniweb -f /etc/miniweb.conf
+.Ed
+.Pp
+Override a single value from the config file on the command line:
+.Bd -literal -offset indent
+$ miniweb -f /etc/miniweb.conf -p 8080
+.Ed
+.Pp
 Listen on all interfaces on port 8080 with 8 worker threads:
 .Bd -literal -offset indent
 $ miniweb -b 0.0.0.0 -p 8080 -t 8
@@ -301,7 +441,7 @@ should be used to provision the certificate beforehand:
 table <miniweb> { 127.0.0.1 }
 
 http protocol "https_proxy" {
-    tls keypair "server"
+    tls
 
     match request header set "X-Forwarded-For" \e
         value "$REMOTE_ADDR"
@@ -397,6 +537,11 @@ dispatcher with a
 .Dv EV_DISPATCH Ns -based
 worker pool, removing the external library dependency and improving
 throughput to over 7000 requests per second on a four-core system.
+A configuration file facility was added shortly after,
+replacing all hardcoded values with a runtime-configurable
+.Pa miniweb.conf
+read by
+.Pa src/conf.c .
 .Sh AUTHORS
 .An MiniWeb Contributors
 .Sh CAVEATS

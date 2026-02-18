@@ -64,6 +64,7 @@ Open `http://127.0.0.1:9001` in your browser.
 ```
 ./build/miniweb [options]
 
+  -f FILE   Config file path (default: auto-detect)
   -p PORT   Port to listen on        (default: 9001)
   -b ADDR   Address to bind to       (default: 127.0.0.1)
   -t NUM    Worker thread count       (default: 4)
@@ -78,6 +79,12 @@ Open `http://127.0.0.1:9001` in your browser.
 # Start with verbose logging on the default port
 ./build/miniweb -v
 
+# Load an explicit config file
+./build/miniweb -f /etc/miniweb.conf
+
+# Override a single value from the config file on the CLI
+./build/miniweb -f /etc/miniweb.conf -p 8080
+
 # Listen on all interfaces, 8 workers
 ./build/miniweb -b 0.0.0.0 -t 8
 
@@ -87,7 +94,63 @@ Open `http://127.0.0.1:9001` in your browser.
 
 ---
 
-## HTTP Endpoints
+## Configuration File
+
+`miniweb` loads a configuration file at startup. Search order (first match wins):
+
+1. `-f /path/to/file` — explicit path from CLI
+2. `./miniweb.conf` — current working directory
+3. `$HOME/.miniweb.conf`
+4. `/etc/miniweb.conf`
+
+CLI flags always override file values. If no file is found, compiled-in defaults are used.
+
+### Format
+
+```
+# comment
+key    value
+```
+
+One directive per line, keys case-insensitive, unknown keys produce a warning but do not abort startup.
+
+### All directives
+
+| Key | Default | Description |
+|---|---|---|
+| `port` | `9001` | TCP port |
+| `bind` | `127.0.0.1` | IPv4 bind address |
+| `threads` | `4` | Worker thread count (max: `THREAD_POOL_SIZE`) |
+| `max_conns` | `1280` | Max concurrent connections |
+| `conn_timeout` | `30` | Idle connection timeout (seconds) |
+| `max_req_size` | `16384` | Max request size (bytes) |
+| `mandoc_timeout` | `10` | `mandoc(1)` subprocess timeout (seconds) |
+| `static_dir` | `static` | Static assets directory |
+| `templates_dir` | `templates` | HTML templates directory |
+| `mandoc_path` | `/usr/bin/mandoc` | Path to `mandoc(1)` binary |
+| `trusted_proxy` | `127.0.0.1` | IP from which `X-Forwarded-*` headers are trusted |
+| `verbose` | `no` | Verbose logging (`yes`/`no`/`true`/`false`/`1`/`0`) |
+
+A fully commented example is provided in `miniweb.conf` at the project root.
+
+### `/etc/rc.d/miniweb`
+
+The natural way to point `rcctl` at a config file:
+
+```sh
+# /etc/rc.d/miniweb
+daemon="/usr/local/bin/miniweb"
+daemon_flags="-f /etc/miniweb.conf"
+. /etc/rc.d/rc.subr
+rc_cmd $1
+```
+
+```sh
+rcctl enable miniweb
+rcctl start miniweb
+```
+
+---
 
 ### Web Interface
 
@@ -139,6 +202,7 @@ Open `http://127.0.0.1:9001` in your browser.
 ├── build/
 ├── docs/
 ├── include/
+│   ├── conf.h
 │   ├── config.h
 │   ├── http_handler.h
 │   ├── http_utils.h
@@ -149,6 +213,7 @@ Open `http://127.0.0.1:9001` in your browser.
 │   ├── template_engine.h
 │   └── urls.h
 ├── src/
+│   ├── conf.c
 │   ├── http_handler.c
 │   ├── http_utils.c
 │   ├── main.c
@@ -179,7 +244,7 @@ work queue  (pthread_cond_wait, zero busy-waiting)
    │
    ▼
 worker thread (1 of N)
-   │  recv() → parse → find_route_match() → handler()
+   │  recv() → parse → route_match() → handler()
    ▼
 close(fd) + free_connection()
 ```
@@ -382,10 +447,10 @@ Verify `mandoc` is installed and that `/usr/bin/mandoc` is unveiled. Check verbo
 - [ ] Alert thresholds and notifications
 - [ ] IPv6 support
 - [ ] Prometheus exporter endpoint
-- [ ] Configuration file support
 - [ ] Port to FreeBSD / NetBSD
 - [x] Native kqueue engine (replaced libmicrohttpd)
 - [x] EV_DISPATCH worker pool — eliminated busy-waiting, +300% throughput
+- [x] Configuration file (`miniweb.conf`) with full runtime knobs
 - [x] Unit test suite
 - [x] Thread-safe metric collection
 - [x] KERN_PROC_ALL retry loop

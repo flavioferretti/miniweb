@@ -33,7 +33,7 @@ init_routes(void)
 }
 
 route_handler_t
-find_route_match(const char *method, const char *path)
+route_match(const char *method, const char *path)
 {
     /* 1. Exact match */
     for (size_t i = 0; i < route_count; i++) {
