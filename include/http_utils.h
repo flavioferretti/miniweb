@@ -16,6 +16,6 @@ void sanitize_string(char *s);
  * Caller must free(). */
 char *safe_popen_read(const char *cmd, size_t max_size);
 char *safe_popen_read_argv(const char *path, char *const argv[],
-						   size_t max_size, int timeout_seconds);
+						   size_t max_size, int timeout_seconds, size_t *out_len);
 
 #endif /* HTTP_UTILS_H */

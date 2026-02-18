@@ -109,7 +109,7 @@ static_handler(http_request_t *req)
 	char fullpath[512];
 	snprintf(fullpath, sizeof(fullpath), "static/%s", path);
 
-	printf("DEBUG: static_handler trying to serve: %s\n", fullpath);
+	// printf("DEBUG: static_handler trying to serve: %s\n", fullpath);
 
 	// Determina il MIME type
 	const char *mime = "application/octet-stream";

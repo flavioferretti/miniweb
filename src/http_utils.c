@@ -64,9 +64,10 @@ sanitize_string(char *s)
  * Enforces a wall-clock timeout (seconds).  Returns malloc'd buffer
  * NUL-terminated, or NULL on error / timeout / empty output.
  * Caller must free(). */
+/* src/http_utils.c */
 char *
 safe_popen_read_argv(const char *path, char *const argv[],
-					 size_t max_size, int timeout_seconds)
+					 size_t max_size, int timeout_seconds, size_t *out_len)
 {
 	int pipefd[2];
 	if (pipe(pipefd) == -1)
@@ -85,6 +86,11 @@ safe_popen_read_argv(const char *path, char *const argv[],
 		dup2(pipefd[1], STDOUT_FILENO);
 		dup2(pipefd[1], STDERR_FILENO);
 		close(pipefd[1]);
+
+		/* Chiudi tutti gli altri fd */
+		for (int fd = 3; fd < 1024; fd++)
+			close(fd);
+
 		execv(path, argv);
 		_exit(127);
 	}
@@ -92,8 +98,7 @@ safe_popen_read_argv(const char *path, char *const argv[],
 	/* Parent */
 	close(pipefd[1]);
 
-	size_t capacity = max_size > 0 ? max_size : 1;
-	char *buffer = malloc(capacity + 1);
+	char *buffer = malloc(max_size);
 	if (!buffer) {
 		close(pipefd[0]);
 		kill(pid, SIGKILL);
@@ -101,10 +106,9 @@ safe_popen_read_argv(const char *path, char *const argv[],
 		return NULL;
 	}
 
-	size_t total    = 0;
-	int    timed_out = 0;
-	time_t deadline  = time(NULL) +
-	(timeout_seconds > 0 ? timeout_seconds : 5);
+	size_t total = 0;
+	int timed_out = 0;
+	time_t deadline = time(NULL) + (timeout_seconds > 0 ? timeout_seconds : 5);
 
 	while (total < max_size) {
 		time_t now = time(NULL);
@@ -112,17 +116,29 @@ safe_popen_read_argv(const char *path, char *const argv[],
 			timed_out = 1;
 			break;
 		}
+
 		int wait_ms = (int)((deadline - now) * 1000);
 		struct pollfd pfd = { .fd = pipefd[0], .events = POLLIN };
-		int pr = poll(&pfd, 1, wait_ms);
-		if (pr == 0) { timed_out = 1; break; }
-		if (pr < 0)  { if (errno == EINTR) continue; break; }
+		int pr = poll(&pfd, 1, wait_ms > 0 ? wait_ms : 0);
+
+		if (pr == 0) {
+			timed_out = 1;
+			break;
+		}
+		if (pr < 0) {
+			if (errno == EINTR) continue;
+			break;
+		}
 
 		if (pfd.revents & POLLIN) {
-			ssize_t n = read(pipefd[0], buffer + total,
-							 max_size - total);
-			if (n <= 0) break;
-			total += (size_t)n;
+			ssize_t n = read(pipefd[0], buffer + total, max_size - total);
+			if (n < 0) {
+				if (errno == EAGAIN || errno == EWOULDBLOCK)
+					continue;
+				break;
+			}
+			if (n == 0) break;  /* EOF */
+				total += (size_t)n;
 		}
 		if (pfd.revents & (POLLERR | POLLHUP))
 			break;
@@ -134,13 +150,16 @@ safe_popen_read_argv(const char *path, char *const argv[],
 		kill(pid, SIGKILL);
 	waitpid(pid, NULL, 0);
 
-	buffer[total] = '\0';
+	if (out_len) {
+		*out_len = total;
+	}
 
 	if (timed_out || total == 0) {
 		free(buffer);
 		return NULL;
 	}
-	return buffer;
+
+	return buffer;  /* Nessun terminatore nullo aggiunto! */
 }
 
 /* Convenience wrapper: run cmd through /bin/sh -c */
@@ -148,5 +167,5 @@ char *
 safe_popen_read(const char *cmd, size_t max_size)
 {
 	char *const argv[] = { "sh", "-c", (char *)cmd, NULL };
-	return safe_popen_read_argv("/bin/sh", argv, max_size, 5);
+	return safe_popen_read_argv("/bin/sh", argv, max_size, 5, NULL);
 }
