@@ -1,520 +1,404 @@
-# MiniWeb - OpenBSD System Monitoring Web Server
+# MiniWeb — OpenBSD System Monitoring Server
 
 [![OpenBSD](https://img.shields.io/badge/OpenBSD-7.8-orange.svg)](https://www.openbsd.org/)
 [![License](https://img.shields.io/badge/license-BSD%203--Clause-blue.svg)](LICENSE)
 [![C](https://img.shields.io/badge/language-C99-brightgreen.svg)](https://en.wikipedia.org/wiki/C99)
 
-A lightweight, secure HTTP server written in C for OpenBSD, built on [OpenBSD](https://www.openbsd.org). Designed for system monitoring, metrics collection, and manual page browsing with OpenBSD's security-first approach.
+A lightweight HTTP server written in C99 for OpenBSD. Provides a system monitoring dashboard, RESTful JSON API, and an integrated manual page browser. No external library dependencies — built entirely on native OpenBSD interfaces.
 
 ![Dashboard Screenshot](docs/screenshot.png)
 
 ---
 
-## ✨ Features
+## Features
 
-- **📊 Real-time System Metrics**: CPU, memory, swap, load average, disk usage, network interfaces
-- **🔍 Process Monitoring**: Top processes by CPU and memory usage with live updates
-- **📚 Man Page Browser**: Search and render OpenBSD manual pages in HTML
-- **🎨 Modern Dashboard**: Clean, responsive web interface with tabbed navigation
-- **🔒 Security Hardened**: Uses OpenBSD's `pledge()` and `unveil()` for sandboxing
-- **⚡ High Performance**: Multi-threaded with connection pooling and caching
-- **📡 RESTful API**: JSON endpoints for easy integration with monitoring tools
+- **Real-time System Metrics** — CPU, memory, swap, load averages, disk, network interfaces
+- **Process Monitoring** — top processes by CPU and memory with live updates
+- **Man Page Browser** — search and render OpenBSD manual pages in HTML, plain text, PDF, or Markdown
+- **Security Hardened** — `pledge(2)` and `unveil(2)` sandboxing from startup
+- **High Performance** — kqueue dispatcher + worker thread pool, >7000 req/s on a 4-core system
+- **RESTful JSON API** — clean endpoints for integration with external monitoring tools
+- **No TLS, by design** — intended to run behind `relayd(8)` for TLS termination
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
 - OpenBSD 7.8 or later
-- `gnuplot` installed: `pkg_add gnuplot` #Optional used in `benchmark.sh`
-- `wrk` installed: `pkg_add wrk` #Optional used in `benchmark.sh`
-- Standard OpenBSD development tools (`clang`, `make`)
+- Standard development tools (`clang`, `make`) — included in base
+- `wrk` for benchmarking: `pkg_add wrk` *(optional)*
+- `gnuplot` for benchmark graphs: `pkg_add gnuplot` *(optional)*
 
 ### Build
 
-```bash
+```sh
 make clean && make
 ```
 
-## Build documentation
+### Build man page
 
-```bash
+```sh
 make man
 ```
 
-## Build unit-tests
-```bash
+### Run unit tests
+
+```sh
 make unit-tests
 ```
 
 ### Run
 
-```bash
+```sh
 ./build/miniweb -v
 ```
 
-Then open http://127.0.0.1:9001 in your browser.
+Open `http://127.0.0.1:9001` in your browser.
 
 ---
 
-## 📖 Usage
+## Usage
 
-### Command Line Options
-
-```bash
+```
 ./build/miniweb [options]
 
-Options:
-  -p PORT      Port to listen on (default: 9001)
-  -b ADDR      Address to bind to (default: 127.0.0.1)
-  -t NUM       Thread pool size (default: 4)
-  -c NUM       Max connections (default: 1000)
-  -v           Enable verbose output
-  -h           Show this help
+  -p PORT   Port to listen on        (default: 9001)
+  -b ADDR   Address to bind to       (default: 127.0.0.1)
+  -t NUM    Worker thread count       (default: 4)
+  -c NUM    Max concurrent conns      (default: 1280)
+  -v        Verbose logging to stderr
+  -h        Show this help
 ```
 
 ### Examples
 
-```bash
-# Start on port 8080 with verbose logging
-./build/miniweb -p 8080 -v
+```sh
+# Start with verbose logging on the default port
+./build/miniweb -v
 
-# Bind to all interfaces with 8 threads
+# Listen on all interfaces, 8 workers
 ./build/miniweb -b 0.0.0.0 -t 8
 
-# Production mode with high connection limit
-./build/miniweb -b 127.0.0.1 -c 5000
+# Production: loopback only, high connection limit
+./build/miniweb -b 127.0.0.1 -c 1280 -t 4
 ```
 
 ---
 
-## 🌐 HTTP Endpoints
+## HTTP Endpoints
 
 ### Web Interface
 
 | Endpoint | Description |
-|----------|-------------|
-| `GET /` | Main dashboard with system overview |
-| `GET /docs` | Manual page browser and search |
-| `GET /networking` | Network interfaces overview with routes and DNS |
-| `GET /apiroot` | MiniWeb API root page |
+|---|---|
+| `GET /` | Dashboard — load, memory, disk, network, processes |
+| `GET /docs` | Manual page browser with `apropos(1)` search |
+| `GET /networking` | Network interfaces, routes, DNS |
+| `GET /apiroot` | API index |
 
 ### Metrics API
 
-| Endpoint | Description | Response Format |
-|----------|-------------|-----------------|
-| `GET /api/metrics` | Complete system metrics | JSON |
+| Endpoint | Response |
+|---|---|
+| `GET /api/metrics` | JSON — full system snapshot |
+| `GET /api/networking` | JSON — interfaces, routes, resolver config |
 
-**Metrics included:**
-- System info (hostname, OS, uptime)
-- CPU load averages (1min, 5min, 15min)
-- Memory stats (total, free, active, wired, cache)
-- Swap usage
-- Disk usage for all mounted filesystems
-- Network interfaces (IP, status)
-- Top 10 processes by CPU usage
-- Top 10 processes by memory usage
-- Process statistics (total, running, sleeping, zombie)
+`/api/metrics` includes: hostname, OS version, uptime, CPU load averages (1/5/15 min), memory (total/free/active/wired/cached), swap, per-filesystem disk usage, network interface status, top 10 processes by CPU, top 10 by memory, process counts (total/running/sleeping/zombie).
 
 ### Manual Pages API
 
-| Endpoint | Description | Format |
-|----------|-------------|--------|
-| `GET /api/man/sections` | List all man sections | JSON |
-| `GET /api/man/pages?section=X` | List pages in section X | JSON |
-| `GET /api/man/search?q=query` | Search manual pages | TEXT |
-| `GET /man/{area}/{section}/{page}` | Render specific man page | JSON |
+| Endpoint | Description |
+|---|---|
+| `GET /api/man/search?q=query` | `apropos(1)` search, returns plain text (one entry per line) |
+| `GET /man/{area}/{section}/{page}` | Render man page as HTML (default) |
+| `GET /man/{area}/{section}/{page}.txt` | Plain text |
+| `GET /man/{area}/{section}/{page}.md` | Markdown |
+| `GET /man/{area}/{section}/{page}.pdf` | PDF |
+| `GET /man/{area}/{section}/{page}.ps` | PostScript |
 
 ### Static Files
 
 | Endpoint | Description |
-|----------|-------------|
-| `GET /static/*` | Serve static assets (CSS, JS, images) |
-| `GET /favicon.ico` | Site favicon |
+|---|---|
+| `GET /static/*` | CSS, JavaScript, images — path traversal rejected |
+| `GET /favicon.ico` | SVG favicon |
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ### Project Structure
 
 ```
-|-- Makefile                # BSD make
-|-- README.md
-|-- benchmark.sh            # Simple benchmark
-|-- build/                  # Compiled binaries
-|-- docs/                   # Documentation
-|-- include
-|   |-- config.h
-|   |-- http_handler.h
-|   |-- http_utils.h
-|   |-- man.h
-|   |-- metrics.h
-|   |-- networking.h
-|   |-- routes.h
-|   |-- template_engine.h
-|   `-- urls.h
-|-- src
-|   |-- http_handler.c
-|   |-- http_utils.c
-|   |-- main.c
-|   |-- man.c
-|   |-- metrics.c
-|   |-- networking.c
-|   |-- routes.c
-|   |-- template_engine.c
-|   `-- urls.c
-|-- static/                 # CSS, JavaScript, images
-|-- templates/              # HTML templates
-`-- tests
-    |-- integration_endpoints.sh
-    |-- routes_test.c
-    `-- template_test.c
+.
+├── Makefile
+├── README.md
+├── benchmark.sh
+├── build/
+├── docs/
+├── include/
+│   ├── config.h
+│   ├── http_handler.h
+│   ├── http_utils.h
+│   ├── man.h
+│   ├── metrics.h
+│   ├── networking.h
+│   ├── routes.h
+│   ├── template_engine.h
+│   └── urls.h
+├── src/
+│   ├── http_handler.c
+│   ├── http_utils.c
+│   ├── main.c
+│   ├── man.c
+│   ├── metrics.c
+│   ├── networking.c
+│   ├── routes.c
+│   ├── template_engine.c
+│   └── urls.c
+├── static/
+├── templates/
+└── tests/
+    ├── integration_endpoints.sh
+    ├── routes_test.c
+    └── template_test.c
+```
+
+### Request Lifecycle
 
 ```
+accept()
+   │
+   ▼
+kqueue dispatcher (main thread)
+   │  EV_DISPATCH → event auto-disabled after delivery
+   ▼
+work queue  (pthread_cond_wait, zero busy-waiting)
+   │
+   ▼
+worker thread (1 of N)
+   │  recv() → parse → find_route_match() → handler()
+   ▼
+close(fd) + free_connection()
+```
+
+The main thread does nothing but `accept()` and enqueue. Workers never call `kevent()` — no races, no busy-waiting.
+
+`EV_DISPATCH` is the key: kqueue auto-disables the event after the first delivery, so the same fd can never reach two workers simultaneously.
 
 ### Key Components
 
-#### Metrics Collection (`metrics.c`)
+#### `main.c` — Dispatcher + Worker Pool
 
-Uses OpenBSD's `sysctl(2)` API to gather system information without spawning external processes:
+- Single `kqueue` instance, owned exclusively by the main thread
+- `EV_ADD | EV_DISPATCH` on every client socket — auto-disables after first event
+- Lock-free hot path: `queue_push()` signals workers via `pthread_cond_signal`
+- Connection pool indexed directly by fd — O(1) alloc/free
+- Generation counter per slot detects stale `udata` pointers from recycled fds
+- Idle timeout sweep (30 s) runs in the main loop, once per second
 
-- **Memory**: `sysctl(CTL_VM, VM_UVMEXP)` for UVM statistics
-- **Load**: `getloadavg(3)` for CPU load averages
-- **Disks**: `getmntinfo(3)` for filesystem usage
-- **Processes**: `sysctl(KERN_PROC, KERN_PROC_ALL)` for process list
-- **Network**: `getifaddrs(3)` for interface information
+#### `metrics.c` — System Metrics
 
-**Critical Implementation Details**: 
+Uses `sysctl(2)` directly — no external processes for metrics:
 
-1. **Process List Retry Loop**: Uses progressive buffer allocation (25%, 50%, 75%, 100% extra space) to handle the race condition where processes spawn between size query and data retrieval. Each request allocates ~130-160 elements with the `mib[5]` parameter set to the requested element count.
+- Memory: `CTL_VM / VM_UVMEXP` for UVM statistics
+- Load: `getloadavg(3)`
+- Disks: `getmntinfo(3)`
+- Processes: `KERN_PROC / KERN_PROC_ALL` with a retry loop for the TOCTOU window between size query and data fetch
+- Network: `getifaddrs(3)`
 
-2. **Thread Safety**: All metric collection functions use thread-safe variants:
-   - `localtime_r()` instead of `localtime()` for timestamp generation
-   - `getpwuid_r()` instead of `getpwuid()` for username lookups
-   - Dynamic memory allocation per request (via `malloc()`) with automatic cleanup by libmicrohttpd (`MHD_RESPMEM_MUST_FREE`)
+All metric functions use thread-safe variants: `localtime_r()`, `getpwuid_r()`.
 
-3. **Performance**: Each JSON buffer is allocated dynamically (~8KB per request) and freed automatically by libmicrohttpd after transmission, eliminating lock contention and enabling full parallel processing across all worker threads.
+#### `http_handler.c` — Response Helpers
 
-#### Security (`main.c`)
+`http_request_get_header()` and `http_request_get_client_ip()` write into per-request scratch buffers inside `http_request_t`, making them safe to call from multiple worker threads without any locks.
 
-Implements defense-in-depth with OpenBSD's security features:
+Reverse-proxy header precedence for client IP: `X-Real-IP` → `X-Forwarded-For` (first entry) → socket peer address.
 
-**unveil(2)** - Restricts filesystem access:
-```c
-unveil("templates", "r");
-unveil("static", "r");
-unveil("/usr/share/man", "r");
-unveil("/etc/passwd", "r");     // For getpwuid()
-unveil("/etc/group", "r");      // For process user names
-unveil(NULL, NULL);             // Lock it down
-```
+#### `template_engine.c` — Templates
 
-**pledge(2)** - Restricts system calls:
-```c
-pledge("stdio rpath inet proc exec vminfo ps getpw", NULL);
-```
-
-Required promises:
-- `stdio`: Basic I/O operations
-- `rpath`: Read files (templates, static)
-- `inet`: Network operations (HTTP server)
-- `proc`, `exec`: For man page rendering (mandoc)
-- `vminfo`: Memory statistics via sysctl
-- `ps`: Process information via sysctl
-- `getpw`: User/group name lookups
-
-#### Template Engine (`template_engine.c`)
-
-Simple placeholder-based templating:
-```html
-<!-- In template -->
-<title>{{TITLE}}</title>
-<main>{{CONTENT}}</main>
-
-<!-- Replaced at runtime -->
-<title>System Dashboard</title>
-<main>... rendered content ...</main>
-```
+Simple `{{TOKEN}}` substitution. Reads layout and page-content files from `templates/` at request time.
 
 ---
 
-## 🔒 Security Considerations
+## Performance
 
-### Hardening Features
+Measured on OpenBSD 7.8, AMD64, 4-core CPU, `wrk -t4 -c100 -d30s`:
 
-✅ **OpenBSD Sandboxing**: `pledge()` and `unveil()` restrict capabilities  
-✅ **Path Traversal Protection**: Rejects `..` and `//` in static file paths  
-✅ **Input Validation**: Sanitizes user input in search queries  
-✅ **Safe Process Execution**: Controlled subprocess invocation for mandoc  
-✅ **Connection Limits**: Prevents resource exhaustion attacks  
-✅ **No Shell Injection**: Direct syscalls instead of shell commands for metrics
+| Endpoint | Throughput | Avg latency |
+|---|---|---|
+| `/static/test.html` | **~7 000 req/s** | 0.36 ms |
+| `/api/metrics` | ~300 req/s | — |
 
-### Known Limitations
+Peak throughput vs. the previous `libmicrohttpd`-based implementation: **+300%**.
 
-⚠️ **Manual Page Rendering**: Uses `popen()` to invoke `mandoc` - isolated via pledge/unveil  
-⚠️ **JSON Construction**: Static buffers with fixed size limits  
-⚠️ **No HTTPS**: Intended for localhost or behind reverse proxy with TLS  
-⚠️ **No Authentication**: Deploy behind authenticated proxy if exposed
+Memory footprint at idle: ~8–12 MB resident. Under load with 4 workers: ~50–80% CPU across all cores.
 
-### Production Deployment
+---
 
-For production use, run behind a reverse proxy with:
-- TLS termination (relayd, nginx)
-- Authentication (HTTP basic auth, OAuth2)
-- Rate limiting
-- Request filtering
+## Security
 
-#### OpenBSD relayd Configuration
+### Sandboxing
 
-Example relayd configuration for HTTPS termination:
+`unveil(2)` limits filesystem access to exactly:
 
 ```
-# /etc/relayd.conf
+templates/          r
+static/             r
+/usr/share/man      r
+/usr/local/man      r
+/usr/X11R6/man      r
+/usr/bin/mandoc     x
+/usr/bin/man        x
+/usr/bin/apropos    x
+/bin/ps             x
+/usr/bin/netstat    x
+/bin/sh             x
+/etc/man.conf       r
+/etc/passwd         r
+/etc/group          r
+/etc/resolv.conf    r
+```
 
-# Define backend server
+`pledge(2)` promise set:
+
+```
+stdio rpath inet route proc exec vminfo ps getpw
+```
+
+### Other mitigations
+
+- Path traversal: any static path containing `..` or `//` gets a 403
+- Connection limit: excess connections receive 503 and are closed immediately
+- Subprocess sanitisation: page/section/area components in `/man/` URLs are run through `sanitize_string()` before being passed to `mandoc(1)`
+- Reverse-proxy headers (`X-Forwarded-For`, `X-Forwarded-Proto`) are set by `relayd` and must not be accepted from direct external connections — bind to `127.0.0.1` in production
+
+### Known limitations
+
+- No TLS — deploy behind `relayd(8)` or another terminating proxy
+- No authentication — add at the proxy layer
+- JSON output uses fixed-size buffers; extremely long hostnames or mount point paths may be truncated
+- Man page rendering spawns `mandoc(1)` as a subprocess; a kernel stall inside mandoc cannot be interrupted by the timeout mechanism
+
+---
+
+## Reverse Proxy with relayd
+
+Minimal `/etc/relayd.conf` for HTTPS termination:
+
+```
 table <miniweb> { 127.0.0.1 }
 
-# HTTPS protocol with headers
-http protocol "miniweb_https" {
-    tls keypair "yourdomain.com"
-    
-    # Forward all requests to miniweb
-    match request path "/*" forward to <miniweb>
-    
-    # Add forwarding headers
-    match request header append "X-Forwarded-For" value "$REMOTE_ADDR"
-    match request header append "X-Forwarded-Proto" value "https"
-    match request header append "X-Real-IP" value "$REMOTE_ADDR"
-    match request header set "Connection" value "close"
+http protocol "https_proxy" {
+    tls
+
+    match request header set "X-Forwarded-For"   value "$REMOTE_ADDR"
+    match request header set "X-Forwarded-Proto" value "https"
+    match request header set "X-Real-IP"         value "$REMOTE_ADDR"
+    match request header set "Host"              value "$HOST"
+
+    tcp { nodelay }
 }
 
-# Relay configuration
-relay "miniweb_relay" {
-    # Listen on external interface with TLS
-    listen on 0.0.0.0 port 443 tls
-    protocol miniweb_https
-    
-    # Forward to miniweb on localhost
-    forward to <miniweb> port 9001 check tcp
+relay "https_frontend" {
+    listen on egress port 443 tls
+    protocol "https_proxy"
+    forward to <miniweb> port 9001
+}
+
+relay "http_redirect" {
+    listen on egress port 80
+    forward to <miniweb> port 9001
 }
 ```
 
-Generate TLS certificate:
-```bash
-# Self-signed for testing
-openssl req -x509 -newkey rsa:4096 -nodes \
-    -keyout /etc/ssl/private/yourdomain.com.key \
-    -out /etc/ssl/yourdomain.com.crt \
-    -days 365 -subj "/CN=yourdomain.com"
+Provision a certificate with `acme-client(1)`, then:
 
-# Let's Encrypt with acme-client
-acme-client yourdomain.com
-```
-
-Enable and start relayd:
-```bash
-# Enable at boot
+```sh
 rcctl enable relayd
-
-# Start service
 rcctl start relayd
-
-# Check status
-rcctl check relayd
 relayctl show summary
 ```
 
-
 ---
 
-## 🛠️ Development
-
-### Code Organization
-
-- **Modular Design**: Each component is self-contained with clear interfaces
-- **Error Handling**: Comprehensive error checking with graceful degradation
-- **Logging**: Configurable verbose mode for debugging
-- **Memory Safety**: Careful buffer management and bounds checking
-
-### Building from Source
-
-```bash
-# Clean build
-make clean && make
-
-# Debug build with symbols
-make DEBUG=1
-
-# Run with verbose logging
-./build/miniweb -v
-```
+## Development
 
 ### Testing
 
-```bash
-# Test metrics endpoint
+```sh
+# Unit tests
+make unit-tests
+
+# Manual endpoint check through the proxy
+for p in / /docs /apiroot /networking \
+          /api/metrics /api/networking \
+          /static/css/custom.css /favicon.ico; do
+    printf '%-30s %s\n' "$p" \
+      "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:9001$p)"
+done
+
+# Man page search
+curl -s 'http://127.0.0.1:9001/api/man/search?q=pledge'
+
+# Metrics
 curl -s http://127.0.0.1:9001/api/metrics | jq .
+```
 
-# Test man page search
-curl -s 'http://127.0.0.1:9001/api/man/search?q=pledge' | jq .
+### Debug build
 
-# Load test
-ab -n 1000 -c 10 http://127.0.0.1:9001/
+```sh
+make DEBUG=1
+./build/miniweb -v
 ```
 
 ---
 
-## 📊 Performance
+## Troubleshooting
 
-### Benchmarks
+**`bind: Address already in use`**  
+Another process owns the port. Find it with `fstat | grep :9001`.
 
-On OpenBSD 7.8 / AMD64 / 4-core CPU:
+**`pledge: Operation not permitted`**  
+A syscall was made outside the promise set. Required promises: `stdio rpath inet route proc exec vminfo ps getpw`. Check that none have been accidentally removed.
 
-- **Metrics endpoint**: 250-350 req/sec (includes sysctl + JSON generation)
-- **Static files**: ~2000 req/sec
-- **Memory footprint**: ~8-12 MB resident
-- **CPU usage**: <1% idle, ~50-80% under heavy load (4 threads active)
+**`sysctl data query failed: Cannot allocate memory`**  
+The process table grew between the size query and the data fetch. The built-in retry loop handles this automatically; if it persists there is unusual process churn on the system.
 
-### Optimization Notes
+**`[write_all] Too many EAGAIN retries`**  
+The client socket buffer stayed full for too long. The connection is dropped. Usually indicates a very slow or unresponsive client.
 
-- Dynamic memory allocation per request eliminates lock contention
-- Thread-safe functions (`localtime_r()`, `getpwuid_r()`) enable full parallelism
-- Process list retrieval uses efficient sysctl interface with retry loop (no fork/exec)
-- libmicrohttpd handles connection pooling and automatic memory cleanup
-- Multi-threaded request handling with 4 worker threads (default)
+**Man pages not rendering**  
+Verify `mandoc` is installed and that `/usr/bin/mandoc` is unveiled. Check verbose output with `-v`.
 
 ---
 
-## 🐛 Troubleshooting
-
-### Common Issues
-
-**Problem**: `sysctl data query failed: Cannot allocate memory`
-
-**Solution**: This is handled by the retry loop with progressive buffer allocation (up to 100% extra space). The code sets `mib[5]` to the requested element count and retries with larger buffers. If it still persists after 4 retries, your system might have extremely high process churn.
-
-**Problem**: `pledge: Operation not permitted`
-
-**Solution**: Ensure all required promises are in the pledge string. Required: `stdio rpath inet proc exec vminfo ps getpw`. The `ps` promise enables process metrics, and `getpw` enables username lookups via `/etc/passwd`.
-
-**Problem**: Segmentation fault under load
-
-**Solution**: Ensure you're using the thread-safe versions of functions:
-- `localtime_r()` instead of `localtime()` 
-- `getpwuid_r()` instead of `getpwuid()`
-- Dynamic allocation with `MHD_RESPMEM_MUST_FREE` instead of static buffers
-
-These changes are required for multi-threaded operation with libmicrohttpd.
-
-**Problem**: Process data is empty (`top_cpu_processes: []`)
-
-**Solutions**:
-1. Verify `ps` and `getpw` promises are in pledge
-2. Ensure `/etc/passwd` and `/etc/group` are unveiled
-3. Check verbose logs with `-v` flag
-
-**Problem**: Man pages not rendering
-
-**Solution**: Ensure `mandoc` is installed and unveiled paths include `/usr/bin/mandoc` and man directories.
-
----
-
-## 🗺️ Roadmap
-
-### Planned Features
+## Roadmap
 
 - [ ] WebSocket support for live metric streaming
-- [ ] Historical data collection and graphing
+- [ ] Historical data with ring-buffer storage and simple graphs
 - [ ] Alert thresholds and notifications
-- [ ] Plugin system for custom metrics
 - [ ] IPv6 support
-- [ ] Prometheus exporter compatibility
-- [ ] Docker/container support
-
-### Technical Debt
-
-- [ ] Replace remaining `popen()` calls with safer alternatives
-- [x] Add comprehensive test suite
-- [ ] Improve JSON generation (streaming, proper escaping)
-- [ ] Add configuration file support
-- [ ] Port to other BSD systems (FreeBSD, NetBSD)
-- [x] ~~Implement thread-safe metric collection~~ ✓ Completed
-- [x] ~~Fix KERN_PROC_ALL memory allocation issues~~ ✓ Completed
-- [x] ~~Replace static buffers with dynamic allocation~~ ✓ Completed
+- [ ] Prometheus exporter endpoint
+- [ ] Configuration file support
+- [ ] Port to FreeBSD / NetBSD
+- [x] Native kqueue engine (replaced libmicrohttpd)
+- [x] EV_DISPATCH worker pool — eliminated busy-waiting, +300% throughput
+- [x] Unit test suite
+- [x] Thread-safe metric collection
+- [x] KERN_PROC_ALL retry loop
+- [x] relayd reverse proxy documentation and header handling
 
 ---
 
-## 📝 License
+## License
 
-BSD 3-Clause License - See [LICENSE](LICENSE) file for details.
-
----
-
-## 🙏 Acknowledgments
-
-- Inspired by OpenBSD's security-first philosophy
-- Uses OpenBSD's excellent system APIs and documentation
+BSD 3-Clause License — see [LICENSE](LICENSE).
 
 ---
 
-# SECURITY CONSIDERATIONS
+## Acknowledgments
 
-**miniweb**
-implements defense-in-depth security using OpenBSD's security features:
-
-*	pledge(2)
-	restricts the process to only necessary system calls.
-
-*	unveil(2)
-	limits filesystem access to required paths only.
-
-*	Path traversal protection rejects attempts to access files outside
-	*/static*.
-
-*	Process metrics use
-	sysctl(2)
-	directly instead of spawning
-	ps(1),
-	eliminating shell injection risks.
-
-*	Connection limits prevent resource exhaustion attacks.
-
-For production use, deploy behind an authenticated reverse proxy with
-TLS, rate limiting, and request filtering.
-Never expose
-**miniweb**
-directly to untrusted networks without additional security controls.
-
-# BUGS
-
-The JSON generation uses fixed-size buffers and may truncate output
-if metrics exceed buffer capacity.
-
-The template engine performs simple string replacement without proper
-escaping, which could allow HTML injection if user input is rendered
-in templates.
-Current implementation only uses trusted input.
-
-Subprocess timeout handling for
-mandoc(1)
-invocation is not fully implemented, which could cause hangs if
-mandoc(1)
-stalls.
-
-# SEE ALSO
-
-apropos(1),
-mandoc(1),
-kqueue(2),
-pledge(2),
-unveil(2)
-
-# HISTORY
-
-**miniweb**
-originally used libmicrohttpd but was rewritten in 2026 to use a native
-kqueue engine for better integration with OpenBSD.
-
-OpenBSD 7.8 - February 14, 2026 - MINIWEB(1)
+Built on OpenBSD's security-first philosophy and its excellent system interfaces: `kqueue(2)`, `pledge(2)`, `unveil(2)`, `sysctl(2)`.

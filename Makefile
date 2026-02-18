@@ -140,9 +140,9 @@ integration-test: ${BUILDDIR}/${PROG}
 	bash ${TESTDIR}/integration_endpoints.sh
 
 # Compilation of the routes test binary
-${BUILDDIR}/routes_test: ${TESTDIR}/routes_test.c ${SRCDIR}/routes.c ${SRCDIR}/metrics.c ${SRCDIR}/man.c ${SRCDIR}/networking.c ${SRCDIR}/template_engine.c ${SRCDIR}/http_utils.c ${SRCDIR}/urls.c
+${BUILDDIR}/routes_test: ${TESTDIR}/routes_test.c ${SRCDIR}/routes.c ${SRCDIR}/metrics.c ${SRCDIR}/man.c ${SRCDIR}/networking.c ${SRCDIR}/template_engine.c ${SRCDIR}/http_utils.c ${SRCDIR}/urls.c ${SRCDIR}/http_handler.c
 	@mkdir -p ${BUILDDIR}
-	${CC} ${CFLAGS} ${LDFLAGS} -I${INCDIR} -o $@ ${TESTDIR}/routes_test.c ${SRCDIR}/networking.c ${SRCDIR}/routes.c ${SRCDIR}/metrics.c ${SRCDIR}/man.c ${SRCDIR}/template_engine.c ${SRCDIR}/http_utils.c ${SRCDIR}/urls.c ${LDADD}
+	${CC} ${CFLAGS} ${LDFLAGS} -I${INCDIR} -o $@ ${TESTDIR}/routes_test.c ${SRCDIR}/networking.c ${SRCDIR}/routes.c ${SRCDIR}/metrics.c ${SRCDIR}/man.c ${SRCDIR}/template_engine.c ${SRCDIR}/http_utils.c ${SRCDIR}/http_handler.c ${SRCDIR}/urls.c ${LDADD}
 
 # Compilation of the template engine test binary
 ${BUILDDIR}/template_test: ${TESTDIR}/template_test.c ${SRCDIR}/template_engine.c

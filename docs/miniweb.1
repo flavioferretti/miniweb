@@ -1,12 +1,12 @@
 .\" Copyright (c) 2026 MiniWeb Contributors
 .\" BSD 3-Clause License
 .\"
-.Dd February 14, 2026
+.Dd February 18, 2026
 .Dt MINIWEB 1
 .Os
 .Sh NAME
 .Nm miniweb
-.Nd lightweight HTTP server for system monitoring
+.Nd lightweight HTTP server for OpenBSD system monitoring
 .Sh SYNOPSIS
 .Nm
 .Op Fl hv
@@ -19,148 +19,254 @@ The
 .Nm
 utility is a lightweight HTTP server designed for OpenBSD system monitoring
 and metrics collection.
-It provides a web-based dashboard, RESTful JSON API for system metrics,
-and a manual page browser.
+It provides a web-based dashboard, a RESTful JSON API for system metrics,
+and an integrated manual page browser.
 .Pp
 .Nm
-uses
+uses a single
 .Xr kqueue 2
-instance and a pool of worker threads. When a connection is ready, it is
-dispatched to a worker that parses the HTTP request into a
+instance managed by a dedicated dispatcher thread.
+When a connection becomes read-ready, the event is delivered once
+.Pq using Dv EV_DISPATCH
+and the connection is placed on a work queue.
+Worker threads dequeue connections, accumulate the full HTTP request,
+parse it, dispatch to the appropriate handler, and close the connection.
+This design avoids busy-waiting and eliminates race conditions between workers.
+.Pp
 .Xr pledge 2
 and
 .Xr unveil 2
-for security sandboxing.
-All system metrics are gathered using native
+are applied at startup to restrict the process to the minimum required
+system calls and filesystem paths.
+System metrics are gathered via
 .Xr sysctl 2
-interfaces without spawning external processes.
+without spawning external processes.
+Manual page rendering delegates to
+.Xr mandoc 1
+via a subprocess with an enforced timeout.
+.Pp
+.Nm
+does not implement TLS directly.
+For production deployments, place it behind
+.Xr relayd 8
+for TLS termination.
+See
+.Sx EXAMPLES
+for a working
+.Xr relayd 8
+configuration.
 .Pp
 The options are as follows:
 .Bl -tag -width Ds
 .It Fl b Ar address
-Bind to the specified network address.
+Bind to the specified IPv4 address.
 The default is
 .Cm 127.0.0.1
-(localhost only).
+.Pq loopback only .
 Use
 .Cm 0.0.0.0
-to listen on all IPv4 interfaces.
+to listen on all interfaces.
+When deployed behind
+.Xr relayd 8 ,
+the default loopback binding is recommended.
 .It Fl c Ar connections
 Set the maximum number of concurrent connections.
 The default is
-.Cm 1000 .
-Valid range is 1-10000.
+.Cm 1280 .
+Connections beyond this limit receive a 503 response and are closed
+immediately.
 .It Fl h
-Display usage information and exit.
+Print a usage summary and exit.
 .It Fl p Ar port
 Listen on the specified TCP port.
 The default is
 .Cm 9001 .
-Valid range is 1-65535.
 Ports below 1024 require root privileges.
 .It Fl t Ar threads
-Set the thread pool size for handling requests.
+Set the number of worker threads.
 The default is
 .Cm 4 .
-Valid range is 1-32.
-Generally should match CPU core count.
+Each worker independently dequeues and processes connections.
+A value matching the CPU core count is a reasonable starting point.
+The maximum is
+.Cm 4
+as compiled; recompile with a higher
+.Dv THREAD_POOL_SIZE
+to increase it.
 .It Fl v
 Enable verbose logging to standard error.
-Logs include HTTP requests, security operations, and metric collection details.
+Logs include connection accept/close events, worker dispatch, and
+security initialisation details.
 .El
 .Sh ENDPOINTS
 .Nm
-provides the following HTTP endpoints:
+provides the following HTTP endpoints.
+All responses use
+.Cm Connection: close ;
+persistent connections are not supported.
 .Ss Web Interface
 .Bl -tag -width Ds
 .It Pa /
-Main dashboard with system overview, tabbed navigation for load, memory,
-disk, network, and process information.
+Main dashboard with system overview.
+Tabbed navigation covers load averages, memory, disk, network interfaces,
+and process information.
 .It Pa /docs
-Manual page browser with search functionality.
+Manual page browser with search powered by
+.Xr apropos 1 .
 .It Pa /networking
-Network interfaces overview with routes and DNS
+Network interface overview including routes and DNS configuration.
 .It Pa /apiroot
-MiniWeb API root page.
+API index page listing available endpoints and their response formats.
 .El
 .Ss Metrics API
 .Bl -tag -width Ds
 .It Pa /api/metrics
-JSON endpoint providing comprehensive system metrics including:
+Returns a JSON object with the following fields:
 .Bl -bullet -compact
 .It
-System information (hostname, OS, uptime, architecture)
+System information: hostname, OS version, uptime, architecture.
 .It
-CPU load averages (1, 5, and 15 minute)
+CPU load averages: 1, 5, and 15 minute.
 .It
-Memory statistics (total, free, active, wired, cache)
+Memory: total, free, active, wired, cached pages.
 .It
-Swap usage
+Swap usage.
 .It
-Disk usage for all mounted filesystems
+Disk usage for all mounted filesystems.
 .It
-Network interface status and IP addresses
+Network interface status and assigned addresses.
 .It
-Top 10 processes by CPU usage
+Top 10 processes by CPU usage.
 .It
-Top 10 processes by memory usage
+Top 10 processes by memory usage.
 .It
-Process statistics (total, running, sleeping, zombie)
+Process counts: total, running, sleeping, zombie.
 .El
 .Pp
-Metrics are cached internally to reduce
+Metrics are cached to reduce
 .Xr sysctl 2
-overhead.
+call overhead.
+.It Pa /api/networking
+Returns a JSON object with network interface details,
+routing table entries, and DNS resolver configuration.
 .El
-.Sh Documentation API AND ROUTES
-.Nm
-maps requests to specific handlers:
+.Ss Manual Page API
 .Bl -tag -width "/api/man/search"
-.It Pa /api/metrics
-Returns system statistics (CPU, Memory, Disk, Network) in JSON format.
 .It Pa /api/man/search
-.Sy Exception :
-Unlike other API endpoints, the search handler returns raw text
-(one entry per line) compatible with the output of
-.Xr apropos 1 ,
-allowing the frontend to perform line-based regex parsing.
-.It Pa /man/{area}/{section}/{page}[.ext]
-Renders manual pages. Supported extensions include
-.Cm .html ,
-.Cm .pdf ,
-.Cm .ps ,
-.Cm .md
-(Markdown), and
-.Cm .txt .
+Accepts a
+.Cm ?q=
+query parameter and returns raw
+.Xr apropos 1
+output, one entry per line.
+Unlike other API endpoints, the response content type is
+.Cm text/plain
+to simplify line-based parsing in the frontend.
+.It Pa /man/ Ns Ar area Ns / Ns Ar section Ns / Ns Ar page Ns Op Ar .ext
+Renders a manual page via
+.Xr mandoc 1 .
+Supported extensions and their output formats:
+.Pp
+.Bl -tag -width ".html" -compact
+.It Cm .html
+HTML output
+.Pq default if no extension is given .
+.It Cm .txt
+Plain text.
+.It Cm .md
+Markdown.
+.It Cm .pdf
+PDF.
+.It Cm .ps
+PostScript.
+.El
 .El
 .Ss Static Files
 .Bl -tag -width Ds
-.It Pa /static/*
-Serve static assets (CSS, JavaScript, images).
-Path traversal attempts are rejected.
+.It Pa /static/ Ns Ar path
+Serves static assets including CSS, JavaScript, and images.
+The path component is validated to reject
+.Sq ..
+and
+.Sq //
+sequences.
+Files are served from the
+.Pa static/
+directory relative to the working directory.
 .It Pa /favicon.ico
-Site favicon.
+Serves the site favicon from
+.Pa static/assets/favicon.svg
+as
+.Cm image/svg+xml .
 .El
+.Sh REVERSE PROXY
+.Nm
+is designed to run behind
+.Xr relayd 8 .
+When a reverse proxy is present,
+.Nm
+reads the following request headers to determine the real client
+address and original protocol:
+.Bl -tag -width "X-Forwarded-Proto" -compact
+.It Cm X-Real-IP
+Preferred header for the client IP address.
+.It Cm X-Forwarded-For
+Used if
+.Cm X-Real-IP
+is absent; the first comma-separated value is taken.
+.It Cm X-Forwarded-Proto
+Set to
+.Cm https
+by
+.Xr relayd 8
+to indicate that the original connection used TLS.
+.El
+.Pp
+If none of these headers are present, the peer address of the TCP
+connection is used.
+.Pp
+These headers should be set exclusively by the reverse proxy and must
+not be accepted from untrusted clients.
+Configure
+.Xr relayd 8
+to overwrite rather than append them.
 .Sh FILES
-.Bl -tag -width "/usr/share/man" -compact
-.It Pa /etc/passwd
-Used for user name lookups in process information.
-Must be unveiled for
-.Xr getpwuid 3 .
-.It Pa /etc/group
-Used for group name lookups.
-Must be unveiled.
+.Bl -tag -width "templates/" -compact
 .It Pa templates/
 HTML templates for dashboard and documentation pages.
+Must be unveiled read-only.
 .It Pa static/
-Static assets (CSS, JavaScript, images).
+Static assets served under
+.Pa /static/ .
+Must be unveiled read-only.
+.It Pa /etc/passwd
+Consulted for user name lookups in process listings.
+Unveiled for
+.Xr getpwuid 3 .
+.It Pa /etc/group
+Consulted for group name lookups.
+Unveiled read-only.
+.It Pa /etc/resolv.conf
+Read for DNS resolver configuration displayed on the networking page.
+Unveiled read-only.
+.It Pa /etc/man.conf
+Read by
+.Xr mandoc 1
+at startup.
 .It Pa /usr/share/man
 .It Pa /usr/local/man
 .It Pa /usr/X11R6/man
-Manual page directories accessed for documentation browser.
+Manual page directories.
+All three are unveiled read-only.
 .It Pa /usr/bin/mandoc
 Manual page formatter.
-Must be unveiled for rendering.
+Unveiled for execution.
+.It Pa /usr/bin/apropos
+Used for manual page search.
+Unveiled for execution.
+.It Pa /bin/ps
+.It Pa /usr/bin/netstat
+.It Pa /bin/sh
+Unveiled for execution by metric and networking collectors.
 .El
 .Sh EXAMPLES
 Start the server on the default port with verbose logging:
@@ -168,173 +274,208 @@ Start the server on the default port with verbose logging:
 $ miniweb -v
 .Ed
 .Pp
-Start on port 8080, listening on all interfaces with 8 worker threads:
+Listen on all interfaces on port 8080 with 8 worker threads:
 .Bd -literal -offset indent
 $ miniweb -b 0.0.0.0 -p 8080 -t 8
 .Ed
 .Pp
-Production configuration with high connection limit:
+Production configuration behind a reverse proxy,
+high connection limit:
 .Bd -literal -offset indent
-$ miniweb -b 127.0.0.1 -p 9001 -c 5000 -t 4
+$ miniweb -b 127.0.0.1 -p 9001 -c 1280 -t 4
 .Ed
 .Pp
-Test the metrics endpoint:
+Query the metrics endpoint directly:
 .Bd -literal -offset indent
 $ curl -s http://127.0.0.1:9001/api/metrics | jq .
 .Ed
 .Pp
-Deploy behind
+Minimal
 .Xr relayd 8
-for HTTPS:
+configuration for TLS termination.
+.Xr acme-client 1
+or
+.Xr acme-client.conf 5
+should be used to provision the certificate beforehand:
 .Bd -literal -offset indent
-# /etc/relayd.conf
 table <miniweb> { 127.0.0.1 }
 
-http protocol "miniweb_https" {
-    tls keypair "example.com"
-    match request path "/*" forward to <miniweb>
-    match request header append "X-Forwarded-For" \e
+http protocol "https_proxy" {
+    tls keypair "server"
+
+    match request header set "X-Forwarded-For" \e
         value "$REMOTE_ADDR"
-    match request header append "X-Forwarded-Proto" \e
+    match request header set "X-Forwarded-Proto" \e
         value "https"
+    match request header set "X-Real-IP" \e
+        value "$REMOTE_ADDR"
+    match request header set "Host" \e
+        value "$HOST"
+
+    tcp { nodelay }
 }
 
-relay "miniweb_relay" {
-    listen on 0.0.0.0 port 443 tls
-    protocol miniweb_https
-    forward to <miniweb> port 9001 check tcp
+relay "https_frontend" {
+    listen on egress port 443 tls
+    protocol "https_proxy"
+    forward to <miniweb> port 9001
 }
+
+relay "http_redirect" {
+    listen on egress port 80
+    forward to <miniweb> port 9001
+}
+.Ed
+.Pp
+Verify that all endpoints respond correctly through the proxy:
+.Bd -literal -offset indent
+$ for p in / /docs /apiroot /networking \e
+      /api/metrics /api/networking \e
+      /static/css/custom.css /favicon.ico; do
+    printf '%-30s %s\en' "$p" \e
+      "$(curl -sk -o /dev/null \e
+         -w '%{http_code}' https://example.com$p)"
+  done
 .Ed
 .Sh DIAGNOSTICS
 .Ex -std
 .Pp
-Common error messages:
+The following messages may appear on standard error:
 .Bl -tag -width Ds
-.It Qq Failed to start server on port %d
-The specified port is already in use or requires elevated privileges
-(ports < 1024).
-Check with
-.Ql fstat | grep :%d
-or start with a higher port number.
-.It Qq pledge: Operation not permitted
-The process attempted a system call not allowed by the current
+.It Dq bind: Address already in use
+Another process is listening on the specified port.
+Use
+.Ql fstat | grep Ar :port
+to identify it.
+.It Dq pledge: Operation not permitted
+A system call was attempted outside the current
 .Xr pledge 2
-promises.
-Verify that the pledge string includes all required promises:
-.Cm stdio rpath inet proc exec vminfo ps getpw .
-.It Qq sysctl data query failed: Cannot allocate memory
-The process list is growing rapidly.
+promise set.
+The required promises are:
+.Cm stdio rpath inet route proc exec vminfo ps getpw .
+.It Dq sysctl data query failed: Cannot allocate memory
+The process table is growing faster than the buffer can be resized.
 .Nm
-includes a retry loop to handle this condition.
-If it persists, check for fork bombs or excessive process creation.
-.It Qq Unable to read metrics
-The metrics collection subsystem encountered an error.
-Enable verbose mode with
-.Fl v
-to see detailed error messages.
+retries automatically; if the condition persists, investigate runaway
+process creation.
+.It Dq [write_all] Too many EAGAIN retries
+The client socket buffer remained full for too many polling cycles.
+The connection is dropped.
+This may indicate a very slow or unresponsive client.
+.It Dq Connection limit reached, rejected fd= Ns Ar n
+The active connection count reached the value set by
+.Fl c .
+Increase the limit or reduce connection hold time.
 .El
 .Sh SEE ALSO
+.Xr acme-client 1 ,
+.Xr apropos 1 ,
 .Xr curl 1 ,
 .Xr mandoc 1 ,
+.Xr kqueue 2 ,
+.Xr pledge 2 ,
+.Xr sysctl 2 ,
+.Xr unveil 2 ,
 .Xr getifaddrs 3 ,
 .Xr getloadavg 3 ,
 .Xr getmntinfo 3 ,
 .Xr getpwuid 3 ,
-.Xr libmicrohttpd 3 ,
-.Xr pledge 2 ,
-.Xr sysctl 2 ,
-.Xr unveil 2 ,
 .Xr relayd 8
 .Sh STANDARDS
-.Nm
-uses standard OpenBSD system interfaces and follows OpenBSD security
-best practices.
-The HTTP implementation uses
-.Xr libmicrohttpd 3 ,
-which implements HTTP/1.1 as specified in RFC 7230-7235.
+The HTTP implementation follows RFC 7230 through RFC 7235
+.Pq HTTP/1.1 .
+Only
+.Cm Connection: close
+is supported; persistent connections and pipelining are not implemented.
 .Sh HISTORY
-The
 .Nm
-utility was written as a lightweight alternative to complex monitoring
-solutions, specifically targeting OpenBSD systems.
+was originally based on
+.Nm libmicrohttpd .
+In early 2026 it was rewritten to use a native
+.Xr kqueue 2
+dispatcher with a
+.Dv EV_DISPATCH Ns -based
+worker pool, removing the external library dependency and improving
+throughput to over 7000 requests per second on a four-core system.
 .Sh AUTHORS
 .An MiniWeb Contributors
 .Sh CAVEATS
 .Nm
-is designed specifically for OpenBSD and relies heavily on OpenBSD-specific
-APIs including
-.Xr sysctl 2 ,
+is OpenBSD-specific.
+It depends on
+.Xr kqueue 2 ,
 .Xr pledge 2 ,
-and
-.Xr unveil 2 .
-Porting to other operating systems requires significant modifications.
+.Xr unveil 2 ,
+and OpenBSD
+.Xr sysctl 2
+MIBs.
+Porting to other systems requires substantial changes.
 .Pp
-The manual page rendering functionality uses
-.Xr popen 3
-to invoke
-.Xr mandoc 1 .
-While this is isolated via
+The manual page renderer invokes
+.Xr mandoc 1
+as a subprocess.
+Although isolated by
 .Xr pledge 2
 and
 .Xr unveil 2 ,
-it introduces potential attack surface.
+the subprocess execution path represents additional attack surface.
+User-supplied section, area, and page name components are sanitised
+before use; only alphanumeric characters, hyphens, underscores,
+periods, and plus signs are permitted.
 .Pp
-.Nm
-does not implement TLS/HTTPS directly.
-For production deployments, use a reverse proxy such as
-.Xr relayd 8
-or
-.Xr nginx 8
-to provide TLS termination and authentication.
+JSON output uses fixed-size buffers.
+Extremely long hostnames, mount point paths, or process argument
+lists may be silently truncated.
 .Sh SECURITY CONSIDERATIONS
 .Nm
-implements defense-in-depth security using OpenBSD's security features:
+implements layered security using native OpenBSD facilities:
 .Bl -bullet
 .It
 .Xr pledge 2
-restricts the process to only necessary system calls.
+restricts available system calls to those required for normal operation.
 .It
 .Xr unveil 2
-limits filesystem access to required paths only.
+limits filesystem access to
+.Pa templates/ ,
+.Pa static/ ,
+the system manual page directories, and a small set of executable paths.
 .It
-Path traversal protection rejects attempts to access files outside
-.Pa /static .
+Path traversal is rejected in the static file handler by refusing any
+path containing
+.Sq ..
+or
+.Sq //
+sequences.
 .It
-Process metrics use
-.Xr sysctl 2
-directly instead of spawning
-.Xr ps 1 ,
-eliminating shell injection risks.
+The connection pool limits active connections and allocates each on the
+heap; a connection exceeding the pool size receives a 503 response and
+is closed without further processing.
 .It
-Connection limits prevent resource exhaustion attacks.
+.Cm X-Forwarded-For
+and related headers are set by
+.Xr relayd 8
+and must not be trusted from direct external connections.
+Deploy with
+.Fl b Cm 127.0.0.1
+and route all external traffic through the reverse proxy.
 .El
 .Pp
-For production use, deploy behind an authenticated reverse proxy with
-TLS, rate limiting, and request filtering.
 Never expose
 .Nm
-directly to untrusted networks without additional security controls.
+directly to untrusted networks.
 .Sh BUGS
-The JSON generation uses fixed-size buffers and may truncate output
-if metrics exceed buffer capacity.
-.Pp
-The template engine performs simple string replacement without proper
-escaping, which could allow HTML injection if user input is rendered
-in templates.
-Current implementation only uses trusted input.
-.Pp
 Subprocess timeout handling for
 .Xr mandoc 1
-invocation is not fully implemented, which could cause hangs if
+invocations relies on
+.Xr poll 2
+with a wall-clock deadline.
+A kernel stall inside
 .Xr mandoc 1
-stalls.
-.Sh SEE ALSO
-.Xr apropos 1 ,
-.Xr mandoc 1 ,
-.Xr kqueue 2 ,
-.Xr pledge 2 ,
-.Xr unveil 2
-.Sh HISTORY
-.Nm
-originally used libmicrohttpd but was rewritten in 2026 to use a native
-kqueue engine for better integration with OpenBSD.
+itself cannot be interrupted by this mechanism.
+.Pp
+The template engine performs token substitution without HTML escaping.
+If future changes introduce user-supplied input into template rendering,
+a proper escaping pass must be added.
+.Pp
+Only IPv4 is supported.
+IPv6 requires changes to the socket creation and address handling code.
