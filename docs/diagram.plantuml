@@ -1,0 +1,47 @@
+@startuml
+skinparam handwritten false
+skinparam monochrome false
+
+package "<&aperture*1> Core & Network" {
+  [main.c] as Main #LightBlue
+  [http_handler.c] as HTTP #TECHNOLOGY
+}
+
+package "<&fork*1> Routing" {
+  [urls.c] as URLS #TECHNOLOGY
+  [routes.c] as Routes #TECHNOLOGY
+}
+
+package "<&puzzle-piece*1> Modules" {
+  [metrics.c] as Metrics #Lavender
+  [networking.c] as Net #Lavender
+  [man.c] as Man #Lavender
+}
+
+package "<&layers*1> Utilities" {
+  [template_engine.c] as Template #LightGoldenRodYellow
+  [http_utils.c] as Utils #LightGoldenRodYellow
+}
+
+' Flusso Principale
+Main -> Main : kevent() (kqueue.h)
+Main -down-> HTTP : queue_push() -> worker_thread()
+HTTP -down-> URLS : route_match() (urls.h)
+URLS -> Routes : dispatching to handler
+
+' Handlers di Rotta
+Routes -down-> Template : render_template_response() (template_engine.h)
+Routes -down-> Metrics : metrics_handler() (metrics.h)
+Routes -> Net : networking_handler() (networking.h)
+Routes -> Man : man_handler() (man.h)
+
+' Approfondimento Moduli
+Metrics -down-> Utils : get_system_metrics_json() -> json_escape_string() (http_utils.h)
+Man -> Utils : man_render_page() -> safe_popen_read_argv() (http_utils.h)
+Net -> Net : networking_get_routes() (networking.h)
+
+' Template Engine
+Template -> Template : read_file_content()
+Template -> Template : replace_all()
+
+@enduml<size:10><:globe_with_meridians:></size>
