@@ -6,7 +6,7 @@
 
 set -eu
 SERVER_PORT=3000
-SERVER_URL="${SERVER_URL:-http://localhost:3000/static/test.txt}"
+SERVER_URL="${SERVER_URL:-http://localhost:3000/static/test.html}"
 TEST_DURATION="${TEST_DURATION:-30}"
 THREADS="${THREADS:-4}"
 CONNECTIONS="${CONNECTIONS:-4 8 16 32 64 128}"
