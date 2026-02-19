@@ -1,89 +1,241 @@
+<!-- docs_extra_js.html -->
+<script>
+(() => {
+  const sectionsContainer = document.getElementById('sectionsContainer');
+  const pagesViewer       = document.getElementById('pagesViewer');
+  const pagesList         = document.getElementById('pagesList');
+  const sectionTitle      = document.getElementById('currentSectionTitle');
+  const closeViewer       = document.getElementById('closeViewer');
+  const searchInput       = document.getElementById('manSearch');
+  const searchResults     = document.getElementById('searchResults');
 
-  <!-- docs_extra_js.html - Per page custom JS -->
-  <script>
-    (() => {
-      const sectionsContainer = document.getElementById('sectionsContainer');
-      const pagesViewer = document.getElementById('pagesViewer');
-      const pagesList = document.getElementById('pagesList');
-      const sectionTitle = document.getElementById('currentSectionTitle');
-      const closeViewer = document.getElementById('closeViewer');
-      const searchInput = document.getElementById('manSearch');
-      const searchResults = document.getElementById('searchResults');
+  /* ── Helpers ─────────────────────────────────────────────────────────── */
 
-      const areaIcon = (area) => (area === 'system' ? 'System' : area === 'x11' ? 'X11' : 'Local');
+  const areaLabel = (area) =>
+    area === 'system' ? 'System' : area === 'x11' ? 'X11' : 'Local';
 
-      const openSection = async (area, sectionId, sectionName) => {
-        sectionsContainer.classList.add('hidden');
-        pagesViewer.classList.remove('hidden');
-        sectionTitle.textContent = `${areaIcon(area)} · Section ${sectionId} · ${sectionName}`;
-        pagesList.innerHTML = '<p class="muted">Loading pages...</p>';
+  /* Resolve the real area+section for a page name.
+   * Calls /api/man/resolve?name=<n>&section=<s>
+   * Returns {name, section, area} or null on failure. */
+  const resolveArea = async (name, section) => {
+    try {
+      const qs = section ? `name=${encodeURIComponent(name)}&section=${encodeURIComponent(section)}`
+                         : `name=${encodeURIComponent(name)}`;
+      const r = await fetch(`/api/man/resolve?${qs}`);
+      if (!r.ok) return null;
+      const d = await r.json();
+      if (d.error) return null;
+      return d; /* { name, section, area, path } */
+    } catch {
+      return null;
+    }
+  };
 
-        const response = await fetch(`/api/man/${area}/${sectionId}`);
-        const data = await response.json();
-        const pages = data.pages || [];
-        if (!pages.length) {
-          pagesList.innerHTML = '<p class="muted">No pages found for this section.</p>';
-          return;
-        }
+  /* Open a man page in a new tab.
+   * Shows a brief spinner/status in the clicked element while resolving. */
+  const openPage = async (name, section, areaHint, linkEl) => {
+    if (linkEl) {
+      linkEl.dataset.origText = linkEl.textContent;
+      linkEl.textContent = '…';
+      linkEl.style.pointerEvents = 'none';
+    }
 
-        pagesList.innerHTML = pages.map((name) => `
-          <div class="page-item">
-            <strong>${name}</strong>
-            <div class="page-links">
-              <a href="/man/${area}/${sectionId}/${name}" target="_blank" rel="noopener">html</a>
-              <a href="/man/${area}/${sectionId}/${name}.md" target="_blank" rel="noopener">md</a>
-              <a href="/man/${area}/${sectionId}/${name}.ps" target="_blank" rel="noopener">ps</a>
-              <a href="/man/${area}/${sectionId}/${name}.pdf" target="_blank" rel="noopener">pdf</a>
-            </div>
-          </div>`).join('');
-      };
+    const resolved = await resolveArea(name, section);
 
-      const loadSections = async () => {
-        const response = await fetch('/api/man/sections');
-        const data = await response.json();
-        sectionsContainer.innerHTML = Object.entries(data).map(([key, area]) => `
-          <div class="area-section">
-            <h3>${areaIcon(key)} (${area.name})</h3>
-            <div class="section-grid">
-              ${area.sections.map((s) => `<button class="section-card" data-area="${key}" data-id="${s.id}" data-name="${s.name}" type="button"><strong>Section ${s.id}</strong><p class="muted">${s.name}</p></button>`).join('')}
-            </div>
-          </div>`).join('');
-      };
+    if (linkEl) {
+      linkEl.textContent = linkEl.dataset.origText || linkEl.textContent;
+      linkEl.style.pointerEvents = '';
+    }
 
-      sectionsContainer.addEventListener('click', (event) => {
-        const card = event.target.closest('.section-card');
-        if (!card) return;
-        openSection(card.dataset.area, card.dataset.id, card.dataset.name);
-      });
+    if (!resolved) {
+      /* Graceful fallback: use the hint area if we have one, else 'system' */
+      const fallbackArea = areaHint || 'system';
+      const sec = section || '1';
+      console.warn(`[man] resolve failed for ${name}(${sec}), falling back to ${fallbackArea}`);
+      window.open(`/man/${fallbackArea}/${sec}/${name}`, '_blank', 'noopener');
+      return;
+    }
 
-      closeViewer.addEventListener('click', () => {
-        pagesViewer.classList.add('hidden');
-        sectionsContainer.classList.remove('hidden');
-      });
+    window.open(
+      `/man/${resolved.area}/${resolved.section}/${resolved.name}`,
+      '_blank', 'noopener'
+    );
+  };
 
-      let timer;
-      searchInput.addEventListener('input', () => {
-        clearTimeout(timer);
-        const q = searchInput.value.trim();
-        if (q.length < 2) {
-          searchResults.classList.add('hidden');
-          return;
-        }
-        timer = setTimeout(async () => {
-          const response = await fetch(`/api/man/search/${encodeURIComponent(q)}`);
-          const text = await response.text();
-          const rows = text.split('\n').filter(Boolean);
-          searchResults.innerHTML = rows.map((line) => {
-            const m = line.match(/^([a-zA-Z0-9_.:-]+)\(([^)]+)\)\s+-\s+(.*)$/);
-            if (!m) return '';
-            return `<a class="search-item" href="/man/all/${m[2]}/${m[1]}" target="_blank" rel="noopener"><strong>${m[1]}(${m[2]})</strong><br><span class="muted">${m[3]}</span></a>`;
-          }).join('') || '<div class="search-item">No results.</div>';
-          searchResults.classList.remove('hidden');
-        }, 280);
-      });
+  /* ── Section browser ─────────────────────────────────────────────────── */
 
-      loadSections().catch(() => {
-        sectionsContainer.innerHTML = '<p class="muted">Unable to load sections.</p>';
-      });
-    })();
-  </script>
+  const openSection = async (area, sectionId, sectionName) => {
+    sectionsContainer.classList.add('hidden');
+    pagesViewer.classList.remove('hidden');
+    sectionTitle.textContent =
+      `${areaLabel(area)} · Section ${sectionId} · ${sectionName}`;
+    pagesList.innerHTML = '<p class="muted">Loading pages…</p>';
+
+    let pages;
+    try {
+      const r = await fetch(`/api/man/${area}/${sectionId}`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = await r.json();
+      pages = d.pages || [];
+    } catch (e) {
+      pagesList.innerHTML =
+        `<p class="muted error">Failed to load pages: ${e.message}</p>`;
+      return;
+    }
+
+    if (!pages.length) {
+      pagesList.innerHTML =
+        '<p class="muted">No pages found for this section.</p>';
+      return;
+    }
+
+    pagesList.innerHTML = pages.map((name) => `
+      <div class="page-item">
+        <strong>${name}</strong>
+        <div class="page-links">
+          <a class="page-link" href="#"
+             data-name="${name}" data-section="${sectionId}"
+             data-area="${area}" data-fmt="">html</a>
+          <a class="page-link" href="#"
+             data-name="${name}" data-section="${sectionId}"
+             data-area="${area}" data-fmt=".md">md</a>
+          <a class="page-link" href="#"
+             data-name="${name}" data-section="${sectionId}"
+             data-area="${area}" data-fmt=".ps">ps</a>
+          <a class="page-link" href="#"
+             data-name="${name}" data-section="${sectionId}"
+             data-area="${area}" data-fmt=".pdf">pdf</a>
+        </div>
+      </div>`).join('');
+  };
+
+  /* Delegate clicks on page-link anchors inside the pages viewer.
+   * area is already known from the browse context — no need to resolve. */
+  pagesList.addEventListener('click', (e) => {
+    const a = e.target.closest('.page-link');
+    if (!a) return;
+    e.preventDefault();
+    const { name, section, area, fmt } = a.dataset;
+    /* For non-html formats just navigate directly — area is certain */
+    if (fmt && fmt !== '') {
+      window.open(`/man/${area}/${section}/${name}${fmt}`, '_blank', 'noopener');
+    } else {
+      /* HTML: still resolve to be safe (handles arch-specific redirects) */
+      openPage(name, section, area, a);
+    }
+  });
+
+  const loadSections = async () => {
+    let data;
+    try {
+      const r = await fetch('/api/man/sections');
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      data = await r.json();
+    } catch (e) {
+      sectionsContainer.innerHTML =
+        `<p class="muted error">Unable to load sections: ${e.message}</p>`;
+      return;
+    }
+
+    sectionsContainer.innerHTML = Object.entries(data).map(([key, area]) => `
+      <div class="area-section">
+        <h3>${areaLabel(key)} <span class="muted">(${area.name})</span></h3>
+        <div class="section-grid">
+          ${area.sections.map((s) => `
+            <button class="section-card" type="button"
+                    data-area="${key}" data-id="${s.id}" data-name="${s.name}">
+              <strong>Section ${s.id}</strong>
+              <p class="muted">${s.name}</p>
+            </button>`).join('')}
+        </div>
+      </div>`).join('');
+  };
+
+  sectionsContainer.addEventListener('click', (e) => {
+    const card = e.target.closest('.section-card');
+    if (!card) return;
+    openSection(card.dataset.area, card.dataset.id, card.dataset.name);
+  });
+
+  closeViewer.addEventListener('click', () => {
+    pagesViewer.classList.add('hidden');
+    sectionsContainer.classList.remove('hidden');
+  });
+
+  /* ── Search ──────────────────────────────────────────────────────────── */
+
+  /* Parse a single apropos output line.
+   * Format: "name(section) - description"
+   * Returns {name, section, desc} or null. */
+  const parseAproposLine = (line) => {
+    const m = line.match(/^([a-zA-Z0-9_.:-]+)\(([^)]+)\)\s+-\s+(.*)$/);
+    if (!m) return null;
+    return { name: m[1], section: m[2], desc: m[3] };
+  };
+
+  let searchTimer;
+  searchInput.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    const q = searchInput.value.trim();
+    if (q.length < 2) {
+      searchResults.innerHTML = '';
+      searchResults.classList.add('hidden');
+      return;
+    }
+
+    searchTimer = setTimeout(async () => {
+      let text;
+      try {
+        const r = await fetch(`/api/man/search?q=${encodeURIComponent(q)}`);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        text = await r.text();
+      } catch (e) {
+        searchResults.innerHTML =
+          `<div class="search-item error">Search failed: ${e.message}</div>`;
+        searchResults.classList.remove('hidden');
+        return;
+      }
+
+      const rows = text.split('\n')
+        .map(parseAproposLine)
+        .filter(Boolean)
+        .slice(0, 60); /* cap at 60 to keep the dropdown manageable */
+
+      if (!rows.length) {
+        searchResults.innerHTML =
+          '<div class="search-item muted">No results.</div>';
+        searchResults.classList.remove('hidden');
+        return;
+      }
+
+      /* Render items as <a href="#"> — real URL resolved on click */
+      searchResults.innerHTML = rows.map((item) => `
+        <a class="search-item" href="#"
+           data-name="${item.name}" data-section="${item.section}">
+          <strong>${item.name}(${item.section})</strong><br>
+          <span class="muted">${item.desc}</span>
+        </a>`).join('');
+      searchResults.classList.remove('hidden');
+    }, 280);
+  });
+
+  /* Resolve on click — this is the core fix for the /all bug */
+  searchResults.addEventListener('click', (e) => {
+    const a = e.target.closest('.search-item[data-name]');
+    if (!a) return;
+    e.preventDefault();
+    openPage(a.dataset.name, a.dataset.section, null, a);
+    searchResults.classList.add('hidden');
+    searchInput.value = '';
+  });
+
+  /* Dismiss dropdown when clicking outside */
+  document.addEventListener('click', (e) => {
+    if (!searchResults.contains(e.target) && e.target !== searchInput)
+      searchResults.classList.add('hidden');
+  });
+
+  /* ── Boot ────────────────────────────────────────────────────────────── */
+  loadSections();
+})();
+</script>

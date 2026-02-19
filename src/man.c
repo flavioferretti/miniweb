@@ -24,7 +24,7 @@ is_valid_token(const char *s)
 		return 0;
 	for (const unsigned char *p = (const unsigned char *)s; *p; p++) {
 		if (!isalnum(*p) && *p != '.' && *p != '_' && *p != '-' &&
-		    *p != '+')
+			*p != '+')
 			return 0;
 	}
 	return 1;
@@ -50,21 +50,21 @@ resolve_man_path(const char *name, const char *section)
 		return NULL;
 
 	char *const argv[] = {"man",
-			      "-M",
-			      "/usr/share/man:/usr/local/man:/usr/X11R6/man",
-			      "-w",
-			      (char *)section,
-			      (char *)name,
-			      NULL};
-	char *path = safe_popen_read_argv("/usr/bin/man", argv, 512, 5, NULL);
-	if (path) {
-		path[strcspn(path, "\r\n")] = 0;
-		if (strlen(path) == 0) {
-			free(path);
-			return NULL;
+		"-M",
+		"/usr/share/man:/usr/local/man:/usr/X11R6/man",
+		"-w",
+		(char *)section,
+		(char *)name,
+		NULL};
+		char *path = safe_popen_read_argv("/usr/bin/man", argv, 512, 5, NULL);
+		if (path) {
+			path[strcspn(path, "\r\n")] = 0;
+			if (strlen(path) == 0) {
+				free(path);
+				return NULL;
+			}
 		}
-	}
-	return path;
+		return path;
 }
 
 /* --- API JSON --- */
@@ -72,50 +72,50 @@ char *
 man_get_sections_json(void)
 {
 	return strdup("{"
-		      "\"system\":{"
-		      "\"name\":\"OpenBSD Base System\","
-		      "\"path\":\"/usr/share/man\","
-		      "\"sections\":["
-		      "{\"id\":\"1\",\"name\":\"General Commands\"},"
-		      "{\"id\":\"2\",\"name\":\"System Calls\"},"
-		      "{\"id\":\"3\",\"name\":\"Library Functions\"},"
-		      "{\"id\":\"3p\",\"name\":\"Perl Library\"},"
-		      "{\"id\":\"4\",\"name\":\"Device Drivers\"},"
-		      "{\"id\":\"5\",\"name\":\"File Formats\"},"
-		      "{\"id\":\"6\",\"name\":\"Games\"},"
-		      "{\"id\":\"7\",\"name\":\"Miscellaneous\"},"
-		      "{\"id\":\"8\",\"name\":\"System Administration\"},"
-		      "{\"id\":\"9\",\"name\":\"Kernel Internals\"}"
-		      "]"
-		      "},"
-		      "\"x11\":{"
-		      "\"name\":\"X11 Window System\","
-		      "\"path\":\"/usr/X11R6/man\","
-		      "\"sections\":["
-		      "{\"id\":\"1\",\"name\":\"X11 Commands\"},"
-		      "{\"id\":\"3\",\"name\":\"X11 Library\"},"
-		      "{\"id\":\"4\",\"name\":\"X11 Drivers\"},"
-		      "{\"id\":\"5\",\"name\":\"X11 Formats\"},"
-		      "{\"id\":\"7\",\"name\":\"X11 Misc\"}"
-		      "]"
-		      "},"
-		      "\"packages\":{"
-		      "\"name\":\"Local Packages\","
-		      "\"path\":\"/usr/local/man\","
-		      "\"sections\":["
-		      "{\"id\":\"1\",\"name\":\"Pkg General\"},"
-		      "{\"id\":\"2\",\"name\":\"Pkg Calls\"},"
-		      "{\"id\":\"3\",\"name\":\"Pkg Lib\"},"
-		      "{\"id\":\"3p\",\"name\":\"Pkg Perl\"},"
-		      "{\"id\":\"4\",\"name\":\"Pkg Drivers\"},"
-		      "{\"id\":\"5\",\"name\":\"Pkg Formats\"},"
-		      "{\"id\":\"6\",\"name\":\"Pkg Games\"},"
-		      "{\"id\":\"7\",\"name\":\"Pkg Misc\"},"
-		      "{\"id\":\"8\",\"name\":\"Pkg Admin\"},"
-		      "{\"id\":\"9\",\"name\":\"Pkg Kernel\"}"
-		      "]"
-		      "}"
-		      "}");
+	"\"system\":{"
+	"\"name\":\"OpenBSD Base System\","
+	"\"path\":\"/usr/share/man\","
+	"\"sections\":["
+	"{\"id\":\"1\",\"name\":\"General Commands\"},"
+	"{\"id\":\"2\",\"name\":\"System Calls\"},"
+	"{\"id\":\"3\",\"name\":\"Library Functions\"},"
+	"{\"id\":\"3p\",\"name\":\"Perl Library\"},"
+	"{\"id\":\"4\",\"name\":\"Device Drivers\"},"
+	"{\"id\":\"5\",\"name\":\"File Formats\"},"
+	"{\"id\":\"6\",\"name\":\"Games\"},"
+	"{\"id\":\"7\",\"name\":\"Miscellaneous\"},"
+	"{\"id\":\"8\",\"name\":\"System Administration\"},"
+	"{\"id\":\"9\",\"name\":\"Kernel Internals\"}"
+	"]"
+	"},"
+	"\"x11\":{"
+	"\"name\":\"X11 Window System\","
+	"\"path\":\"/usr/X11R6/man\","
+	"\"sections\":["
+	"{\"id\":\"1\",\"name\":\"X11 Commands\"},"
+	"{\"id\":\"3\",\"name\":\"X11 Library\"},"
+	"{\"id\":\"4\",\"name\":\"X11 Drivers\"},"
+	"{\"id\":\"5\",\"name\":\"X11 Formats\"},"
+	"{\"id\":\"7\",\"name\":\"X11 Misc\"}"
+	"]"
+	"},"
+	"\"packages\":{"
+	"\"name\":\"Local Packages\","
+	"\"path\":\"/usr/local/man\","
+	"\"sections\":["
+	"{\"id\":\"1\",\"name\":\"Pkg General\"},"
+	"{\"id\":\"2\",\"name\":\"Pkg Calls\"},"
+	"{\"id\":\"3\",\"name\":\"Pkg Lib\"},"
+	"{\"id\":\"3p\",\"name\":\"Pkg Perl\"},"
+	"{\"id\":\"4\",\"name\":\"Pkg Drivers\"},"
+	"{\"id\":\"5\",\"name\":\"Pkg Formats\"},"
+	"{\"id\":\"6\",\"name\":\"Pkg Games\"},"
+	"{\"id\":\"7\",\"name\":\"Pkg Misc\"},"
+	"{\"id\":\"8\",\"name\":\"Pkg Admin\"},"
+	"{\"id\":\"9\",\"name\":\"Pkg Kernel\"}"
+	"]"
+	"}"
+	"}");
 }
 
 char *
@@ -190,7 +190,7 @@ man_get_section_pages_json(const char *area, const char *section)
 
 char *
 man_get_page_metadata_json(const char *area, const char *section,
-			   const char *name)
+						   const char *name)
 {
 	char *filepath = resolve_man_path(name, section);
 	if (!filepath)
@@ -202,9 +202,9 @@ man_get_page_metadata_json(const char *area, const char *section,
 		return strdup("{\"error\":\"OOM\"}");
 	}
 	snprintf(json, 1024,
-		 "{\"name\":\"%s\",\"section\":\"%s\",\"area\":\"%s\",\"path\":"
-		 "\"%s\"}",
-		 name, section, area, filepath);
+			 "{\"name\":\"%s\",\"section\":\"%s\",\"area\":\"%s\",\"path\":"
+			 "\"%s\"}",
+		  name, section, area, filepath);
 
 	free(filepath);
 	return json;
@@ -217,17 +217,25 @@ man_api_search(const char *query)
 		return strdup("");
 
 	char *const argv[] = {"apropos", "-M",
-			      "/usr/share/man:/usr/local/man:/usr/X11R6/man",
-			      (char *)query, NULL};
-	char *output = safe_popen_read_argv("/usr/bin/apropos", argv,
-					    MAX_OUTPUT_SIZE, 5, NULL);
-	if (!output)
-		return strdup("");
+		"/usr/share/man:/usr/local/man:/usr/X11R6/man",
+		(char *)query, NULL};
+		char *output = safe_popen_read_argv("/usr/bin/apropos", argv,
+											MAX_OUTPUT_SIZE, 5, NULL);
+		if (!output)
+			return strdup("");
 
 	return output;
 }
 
 /* util for search */
+static const char *
+area_from_path(const char *filepath)
+{
+	if (strncmp(filepath, "/usr/X11R6/", 11) == 0) return "x11";
+	if (strncmp(filepath, "/usr/local/",  11) == 0) return "packages";
+	return "system";
+}
+
 char *
 man_api_search_raw(const char *query)
 {
@@ -236,11 +244,16 @@ man_api_search_raw(const char *query)
 
 	/* Rimuoviamo -M /usr/share/man per usare il path di sistema completo
 	 *      che include /usr/local/man dopo il tuo makewhatis */
-	char *const argv[] = {"apropos", (char *)query, NULL};
+	// char *const argv[] = {"apropos", (char *)query, NULL};
+	char *const argv[] = {
+		"apropos", "-M",
+		"/usr/share/man:/usr/local/man:/usr/X11R6/man",
+		(char *)query, NULL
+	};
 
 	/* Aumentiamo il buffer perché apropos può restituire molto testo */
 	char *output = safe_popen_read_argv("/usr/bin/apropos", argv,
-					    1024 * 1024, 5, NULL);
+										1024 * 1024, 5, NULL);
 
 	if (!output)
 		return strdup("");
@@ -267,131 +280,211 @@ man_api_handler(http_request_t *req)
 	/* 2. Isola la query string dal path principale */
 	const char *query_string = strchr(path, '?');
 	size_t path_len =
-	    query_string ? (size_t)(query_string - path) : strlen(path);
+	query_string ? (size_t)(query_string - path) : strlen(path);
 
 	/* --- ROUTING LOGIC --- */
 
-	/* Casi semplici: stringhe esatte senza parametri nel path */
-	if (strncmp(path, "/sections", path_len) == 0 && path_len == 9) {
-		json = man_get_sections_json();
-	} else if (strncmp(path, "/pages", path_len) == 0) {
-		/* Estrazione "section=" dalla query string */
-		const char *q =
-		    query_string ? strstr(query_string, "section=") : NULL;
-		if (q) {
-			q += 8;
-			char section[16] = {0};
-			for (int i = 0; *q && *q != '&' && i < 15; i++)
-				section[i++] = *q++;
-			json = man_get_section_pages_json("system", section);
-		} else {
-			json =
-			    strdup("{\"error\":\"Missing section parameter\"}");
-		}
-	} else if (strncmp(path, "/search", 7) == 0) {
-		const char *query = NULL;
-		char query_buf[256] = {0};
+	/* /api/man/resolve?name=kqueue&section=2
+	 * Resolves the real area+path of a man page via 'man -w' so the FE
+	 * can build a correct /man/{area}/{section}/{name} link without guessing. */
+	if (strncmp(path, "/resolve", 8) == 0) {
+		char name_buf[64]    = {0};
+		char section_buf[16] = {0};
 
-		/* Controllo se è /api/man/search/open (formato JS) */
-		if (path[7] == '/') {
-			query = path + 8; // Prende tutto quello dopo lo slash
+		/* Extract name= and section= from query string */
+		const char *qs = query_string ? query_string : strchr(path, '?');
+		if (qs) {
+			const char *p_name = strstr(qs, "name=");
+			if (p_name) {
+				p_name += 5;
+				for (int i = 0; *p_name && *p_name != '&' && i < 63; i++)
+					name_buf[i] = *p_name++;
+			}
+			const char *p_sec = strstr(qs, "section=");
+			if (p_sec) {
+				p_sec += 8;
+				for (int i = 0; *p_sec && *p_sec != '&' && i < 15; i++)
+					section_buf[i] = *p_sec++;
+			}
 		}
-		/* Controllo se è /api/man/search?q=open (formato curl) */
-		else {
-			const char *q_param = strstr(path, "q=");
-			if (q_param) {
-				q_param += 2;
-				int i = 0;
-				while (*q_param && *q_param != '&' && i < 255) {
-					query_buf[i++] = *q_param++;
+
+		if (name_buf[0] == '\0' || !is_valid_token(name_buf) ||
+			(section_buf[0] != '\0' && !is_valid_section(section_buf))) {
+			json = strdup("{\"error\":\"name parameter required\"}");
+			} else {
+				/* Use full MANPATH; optionally narrow by section */
+				char *filepath = NULL;
+				if (section_buf[0] != '\0') {
+					char *const argv[] = {
+						"man", "-M",
+						"/usr/share/man:/usr/local/man:/usr/X11R6/man",
+						"-w", section_buf, name_buf, NULL
+					};
+					filepath = safe_popen_read_argv("/usr/bin/man",
+													argv, 512, 5, NULL);
+				} else {
+					char *const argv[] = {
+						"man", "-M",
+						"/usr/share/man:/usr/local/man:/usr/X11R6/man",
+						"-w", name_buf, NULL
+					};
+					filepath = safe_popen_read_argv("/usr/bin/man",
+													argv, 512, 5, NULL);
 				}
-				query = query_buf;
-			}
-		}
 
-		if (query && *query != '\0') {
-			/* IMPORTANTE: qui chiamiamo la funzione che restituisce
-			 * TESTO, non JSON */
-			json = man_api_search_raw(query);
-		} else {
-			json = strdup("");
-		}
-	}
-	/* Caso dinamico: /api/man/system/1 */
-	else {
-		char area[32] = {0};
-		char section[16] = {0};
-		/* Usiamo una copia locale del path limitata a path_len per
-		 * sscanf */
-		char path_tmp[64] = {0};
-		if (path_len < sizeof(path_tmp)) {
-			strncpy(path_tmp, path, path_len);
-			if (sscanf(path_tmp, "/%31[^/]/%15s", area, section) ==
-			    2) {
+				if (filepath) {
+					filepath[strcspn(filepath, "\r\n")] = 0;
+				}
+
+				if (!filepath || filepath[0] == '\0') {
+					free(filepath);
+					json = strdup("{\"error\":\"not found\"}");
+				} else {
+					const char *area = area_from_path(filepath);
+
+					/* Extract section from filename: ls.1 -> "1" */
+					char resolved_section[16] = {0};
+					const char *base = strrchr(filepath, '/');
+					base = base ? base + 1 : filepath;
+					const char *dot = strrchr(base, '.');
+					if (dot && dot[1] != '\0'){
+						strlcpy(resolved_section, dot + 1,
+								sizeof(resolved_section));
+					}
+
+
+					/* Escape filepath for JSON (no untrusted input,
+					 * but paths can contain spaces on weird installs) */
+					char jbuf[1024];
+					snprintf(jbuf, sizeof(jbuf),
+							 "{\"name\":\"%s\","
+							 "\"section\":\"%s\","
+							 "\"area\":\"%s\","
+							 "\"path\":\"%s\"}",
+			  name_buf,
+			  resolved_section[0] ? resolved_section
+			  : section_buf,
+			  area,
+			  filepath);
+					json = strdup(jbuf);
+					free(filepath);
+				}
+			}
+	} else
+		/* Casi semplici: stringhe esatte senza parametri nel path */
+		if (strncmp(path, "/sections", path_len) == 0 && path_len == 9) {
+			json = man_get_sections_json();
+		} else if (strncmp(path, "/pages", path_len) == 0) {
+			/* Estrazione "section=" dalla query string */
+			const char *q =
+			query_string ? strstr(query_string, "section=") : NULL;
+			if (q) {
+				q += 8;
+				char section[16] = {0};
+				for (int i = 0; *q && *q != '&' && i < 15; i++)
+					section[i++] = *q++;
+				json = man_get_section_pages_json("system", section);
+			} else {
 				json =
-				    man_get_section_pages_json(area, section);
+				strdup("{\"error\":\"Missing section parameter\"}");
+			}
+		} else if (strncmp(path, "/search", 7) == 0) {
+			const char *query = NULL;
+			char query_buf[256] = {0};
+
+			/* Controllo se è /api/man/search/open (formato JS) */
+			if (path[7] == '/') {
+				query = path + 8; // Prende tutto quello dopo lo slash
+			}
+			/* Controllo se è /api/man/search?q=open (formato curl) */
+			else {
+				const char *q_param = strstr(path, "q=");
+				if (q_param) {
+					q_param += 2;
+					int i = 0;
+					while (*q_param && *q_param != '&' && i < 255) {
+						query_buf[i++] = *q_param++;
+					}
+					query = query_buf;
+				}
+			}
+
+			if (query && *query != '\0') {
+				/* IMPORTANTE: qui chiamiamo la funzione che restituisce
+				 * TESTO, non JSON */
+				json = man_api_search_raw(query);
+			} else {
+				json = strdup("");
+			}
+		}
+		/* Caso dinamico: /api/man/system/1 */
+		else {
+			char area[32] = {0};
+			char section[16] = {0};
+			/* Usiamo una copia locale del path limitata a path_len per
+			 * sscanf */
+			char path_tmp[64] = {0};
+			if (path_len < sizeof(path_tmp)) {
+				strncpy(path_tmp, path, path_len);
+				if (sscanf(path_tmp, "/%31[^/]/%15s", area, section) ==
+					2) {
+					json =
+					man_get_section_pages_json(area, section);
+					}
+			}
+
+			if (!json) {
+				json = strdup("{\"error\":\"Unknown API endpoint or "
+				"malformed path\"}");
 			}
 		}
 
+		/* 3. Invio della risposta */
 		if (!json) {
-			json = strdup("{\"error\":\"Unknown API endpoint or "
-				      "malformed path\"}");
+			return http_send_error(req, 500, "Internal Server Error");
 		}
-	}
 
-	/* 3. Invio della risposta */
-	if (!json) {
-		return http_send_error(req, 500, "Internal Server Error");
-	}
+		http_response_t *resp = http_response_create();
+		http_response_set_status(resp, 200);
+		/* Se stiamo rispondendo a una ricerca, usiamo text/plain per il JS */
+		if (strncmp(path, "/search", 7) == 0) {
+			resp->content_type = "text/plain; charset=utf-8";
+		} else {
+			resp->content_type = "application/json";
+		}
+		http_response_add_header(resp, "Access-Control-Allow-Origin", "*");
 
-	http_response_t *resp = http_response_create();
-	http_response_set_status(resp, 200);
-	/* Se stiamo rispondendo a una ricerca, usiamo text/plain per il JS */
-	if (strncmp(path, "/search", 7) == 0) {
-		resp->content_type = "text/plain; charset=utf-8";
-	} else {
-		resp->content_type = "application/json";
-	}
-	http_response_add_header(resp, "Access-Control-Allow-Origin", "*");
+		http_response_set_body(resp, json, strlen(json),
+							   1); /* 1 = libera json */
 
-	http_response_set_body(resp, json, strlen(json),
-			       1); /* 1 = libera json */
+		int ret = http_response_send(req, resp);
+		http_response_free(resp);
 
-	int ret = http_response_send(req, resp);
-	http_response_free(resp);
-
-	return ret;
+		return ret;
 }
 
 /**
- * Esegue il rendering di una pagina man usando mandoc.
- * Supporta vari formati (html, pdf, ps, md).
- */
-/**
- * Esegue il rendering di una pagina man usando mandoc.
- * Supporta vari formati (html, pdf, ps, md).
+ * Renders a man page via mandoc. Supports html, pdf, ps, md formats.
+ * area parameter is accepted for API compat but ignored - full MANPATH
+ * is always used; real area is derived from the resolved filepath.
  */
 char *
 man_render_page(const char *area, const char *section, const char *page,
-		const char *format, size_t *out_len)
+				const char *format, size_t *out_len)
 {
-	const char *manpath = "/usr/share/man";
+	/* area is accepted for API compatibility but we always use the full
+	 * MANPATH so any page in any of the three trees is found regardless of
+	 * what the caller passes. area_from_path() derives the real area from
+	 * the resolved filepath when needed. */
+	(void)area;
 
-	/* 1. Selezione del MANPATH in base all'area */
-	if (area != NULL) {
-		if (strcmp(area, "x11") == 0) {
-			manpath = "/usr/X11R6/man";
-		} else if (strcmp(area, "packages") == 0) {
-			manpath = "/usr/local/man";
-		}
-	}
-
-	/* 2. Risoluzione del path del file usando 'man -w' */
+	/* 1. Resolve physical file path via 'man -w' with full MANPATH */
 	char *const argv_w[] = {
-	    "man",	  "-M", (char *)manpath, "-w", (char *)section,
-	    (char *)page, NULL};
+		"man", "-M", "/usr/share/man:/usr/local/man:/usr/X11R6/man",
+		"-w", (char *)section, (char *)page, NULL
+	};
 	char *filepath =
-	    safe_popen_read_argv("/usr/bin/man", argv_w, 1024, 5, NULL);
+	safe_popen_read_argv("/usr/bin/man", argv_w, 1024, 5, NULL);
 
 	if (!filepath)
 		return NULL;
@@ -410,9 +503,27 @@ man_render_page(const char *area, const char *section, const char *page,
 
 	/* 4. Esecuzione di mandoc - IMPORTANTE: usiamo out_len per ottenere la
 	 * lunghezza reale */
-	char *const argv_m[] = {"mandoc", "-T", (char *)t_arg, filepath, NULL};
+	/* For HTML output, pass -O style= so mandoc links our stylesheet
+	 * instead of embedding its own minimal inline CSS.
+	 * Other formats (pdf, ps, markdown) do not support -O style. */
+	/* 4. Esecuzione di mandoc */
+	char *argv_m[10]; // Buffer sufficiente per gli argomenti
+	int argc = 0;
+
+	argv_m[argc++] = "mandoc";
+	argv_m[argc++] = "-T";
+	argv_m[argc++] = (char *)t_arg;
+
+	/* Aggiungiamo -O solo per l'HTML */
+	if (strcmp(t_arg, "html") == 0) {
+		argv_m[argc++] = "-Ostyle=/static/css/custom.css";
+	}
+
+	argv_m[argc++] = filepath;
+	argv_m[argc++] = NULL;
+
 	char *output = safe_popen_read_argv("/usr/bin/mandoc", argv_m,
-					    MAX_OUTPUT_SIZE, 10, out_len);
+										MAX_OUTPUT_SIZE, 10, out_len);
 
 	/* Aggiungi questo debug temporaneo per verificare l'output */
 	if (config_verbose && strcmp(format, "pdf") == 0 && output && *out_len > 0) {
@@ -427,7 +538,7 @@ man_render_page(const char *area, const char *section, const char *page,
 	free(filepath);
 
 	return output; /* output è raw binary, out_len contiene la lunghezza
-			  esatta */
+	esatta */
 }
 
 /**
@@ -473,7 +584,7 @@ man_render_handler(http_request_t *req)
 	/* 2. Validazione minima */
 	if (page[0] == '\0' || section[0] == '\0') {
 		return http_send_error(req, 400,
-				       "Missing section or page name");
+							   "Missing section or page name");
 	}
 
 	/* 3. Rendering */

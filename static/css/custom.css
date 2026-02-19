@@ -185,3 +185,93 @@ footer {
 
   .navbar-menu.show { display: flex; }
 }
+
+/* ── mandoc(1) HTML output ───────────────────────────────────────────────────
+ * Classes emitted by mandoc -T html. Integrated here so man pages rendered
+ * by miniweb inherit the site theme (colors, font) without a separate file.
+ * Ref: mandoc.css distributed with mandoc, stripped to the essential rules.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/* Header / footer tables (NAME(SECTION) ... date ... OS) */
+
+
+/* Inline macros that must not break to a new line */
+.Nd, .Bf, .Op       { display: inline; }
+
+/* Semantic typography */
+.Pa, .Ad            { font-style: italic; }           /* path / address */
+.Ms                 { font-weight: bold; }             /* math symbol    */
+.Bl-diag > dt       { font-weight: bold; }             /* diag list term */
+code.Nm, .Fl, .Cm,
+.Ic, code.In, .Fd,
+.Fn, .Cd            { font-weight: bold;               /* command / flag  */
+  font-family: inherit; }
+
+  /* ── Theme integration ──────────────────────────────────────────────────── */
+
+  /* Wrap the entire mandoc page in a readable container */
+  .Pp {
+    max-width: 80ch;
+    padding: 0 1rem;
+    font-family: 'Satoshi-Medium', ui-monospace, monospace;
+    color: var(--text);
+  }
+
+  .head {
+    width: min(1200px, 100% - 2rem);
+    margin-inline: auto;
+    background-color: #1155dd;
+    color: #edecce;
+    padding: 2rem;
+    border-radius: 0.5rem;
+  }
+
+  .manual-text {
+    width: min(1200px, 100% - 2rem);
+    margin-inline: auto;
+    background: #dfdfef;
+    padding: 2rem;
+    border-radius: 0.5rem;
+  }
+
+  .foot {
+    width: min(1200px, 100% - 2rem);
+    margin-inline: auto;
+    background-color: #1155dd;
+    color: #edecce;
+    padding: 2rem;
+    border-radius: 0.5rem;
+  }
+
+
+
+  /* Section headings */
+  body.mandoc h1 { font-size: 1rem; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--text-muted); }
+
+    /* Inline code / pre blocks */
+    body.mandoc pre,
+body.mandoc code    { background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 0.3rem;
+  padding: 0.15em 0.35em;
+  font-size: 0.92em; }
+  body.mandoc pre     { padding: 0.75rem 1rem; overflow-x: auto; }
+
+  /* Links inherit primary colour */
+  body.mandoc a       { color: var(--primary); }
+  body.mandoc a:hover { text-decoration: underline; }
+
+  /* Head/foot tables — subdued, small */
+  body.mandoc table.head,
+body.mandoc table.foot {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 1.5rem;
+}
+body.mandoc table.foot { border-top: 1px solid var(--border);
+  margin-top: 1.5rem; border-bottom: none; }
+
+  /* Dark-theme tweaks: mandoc uses <b> heavily */
+  :root[data-theme='dark'] body.mandoc b { color: var(--text); }

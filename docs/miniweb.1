@@ -187,6 +187,8 @@ Supported extensions and their output formats:
 .It Cm .html
 HTML output
 .Pq default if no extension is given .
+.It Cm .txt
+Plain text.
 .It Cm .md
 Markdown.
 .It Cm .pdf
@@ -617,8 +619,12 @@ A kernel stall inside
 itself cannot be interrupted by this mechanism.
 .Pp
 The template engine performs token substitution without HTML escaping.
-If future changes introduce user-supplied input into template rendering,
-a proper escaping pass must be added.
+Currently all values passed to templates are trusted strings written
+directly in the source code, so no user input reaches the substitution
+step and there is no immediate risk.
+If future changes introduce user-supplied input into template rendering
+.Pq for example, echoing a search query into a page title ,
+a proper escaping pass must be added to prevent cross-site scripting.
 .Pp
 Only IPv4 is supported.
 IPv6 requires changes to the socket creation and address handling code.
