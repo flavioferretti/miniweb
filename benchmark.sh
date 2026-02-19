@@ -5,8 +5,8 @@
 #
 
 set -eu
-SERVER_PORT=9001
-SERVER_URL="${SERVER_URL:-http://localhost:9001/static/test.txt}"
+SERVER_PORT=3000
+SERVER_URL="${SERVER_URL:-http://localhost:3000/static/test.txt}"
 TEST_DURATION="${TEST_DURATION:-30}"
 THREADS="${THREADS:-4}"
 CONNECTIONS="${CONNECTIONS:-4 8 16 32 64 128}"
