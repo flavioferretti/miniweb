@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 
 #include "../include/http_handler.h"
+#include "../include/config.h"
 #include "../include/man.h"
 #include "../include/metrics.h"
 #include "../include/networking.h"
@@ -59,7 +60,9 @@ view_template_handler(http_request_t *req)
 int
 favicon_handler(http_request_t *req)
 {
-	return http_send_file(req, "static/assets/favicon.svg", "image/svg+xml");
+	char favicon_path[512];
+	snprintf(favicon_path, sizeof(favicon_path), "%s/assets/favicon.svg", config_static_dir);
+	return http_send_file(req, favicon_path, "image/svg+xml");
 }
 
 /* Static file handler */
@@ -84,7 +87,7 @@ static_handler(http_request_t *req)
 
 	// Costruisci il percorso completo
 	char fullpath[512];
-	snprintf(fullpath, sizeof(fullpath), "static/%s", path);
+	snprintf(fullpath, sizeof(fullpath), "%s/%s", config_static_dir, path);
 
 	// printf("DEBUG: static_handler trying to serve: %s\n", fullpath);
 

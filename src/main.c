@@ -49,6 +49,8 @@
 static miniweb_conf_t config;
 
 int config_verbose = 0;   /* consulted by other translation units */
+char config_static_dir[CONF_STR_MAX] = "static";
+char config_templates_dir[CONF_STR_MAX] = "templates";
 
 static volatile sig_atomic_t running = 1;
 static int kq_fd     = -1;
@@ -494,8 +496,10 @@ parse_args(int argc, char *argv[])
 	if (config.threads  > THREAD_POOL_SIZE) config.threads  = THREAD_POOL_SIZE;
 	if (config.max_conns > MAX_CONNECTIONS) config.max_conns = MAX_CONNECTIONS;
 
-	/* Propagate verbose to the global flag consulted by other modules */
+	/* Propagate config to global values consulted by other modules */
 	config_verbose = config.verbose;
+	strlcpy(config_static_dir, config.static_dir, sizeof(config_static_dir));
+	strlcpy(config_templates_dir, config.templates_dir, sizeof(config_templates_dir));
 
 	if (config.verbose)
 		conf_dump(&config);
