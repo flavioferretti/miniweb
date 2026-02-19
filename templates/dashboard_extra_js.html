@@ -1,5 +1,4 @@
-
-  <!-- dashboard_extra_js.html - Per page custom JS -->
+<!-- dashboard_extra_js.html - Per page custom JS -->
   <script>
     (() => {
       const dashboard = document.getElementById('dashboard');
@@ -54,13 +53,47 @@
         const load = latest.load || {};
 
         if (currentTab === 'overview') {
-          const memUsed = (m.total_mb || 0) - (m.free_mb || 0);
+          /* active+wired = pages actually in use; inactive is reclaimable cache */
+          const memInUse = (m.active_mb || 0) + (m.wired_mb || 0);
+          const memTotal = m.total_mb || 1;
+          const cpu = latest.cpu || null;
+          const cpuUsed = cpu ? (cpu.used_pct ?? 0) : null;
           dashboard.innerHTML = [
+            panel('CPU Usage', cpu
+              ? `<p class="stat-value">${cpuUsed}%</p><div class="progress"><span style="width:${cpuUsed}%"></span></div><p class="muted">user ${cpu.user_pct}% · sys ${cpu.system_pct}% · intr ${cpu.interrupt_pct}% · idle ${cpu.idle_pct}%</p>`
+              : '<p class="muted">CPU data unavailable</p>'),
             panel('Load Average', `<p class="stat-value">${(load['1min'] ?? 0).toFixed(2)}</p><p class="muted">1m · ${(load['5min'] ?? 0).toFixed(2)} (5m) · ${(load['15min'] ?? 0).toFixed(2)} (15m)</p>`),
-            panel('Memory Usage', `<p class="stat-value">${mbToGb(memUsed)} / ${mbToGb(m.total_mb || 0)} GB</p><div class="progress"><span style="width:${pct(memUsed, m.total_mb || 0)}%"></span></div>`),
-            panel('Swap Usage', `<p class="stat-value">${mbToGb(swap.used_mb || 0)} / ${mbToGb(swap.total_mb || 0)} GB</p><div class="progress"><span style="width:${pct(swap.used_mb || 0, swap.total_mb || 0)}%"></span></div>`),
+            panel('Memory', `<p class="stat-value">${mbToGb(memInUse)} / ${mbToGb(memTotal)} GB</p><div class="progress"><span style="width:${pct(memInUse, memTotal)}%"></span></div><p class="muted">active + wired · inactive ${mbToGb(m.inactive_mb||0)} GB (cache) · free ${mbToGb(m.free_mb||0)} GB</p>`),
+            panel('Swap', `<p class="stat-value">${mbToGb(swap.used_mb || 0)} / ${mbToGb(swap.total_mb || 0)} GB</p><div class="progress"><span style="width:${pct(swap.used_mb || 0, swap.total_mb || 0)}%"></span></div>`),
             panel('OS', `<p>${latest.os?.type || 'Unknown'} ${latest.os?.release || ''}</p><p class="muted">${latest.os?.machine || ''}</p>`),
           ].join('');
+          return;
+        }
+
+        if (currentTab === 'cpu') {
+          const cpu = latest.cpu || null;
+          if (!cpu) {
+            dashboard.innerHTML = panel('CPU', '<p class="muted">CPU data unavailable.</p>');
+            return;
+          }
+          /* val is already 0-100 (sysctl gives percentages summing to ~100) */
+          const bar = (label, val, color) => {
+            const w = Math.min(100, Math.max(0, val));
+            const spanStyle = color
+              ? `width:${w}%;background:${color}`
+              : `width:${w}%`;
+            return `<div class="kv"><span>${label}</span><strong>${val}%</strong></div>`
+              + `<div class="progress" style="margin-bottom:0.6rem">`
+              + `<span style="${spanStyle}"></span></div>`;
+          };
+          dashboard.innerHTML = panel('CPU Breakdown',
+            bar('Total Used (user+sys+intr)', cpu.used_pct ?? 0) +
+            bar('User',      cpu.user_pct      ?? 0, '#3b82f6') +
+            bar('System',    cpu.system_pct    ?? 0, '#f59e0b') +
+            bar('Interrupt', cpu.interrupt_pct ?? 0, '#ef4444') +
+            bar('Nice',      cpu.nice_pct      ?? 0, '#10b981') +
+            bar('Idle',      cpu.idle_pct      ?? 0, '#6b7280')
+          );
           return;
         }
 
@@ -70,9 +103,35 @@
         }
 
         if (currentTab === 'memory') {
+          const total = m.total_mb || 1;
+          /* Each segment bar is relative to total physical RAM */
+          const memBar = (label, mb, color, note) => {
+            const p = pct(mb, total);
+            const colorStyle = color ? `background:${color}` : '';
+            return `<div class="kv" style="margin-top:0.5rem">`
+              + `<span>${label}</span>`
+              + `<strong>${mbToGb(mb)} GB <span class="muted">(${p}%)</span></strong></div>`
+              + `<div class="progress" style="margin-bottom:0.35rem">`
+              + `<span style="width:${p}%;${colorStyle}"></span></div>`
+              + (note ? `<p class="muted" style="font-size:0.76rem;margin:0 0 0.9rem">${note}</p>` : '');
+          };
           dashboard.innerHTML = [
-            panel('Memory Detail', `<div class="kv"><span>Total</span><strong>${mbToGb(m.total_mb || 0)} GB</strong></div><div class="kv"><span>Free</span><strong>${mbToGb(m.free_mb || 0)} GB</strong></div><div class="kv"><span>Active</span><strong>${mbToGb(m.active_mb || 0)} GB</strong></div><div class="kv"><span>Wired</span><strong>${mbToGb(m.wired_mb || 0)} GB</strong></div>`),
-            panel('Swap Detail', `<div class="kv"><span>Total</span><strong>${mbToGb(swap.total_mb || 0)} GB</strong></div><div class="kv"><span>Used</span><strong>${mbToGb(swap.used_mb || 0)} GB</strong></div>`),
+            panel(`Physical Memory — ${mbToGb(total)} GB total`,
+              memBar('Active',   m.active_mb   || 0, '#3b82f6',
+                'Pages recently used — will be reused before freeing') +
+              memBar('Inactive', m.inactive_mb || 0, '#f59e0b',
+                'Used but not recently — first candidate for reclaim') +
+              memBar('Wired',    m.wired_mb    || 0, '#ef4444',
+                'Kernel & locked pages — cannot be paged out') +
+              memBar('Free',     m.free_mb     || 0, '#10b981',
+                'Immediately available to any process')
+            ),
+            panel('Swap',
+              `<div class="kv"><span>Total</span><strong>${mbToGb(swap.total_mb || 0)} GB</strong></div>`
+              + `<div class="kv"><span>Used</span><strong>${mbToGb(swap.used_mb || 0)} GB</strong></div>`
+              + `<div class="progress"><span style="width:${pct(swap.used_mb||0, swap.total_mb||1)}%"></span></div>`
+              + `<p class="muted" style="font-size:0.76rem;margin-top:0.4rem">Swap pressure indicates RAM exhaustion</p>`
+            ),
           ].join('');
           return;
         }
