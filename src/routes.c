@@ -12,6 +12,7 @@
 #include "../include/networking.h"
 #include "../include/routes.h"
 #include "../include/template_engine.h"
+#include "../include/urls.h"
 
 /* Template rendering helper */
 int
@@ -35,48 +36,24 @@ render_template_response(http_request_t *req, struct template_data *data)
 	return ret;
 }
 
-/* Dashboard page handler */
+/* Generic template-backed view handler */
 int
-dashboard_handler(http_request_t *req)
+view_template_handler(http_request_t *req)
 {
+	const struct view_route *view = find_view_route(req->method, req->url);
+
+	if (view == NULL)
+		return http_send_error(req, 404, "Not Found");
+
 	struct template_data data = {
-		.title = "MiniWeb - Dashboard",
-		.page_content = "dashboard.html",
-		.extra_head_file = "dashboard_extra_head.html",
-		.extra_js_file = "dashboard_extra_js.html"
+		.title = view->title,
+		.page_content = view->page,
+		.extra_head_file = view->extra_head,
+		.extra_js_file = view->extra_js,
 	};
 
 	return render_template_response(req, &data);
 }
-
-/* API root page handler */
-int
-apiroot_handler(http_request_t *req)
-{
-	struct template_data data = {
-		.title = "MiniWeb - API Root",
-		.page_content = "api.html",
-		.extra_head_file = "api_extra_head.html",
-		.extra_js_file = "api_extra_js.html"
-	};
-
-	return render_template_response(req, &data);
-}
-
-/* Documentation page handler */
-int
-man_handler(http_request_t *req)
-{
-	struct template_data data = {
-		.title = "MiniWeb - Documentation",
-		.page_content = "docs.html",
-		.extra_head_file = "docs_extra_head.html",
-		.extra_js_file = "docs_extra_js.html"
-	};
-
-	return render_template_response(req, &data);
-}
-
 
 /* Favicon handler */
 int

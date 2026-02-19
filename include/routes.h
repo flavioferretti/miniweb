@@ -14,10 +14,7 @@ void            init_routes(void);
 route_handler_t route_match(const char *method, const char *path);
 
 /* ── Handler declarations ───────────────────────────────────────── */
-int dashboard_handler     (http_request_t *req);
-int apiroot_handler       (http_request_t *req);
-int man_handler           (http_request_t *req);
-int networking_handler    (http_request_t *req);
+int view_template_handler(http_request_t *req);
 int favicon_handler       (http_request_t *req);
 int static_handler        (http_request_t *req);
 int metrics_handler       (http_request_t *req);
