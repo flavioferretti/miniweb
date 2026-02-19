@@ -6,6 +6,7 @@
 #include <sys/stat.h>
 
 #include "../include/template_engine.h"
+#include "../include/config.h"
 
 /*
  * Read file content into a dynamically allocated buffer.
@@ -49,9 +50,9 @@ read_file_content(const char *path, char **content)
 static int
 read_template_file(const char *filename, char **content)
 {
-	char path[256];
+	char path[512];
 	/* Sanitize or validate filename in production to prevent traversal */
-	snprintf(path, sizeof(path), "templates/%s", filename);
+	snprintf(path, sizeof(path), "%s/%s", config_templates_dir, filename);
 	return read_file_content(path, content);
 }
 
@@ -169,15 +170,12 @@ template_render_with_data(struct template_data *data, char **output)
 	}
 
 	/* Load the global base layout (shell) */
-	if (read_file_content("templates/base.html", &base_template) != 0) {
+	if (read_template_file("base.html", &base_template) != 0) {
 		goto cleanup;
 	}
 
 	/* Load the specific inner page content */
-	char page_path[256];
-	snprintf(page_path, sizeof(page_path), "templates/%s",
-			 data->page_content);
-	if (read_file_content(page_path, &page_content) != 0) {
+	if (read_template_file(data->page_content, &page_content) != 0) {
 		goto cleanup;
 	}
 
