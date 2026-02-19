@@ -212,7 +212,7 @@ After removal, requests to that path will no longer match and will return `404 N
 |---|---|
 | `GET /api/man/search?q=query` | `apropos(1)` search, returns plain text (one entry per line) |
 | `GET /man/{area}/{section}/{page}` | Render man page as HTML (default) |
-| `GET /man/{area}/{section}/{page}.txt` | Plain text |
+| `GET /man/{area}/{section}/{page}.html` | HTML |
 | `GET /man/{area}/{section}/{page}.md` | Markdown |
 | `GET /man/{area}/{section}/{page}.pdf` | PDF |
 | `GET /man/{area}/{section}/{page}.ps` | PostScript |
