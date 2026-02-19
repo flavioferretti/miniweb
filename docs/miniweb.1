@@ -135,6 +135,47 @@ Network interface overview including routes and DNS configuration.
 .It Pa /apiroot
 API index page listing available endpoints and their response formats.
 .El
+.Ss Adding or Removing Regular Pages
+Template-backed pages such as
+.Pa /
+and
+.Pa /docs
+are defined in a static table in
+.Pa src/urls.c
+.Pq Dv view_routes .
+Each entry maps a method/path pair to:
+.Bl -bullet -compact
+.It
+page title
+.It
+main content template
+.Pq e.g. Pa dashboard.html
+.It
+optional extra head partial
+.It
+optional extra JavaScript partial
+.El
+.Pp
+To add a page (for example
+.Pa /about ):
+.Bl -enum -compact
+.It
+Create templates in
+.Pa templates/
+for the main content and optional extras.
+.It
+Add a new entry to
+.Dv view_routes
+in
+.Pa src/urls.c .
+.It
+Rebuild; startup route registration will include it automatically.
+.El
+.Pp
+To remove a page, delete its corresponding
+.Dv view_routes
+entry and rebuild.
+Requests to the removed path will then return 404.
 .Ss Metrics API
 .Bl -tag -width Ds
 .It Pa /api/metrics

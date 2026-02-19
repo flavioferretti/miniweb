@@ -161,6 +161,42 @@ rcctl start miniweb
 | `GET /networking` | Network interfaces, routes, DNS |
 | `GET /apiroot` | API index |
 
+### Add or Remove Regular Pages (`/`, `/docs`, ...)
+
+Template-backed pages are declared in one place: `view_routes[]` in `src/urls.c`.
+Each entry maps a URL path to a template and optional extra partials used by `base.html`.
+
+#### Add a new page (example: `/about`)
+
+1. Create page templates under `templates/`:
+   - `about.html` (main page body)
+   - `about_extra_head.html` (optional, can be empty)
+   - `about_extra_js.html` (optional, can be empty)
+2. Add a new `view_routes[]` entry in `src/urls.c`:
+
+```c
+{"GET", "/about", "MiniWeb - About", "about.html",
+ "about_extra_head.html", "about_extra_js.html"},
+```
+
+3. Rebuild and run:
+
+```sh
+make clean && make
+./build/miniweb -v
+```
+
+The route is registered automatically by `init_routes()` (same file), because all
+entries in `view_routes[]` are bound to `view_template_handler`.
+
+#### Remove an existing page
+
+1. Remove (or comment) the corresponding entry from `view_routes[]` in `src/urls.c`.
+2. Optionally delete the associated templates in `templates/`.
+3. Rebuild.
+
+After removal, requests to that path will no longer match and will return `404 Not Found`.
+
 ### Metrics API
 
 | Endpoint | Response |
