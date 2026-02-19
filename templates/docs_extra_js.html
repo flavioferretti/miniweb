@@ -165,12 +165,19 @@
   /* ── Search ──────────────────────────────────────────────────────────── */
 
   /* Parse a single apropos output line.
-   * Format: "name(section) - description"
-   * Returns {name, section, desc} or null. */
+   * apropos can produce two formats:
+   *   simple:  "ls(1) - list directory contents"
+   *   aliases: "kqueue, EV_SET, kevent, kqueue1(2) - kernel event notification"
+   * We extract the LAST token before "(section)" as the canonical name,
+   * because that is what man(1) will accept as a page name. */
   const parseAproposLine = (line) => {
-    const m = line.match(/^([a-zA-Z0-9_.:-]+)\(([^)]+)\)\s+-\s+(.*)$/);
+    const m = line.match(/^(.+?)\(([^)]+)\)\s+-\s+(.*)$/);
     if (!m) return null;
-    return { name: m[1], section: m[2], desc: m[3] };
+    /* m[1] may be "kqueue, EV_SET, kevent, kqueue1" — take the last token */
+    const names = m[1].split(/[,\s]+/).filter(Boolean);
+    const name = names[names.length - 1];
+    if (!name) return null;
+    return { name, section: m[2], desc: m[3] };
   };
 
   let searchTimer;

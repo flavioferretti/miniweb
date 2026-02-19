@@ -193,7 +193,14 @@ footer {
  * ─────────────────────────────────────────────────────────────────────────── */
 
 /* Header / footer tables (NAME(SECTION) ... date ... OS) */
-
+.permalink {
+  color: #0f1040;
+}
+.Dv {
+  color: #0f1040;
+  font-style: italic;
+  font-weight: 600;
+}
 
 /* Inline macros that must not break to a new line */
 .Nd, .Bf, .Op       { display: inline; }
@@ -220,7 +227,7 @@ code.Nm, .Fl, .Cm,
   .head {
     width: min(1200px, 100% - 2rem);
     margin-inline: auto;
-    background-color: #1155dd;
+    background-color: #111b2f;
     color: #edecce;
     padding: 2rem;
     border-radius: 0.5rem;
@@ -237,7 +244,7 @@ code.Nm, .Fl, .Cm,
   .foot {
     width: min(1200px, 100% - 2rem);
     margin-inline: auto;
-    background-color: #1155dd;
+    background-color: #111b2f;
     color: #edecce;
     padding: 2rem;
     border-radius: 0.5rem;

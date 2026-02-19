@@ -6,6 +6,7 @@
 #include "http_utils.h"
 #include <ctype.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
 #include <stdio.h>
@@ -81,13 +82,21 @@ safe_popen_read_argv(const char *path, char *const argv[],
 	}
 
 	if (pid == 0) {
-		/* Child */
+		/* Child: stdout → pipe, stderr → /dev/null.
+		 * Keeping stderr separate prevents mandoc/man error messages
+		 * (e.g. "No entry for X in section Y") from leaking into the
+		 * output buffer and being sent to the client as a 200 body. */
 		close(pipefd[0]);
 		dup2(pipefd[1], STDOUT_FILENO);
-		dup2(pipefd[1], STDERR_FILENO);
 		close(pipefd[1]);
 
-		/* Chiudi tutti gli altri fd */
+		int devnull = open("/dev/null", O_WRONLY);
+		if (devnull >= 0) {
+			dup2(devnull, STDERR_FILENO);
+			close(devnull);
+		}
+
+		/* Close all other fds */
 		for (int fd = 3; fd < 1024; fd++)
 			close(fd);
 

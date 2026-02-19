@@ -489,8 +489,16 @@ man_render_page(const char *area, const char *section, const char *page,
 	if (!filepath)
 		return NULL;
 
-	/* Rimuove newline finale dal path */
+	/* Strip trailing newline */
 	filepath[strcspn(filepath, "\r\n")] = 0;
+
+	/* Validate: man -w must return an absolute path.
+	 * An empty string means the page was not found.
+	 * A non-'/' first byte means something went wrong. */
+	if (filepath[0] != '/') {
+		free(filepath);
+		return NULL;
+	}
 
 	/* 3. Scelta del formato per mandoc */
 	const char *t_arg = "html"; // default

@@ -523,6 +523,7 @@ apply_openbsd_security(void)
 	unveil("/usr/bin/netstat",  "x");
 	unveil("/bin/sh",           "x");
 	unveil("/etc/man.conf",     "r");
+	unveil("/dev/null", "rw");
 
 	/* User/group lookups */
 	unveil("/etc/passwd",       "r");
