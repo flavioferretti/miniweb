@@ -19,6 +19,8 @@ static const struct view_route view_routes[] = {
 	 "api_extra_head.html", "api_extra_js.html"},
 	{"GET", "/networking", "MiniWeb - Networking", "networking.html",
 	 "networking_extra_head.html", "networking_extra_js.html"},
+	{"GET", "/packages", "MiniWeb - Package Manager", "packages.html",
+	 "packages_extra_head.html", "packages_extra_js.html"},
 };
 
 void
@@ -55,6 +57,9 @@ init_routes(void)
 	register_route("GET", "/favicon.ico", favicon_handler);
 	register_route("GET", "/api/metrics", metrics_handler);
 	register_route("GET", "/api/networking", networking_api_handler);
+	register_route("GET", "/api/packages/search", pkg_api_handler);
+	register_route("GET", "/api/packages/info", pkg_api_handler);
+	register_route("GET", "/api/packages/which", pkg_api_handler);
 }
 
 route_handler_t
@@ -83,6 +88,10 @@ route_match(const char *method, const char *path)
 		/* /api/man/... */
 		if (strncmp(path, "/api/man", 8) == 0)
 			return man_api_handler;
+
+		/* /api/packages/... */
+		if (strncmp(path, "/api/packages", 13) == 0)
+			return pkg_api_handler;
 
 		/* /static/... */
 		if (strncmp(path, "/static/", 8) == 0)

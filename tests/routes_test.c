@@ -20,6 +20,10 @@ int main(void)
 	assert(route_match("GET",  "/apiroot")        != NULL);
 	assert(route_match("GET",  "/networking")     != NULL);
 	assert(route_match("GET",  "/api/networking") != NULL);
+	assert(route_match("GET",  "/packages")       != NULL);
+	assert(route_match("GET",  "/api/packages/search") != NULL);
+	assert(route_match("GET",  "/api/packages/info")   != NULL);
+	assert(route_match("GET",  "/api/packages/which")  != NULL);
 	assert(route_match("GET",  "/favicon.ico")    != NULL);
 
 	/* Dynamic routes */
