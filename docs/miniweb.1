@@ -575,7 +575,9 @@ In early 2026 it was rewritten to use a native
 dispatcher with a
 .Dv EV_DISPATCH Ns -based
 worker pool, removing the external library dependency and improving
-throughput to over 7000 requests per second on a four-core system.
+throughput from roughly 7000 requests per second to 34771.76 requests
+per second on static-file benchmarks on a four-core system
+(approximately +396.74%, or 4.97x).
 A configuration file facility was added shortly after,
 replacing all hardcoded values with a runtime-configurable
 .Pa miniweb.conf
