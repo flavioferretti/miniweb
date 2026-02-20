@@ -176,9 +176,11 @@ Then open
 .Sh ENDPOINTS
 .Nm
 provides the following HTTP endpoints.
-All responses use
-.Cm Connection: close ;
-persistent connections are not supported.
+Responses follow HTTP/1.1 connection semantics: keep-alive is enabled by
+default for HTTP/1.1 unless the client sends
+.Cm Connection: close .
+Handlers may also force close behavior, and each connection is capped at 64
+served requests before being closed.
 .Ss Web Interface
 .Bl -tag -width Ds
 .It Pa /
@@ -810,9 +812,11 @@ Increase the limit or reduce connection hold time.
 .Sh STANDARDS
 The HTTP implementation follows RFC 7230 through RFC 7235
 .Pq HTTP/1.1 .
-Only
-.Cm Connection: close
-is supported; persistent connections and pipelining are not implemented.
+Persistent connections
+.Pq keep-alive
+are supported for sequential requests
+.Pq no pipelining ,
+with an internal per-connection cap of 64 requests.
 .Sh HISTORY
 .Nm
 was originally based on
