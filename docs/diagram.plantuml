@@ -20,8 +20,8 @@ skinparam component {
 package "<&layers*1> Project functions" #EAF4FF {
   component "main.c\n(queue_*, worker_thread, main)" as Main #A8D8FF
   component "http_handler.c\n(http_response_*, http_send_*)" as HTTP #9ED9FF
-  component "urls.c\n(init_routes, route_match)" as URLS #B8E0FF
-  component "routes.c\n(view/static handlers)" as Routes #C4E8FF
+  component "urls.c\n(init_routes, route_match,\nregister_route, find_view_route)" as URLS #B8E0FF
+  component "routes.c\n(view/static/favicon handlers,\nrender_template_response)" as Routes #C4E8FF
   component "metrics.c\n(get_system_metrics_json, metrics_*)" as Metrics #D6EFFF
   component "networking.c\n(networking_get_*, networking_*_handler)" as Net #CFE6FF
   component "man.c\n(man_api_handler, man_render_handler)" as Man #E3F2FF
@@ -60,7 +60,10 @@ Main --> HTTP : http_send_error(), http_request_*\n(http_handler.h)
 Main --> URLS : init_routes(), route_match()\n(urls.h)
 Main --> Conf : conf_defaults/load/dump(), conf_apply_cli()\n(conf.h)
 
-URLS --> Routes : view_template_handler(), favicon_handler(),\nmetrics_handler(), networking_api_handler(),\nman_api_handler(), man_render_handler(), static_handler()\n(routes.h, metrics.h, networking.h, man.h)
+URLS --> Routes : view_template_handler(), favicon_handler(),\nstatic_handler()\n(routes.h)
+URLS --> Metrics : metrics_handler()\n(metrics.h)
+URLS --> Net : networking_api_handler()\n(networking.h)
+URLS --> Man : man_api_handler(), man_render_handler()\n(man.h)
 
 Routes --> Template : template_render(), template_render_with_data()\n(template_engine.h)
 Routes --> HTTP : http_response_*, http_send_*\n(http_handler.h)
