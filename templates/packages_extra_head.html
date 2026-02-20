@@ -29,6 +29,31 @@
   padding: 0.8rem;
   margin-top: 0.75rem;
 }
+.pkg-list-button {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 0.45rem;
+  padding: 0.35rem 0.55rem;
+  cursor: pointer;
+}
+.pkg-list-button:hover {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+.pkg-detail h4 { margin-bottom: 0.5rem; }
+.pkg-detail details { margin-top: 0.6rem; }
+.pkg-detail summary { cursor: pointer; color: var(--text); }
+.pkg-files-scroll {
+  max-height: 260px;
+  overflow: auto;
+  margin-top: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.5rem;
+  background: var(--surface-2);
+}
+
 /* Tab navigation - Same style as dashboard */
 .tab-navigation {
   display: flex;
