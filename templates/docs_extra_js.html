@@ -9,7 +9,7 @@
   const searchInput       = document.getElementById('manSearch');
   const searchResults     = document.getElementById('searchResults');
 
-  /* ── Helpers ─────────────────────────────────────────────────────────── */
+  /* -- Helpers ----------------------------------------------------------- */
 
   const areaLabel = (area) =>
     area === 'system' ? 'System' : area === 'x11' ? 'X11' : 'Local';
@@ -62,7 +62,7 @@
     );
   };
 
-  /* ── Section browser ─────────────────────────────────────────────────── */
+  /* -- Section browser --------------------------------------------------- */
 
   const openSection = async (area, sectionId, sectionName) => {
     sectionsContainer.classList.add('hidden');
@@ -162,7 +162,7 @@
     sectionsContainer.classList.remove('hidden');
   });
 
-  /* ── Search ──────────────────────────────────────────────────────────── */
+  /* -- Search ------------------------------------------------------------ */
 
   /* Parse a single apropos output line.
    * apropos can produce two formats:
@@ -242,7 +242,7 @@
       searchResults.classList.add('hidden');
   });
 
-  /* ── Boot ────────────────────────────────────────────────────────────── */
+  /* -- Boot -------------------------------------------------------------- */
   loadSections();
 })();
 </script>
