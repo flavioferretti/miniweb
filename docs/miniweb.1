@@ -703,6 +703,29 @@ $ for p in / /docs /apiroot /networking \e
          -w '%{http_code}' https://example.com$p)"
   done
 .Ed
+.Pp
+Esempio di script
+.Xr rc.d 8
+per eseguire
+.Nm
+come servizio su OpenBSD:
+.Bd -literal -offset indent
+# cat /etc/rc.d/miniweb
+#!/bin/ksh
+
+# Il "daemon" qui e\(aq lo script wrapper
+daemon="/home/flavio/DEV/miniweb/build/miniweb"
+daemon_flags="-f /etc/miniweb.conf"
+daemon_user="flavio"
+
+. /etc/rc.d/rc.subr
+
+# IMPORTANTE: Poiche\(aq lo script wrapper lancia un altro processo (miniweb),
+# rc.subr perderebbe traccia del PID. Usiamo rc_bg=YES.
+rc_bg=YES
+
+rc_cmd $1
+.Ed
 .Sh DEVELOPMENT
 .Ss Testing
 .Bd -literal -offset indent

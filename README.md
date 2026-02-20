@@ -365,6 +365,23 @@ for p in / /docs /apiroot /networking \
 done
 ```
 
+### OpenBSD rc.d service
+
+Esempio di script `/etc/rc.d/miniweb`:
+
+```sh
+#!/bin/ksh
+
+daemon="/home/flavio/DEV/miniweb/build/miniweb"
+daemon_flags="-f /etc/miniweb.conf"
+daemon_user="flavio"
+
+. /etc/rc.d/rc.subr
+
+rc_bg=YES
+rc_cmd $1
+```
+
 ## Development
 
 ### Testing
