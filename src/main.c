@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -44,6 +45,7 @@
 #define REQUEST_BUFFER_SIZE 16384
 #define LISTEN_BACKLOG      128
 #define QUEUE_CAPACITY      512
+#define MAX_KEEPALIVE_REQUESTS 64
 
 /* -- Active configuration (populated in main before any thread starts) ------ */
 static miniweb_conf_t config;
@@ -63,6 +65,8 @@ typedef struct connection {
 	char             buffer[REQUEST_BUFFER_SIZE];
 	size_t           bytes_read;
 	time_t           created;
+	time_t           last_activity;
+	int              requests_served;
 	unsigned int     gen;     /* matches conn_gen[fd] at alloc time */
 } connection_t;
 
@@ -163,6 +167,7 @@ alloc_connection(int fd, struct sockaddr_in *addr)
 
 		conn->fd      = fd;
 		conn->created = time(NULL);
+		conn->last_activity = conn->created;
 		conn->gen     = conn_gen[fd];
 		if (addr)
 			memcpy(&conn->addr, addr, sizeof(struct sockaddr_in));
@@ -203,20 +208,68 @@ set_nonblock(int fd)
 static int
 parse_request_line(const char *buf, char *method, char *url, char *version)
 {
-	const char *eol = strstr(buf, "\r\n");
-	if (!eol)
+	const char *sp1 = strchr(buf, ' ');
+	if (!sp1 || sp1 == buf)
 		return -1;
 
-	size_t len = (size_t)(eol - buf);
-	char   line[2048];
-	if (len >= sizeof(line))
+	const char *sp2 = strchr(sp1 + 1, ' ');
+	if (!sp2 || sp2 == sp1 + 1)
 		return -1;
 
-	memcpy(line, buf, len);
-	line[len] = '\0';
+	const char *eol = strstr(sp2 + 1, "\r\n");
+	if (!eol || eol == sp2 + 1)
+		return -1;
 
-	return (sscanf(line, "%31s %511s %31s", method, url, version) == 3)
-	? 0 : -1;
+	size_t mlen = (size_t)(sp1 - buf);
+	size_t ulen = (size_t)(sp2 - (sp1 + 1));
+	size_t vlen = (size_t)(eol - (sp2 + 1));
+
+	if (mlen >= 32 || ulen >= 512 || vlen >= 32)
+		return -1;
+
+	memcpy(method, buf, mlen);
+	method[mlen] = '\0';
+	memcpy(url, sp1 + 1, ulen);
+	url[ulen] = '\0';
+	memcpy(version, sp2 + 1, vlen);
+	version[vlen] = '\0';
+
+	return 0;
+}
+
+static const char *
+find_header_end(const char *buf)
+{
+	return strstr(buf, "\r\n\r\n");
+}
+
+static int
+request_keep_alive(const char *buf, const char *version)
+{
+	int is_http11 = (strcmp(version, "HTTP/1.1") == 0);
+	const char *p = buf;
+
+	while ((p = strcasestr(p, "\r\nConnection:")) != NULL) {
+		p += 13;
+		while (*p == ' ' || *p == '\t')
+			p++;
+		if (strncasecmp(p, "close", 5) == 0)
+			return 0;
+		if (strncasecmp(p, "keep-alive", 10) == 0)
+			return 1;
+	}
+
+	if (!strncasecmp(buf, "Connection:", 11)) {
+		p = buf + 11;
+		while (*p == ' ' || *p == '\t')
+			p++;
+		if (strncasecmp(p, "close", 5) == 0)
+			return 0;
+		if (strncasecmp(p, "keep-alive", 10) == 0)
+			return 1;
+	}
+
+	return is_http11 ? 1 : 0;
 }
 
 static void
@@ -270,6 +323,7 @@ worker_thread(void *arg)
 		}
 
 		int fd = conn->fd;
+		int close_conn = 1;
 
 		/* -- Read loop: accumulate until we have a full HTTP request ---- */
 		int request_done = 0;
@@ -296,9 +350,10 @@ worker_thread(void *arg)
 			}
 
 			conn->bytes_read += (size_t)n;
+			conn->last_activity = time(NULL);
 			conn->buffer[conn->bytes_read] = '\0';
 
-			if (strstr(conn->buffer, "\r\n\r\n")) {
+			if (find_header_end(conn->buffer)) {
 				request_done = 1;
 			} else if (conn->bytes_read >= (size_t)config.max_req_size - 1) {
 				/* Request too large */
@@ -318,6 +373,7 @@ worker_thread(void *arg)
 
 			if (parse_request_line(conn->buffer,
 				method, path, version) == 0) {
+				int keep_alive = request_keep_alive(conn->buffer, version);
 				http_handler_t handler = route_match(method, path);
 			if (handler) {
 				http_request_t req = {
@@ -325,31 +381,59 @@ worker_thread(void *arg)
 					.method      = method,
 					.url         = path,
 					.version     = version,
+					.keep_alive  = keep_alive,
 					.buffer      = conn->buffer,
 					.buffer_len  = conn->bytes_read,
 					.client_addr = &conn->addr,
 				};
 				handler(&req);
+				keep_alive = req.keep_alive;
+				if (keep_alive &&
+				    conn->requests_served < MAX_KEEPALIVE_REQUESTS) {
+					conn->requests_served++;
+					conn->bytes_read = 0;
+					conn->buffer[0] = '\0';
+					conn->last_activity = time(NULL);
+
+					struct kevent ev;
+					EV_SET(&ev, fd, EVFILT_READ, EV_ENABLE, 0, 0, conn);
+					if (kevent(kq_fd, &ev, 1, NULL, 0, NULL) == 0)
+						close_conn = 0;
+				}
 			} else {
 				http_request_t req = {
 					.fd          = fd,
 					.method      = method,
 					.url         = path,
 					.version     = version,
+					.keep_alive  = keep_alive,
 					.buffer      = conn->buffer,
 					.buffer_len  = conn->bytes_read,
 					.client_addr = &conn->addr,
 				};
 				http_send_error(&req, 404, "Not Found");
+				if (req.keep_alive &&
+				    conn->requests_served < MAX_KEEPALIVE_REQUESTS) {
+					conn->requests_served++;
+					conn->bytes_read = 0;
+					conn->buffer[0] = '\0';
+					conn->last_activity = time(NULL);
+
+					struct kevent ev;
+					EV_SET(&ev, fd, EVFILT_READ, EV_ENABLE, 0, 0, conn);
+					if (kevent(kq_fd, &ev, 1, NULL, 0, NULL) == 0)
+						close_conn = 0;
+				}
 			}
 				} else {
 					send_error_direct(fd, 400, "Bad Request");
 				}
 		}
 
-		/* Connection: close semantics — always shut down after one request. */
-		close(fd);
-		free_connection(fd);
+		if (close_conn) {
+			close(fd);
+			free_connection(fd);
+		}
 
 		next_conn:;
 	}
@@ -416,7 +500,7 @@ sweep_idle_connections(void)
 	pthread_mutex_lock(&conn_mutex);
 	for (int i = 0; i < MAX_CONNECTIONS; i++) {
 		connection_t *c = connections[i];
-		if (c && (now - c->created) > config.conn_timeout) {
+		if (c && (now - c->last_activity) > config.conn_timeout) {
 			close(c->fd);
 			free(c);
 			connections[i] = NULL;

@@ -19,6 +19,7 @@ typedef struct http_request {
 	const char *method;              /* GET, POST, etc. */
 	const char *url;                 /* Request path */
 	const char *version;             /* HTTP/1.1 */
+	int keep_alive;                  /* 1 if connection should stay open */
 	const char *buffer;              /* Full raw request buffer */
 	size_t buffer_len;               /* Bytes in buffer */
 	struct sockaddr_in *client_addr; /* Peer address */
