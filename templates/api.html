@@ -30,6 +30,22 @@
           <p>Networking info JSON API, retireve: routes, DNS, interface statistics.</p>
         </article>
 
+
+        <article class="panel api-endpoint">
+          <div class="endpoint-top"><span class="method">GET</span><a href="/api/packages/search?q=curl"><code>/api/packages/search?q={query}</code></a></div>
+          <p>Search installed packages by package name pattern.</p>
+        </article>
+
+        <article class="panel api-endpoint">
+          <div class="endpoint-top"><span class="method">GET</span><a href="/api/packages/info?name=curl"><code>/api/packages/info?name={package}</code></a></div>
+          <p>Returns detailed package information for a single package.</p>
+        </article>
+
+        <article class="panel api-endpoint">
+          <div class="endpoint-top"><span class="method">GET</span><a href="/api/packages/which?path=/usr/local/bin/curl"><code>/api/packages/which?path={absolute_file_path}</code></a></div>
+          <p>Returns package(s) that own the provided absolute file path.</p>
+        </article>
+
         <article class="panel api-endpoint">
           <div class="endpoint-top"><span class="method">GET</span><a href="/static/benchmark.html"><code>/static/benchmark.html</code></a></div>
           <h4>Benchmarks</h4>

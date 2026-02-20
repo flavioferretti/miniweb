@@ -36,6 +36,9 @@ int man_render_handler(http_request_t *req);
 /** Serve /api/man JSON endpoints. */
 int man_api_handler(http_request_t *req);
 
+/** Serve /api/packages JSON endpoints. */
+int pkg_api_handler(http_request_t *req);
+
 /** Render an HTML response from template data. */
 int render_template_response(http_request_t *req, struct template_data *data);
 

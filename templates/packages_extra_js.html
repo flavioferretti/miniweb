@@ -1,0 +1,117 @@
+<script>
+(() => {
+  const tabs = document.getElementById('pkgTabNavigation');
+  const dashboard = document.getElementById('packages-dashboard');
+  if (!tabs || !dashboard) return;
+
+  let currentTab = 'search';
+
+  const panel = (title, body) => `
+    <article class="panel stat-card">
+      <h3>${title}</h3>
+      ${body}
+    </article>
+  `;
+
+  const searchView = () => panel('Search packages by name', `
+    <form class="pkg-form" id="pkg-search-form">
+      <input id="pkg-search-query" placeholder="e.g. curl" required />
+      <button type="submit">Search</button>
+    </form>
+    <div id="pkg-search-result" class="muted">No query yet.</div>
+  `);
+
+  const infoView = () => panel('View single package info', `
+    <form class="pkg-form" id="pkg-info-form">
+      <input id="pkg-info-name" placeholder="e.g. curl-8.8.0" required />
+      <button type="submit">Get info</button>
+    </form>
+    <div id="pkg-info-result" class="muted">No package selected.</div>
+  `);
+
+  const whichView = () => panel('Find package owning a file path', `
+    <form class="pkg-form" id="pkg-which-form">
+      <input id="pkg-which-path" placeholder="e.g. /usr/local/bin/curl" required />
+      <button type="submit">Lookup</button>
+    </form>
+    <div id="pkg-which-result" class="muted">No path provided.</div>
+  `);
+
+  const render = () => {
+    if (currentTab === 'search') dashboard.innerHTML = searchView();
+    if (currentTab === 'info') dashboard.innerHTML = infoView();
+    if (currentTab === 'which') dashboard.innerHTML = whichView();
+    bindForms();
+  };
+
+  const renderList = (container, items) => {
+    if (!items || !items.length) {
+      container.innerHTML = '<p class="muted">No results.</p>';
+      return;
+    }
+    container.innerHTML = `<ul class="pkg-list">${items.map((item) => `<li><code>${item}</code></li>`).join('')}</ul>`;
+  };
+
+  const bindForms = () => {
+    const searchForm = document.getElementById('pkg-search-form');
+    const infoForm = document.getElementById('pkg-info-form');
+    const whichForm = document.getElementById('pkg-which-form');
+
+    searchForm?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const q = document.getElementById('pkg-search-query').value.trim();
+      const target = document.getElementById('pkg-search-result');
+      if (!q) return;
+      target.textContent = 'Searching...';
+      try {
+        const resp = await fetch(`/api/packages/search?q=${encodeURIComponent(q)}`);
+        const data = await resp.json();
+        renderList(target, data.packages || []);
+      } catch {
+        target.innerHTML = '<p class="muted">Search failed.</p>';
+      }
+    });
+
+    infoForm?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const name = document.getElementById('pkg-info-name').value.trim();
+      const target = document.getElementById('pkg-info-result');
+      if (!name) return;
+      target.textContent = 'Loading package info...';
+      try {
+        const resp = await fetch(`/api/packages/info?name=${encodeURIComponent(name)}`);
+        const data = await resp.json();
+        const info = data.info || data.error || 'No data';
+        target.innerHTML = `<div class="pkg-output">${info}</div>`;
+      } catch {
+        target.innerHTML = '<p class="muted">Info lookup failed.</p>';
+      }
+    });
+
+    whichForm?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const path = document.getElementById('pkg-which-path').value.trim();
+      const target = document.getElementById('pkg-which-result');
+      if (!path) return;
+      target.textContent = 'Finding owner package...';
+      try {
+        const resp = await fetch(`/api/packages/which?path=${encodeURIComponent(path)}`);
+        const data = await resp.json();
+        renderList(target, data.packages || []);
+      } catch {
+        target.innerHTML = '<p class="muted">Path lookup failed.</p>';
+      }
+    });
+  };
+
+  tabs.addEventListener('click', (event) => {
+    const button = event.target.closest('.tab-button');
+    if (!button) return;
+    currentTab = button.dataset.tab;
+    tabs.querySelectorAll('.tab-button').forEach((b) => b.classList.toggle('active', b === button));
+    render();
+  });
+
+  render();
+})();
+</script>

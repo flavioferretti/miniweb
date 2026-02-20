@@ -17,7 +17,8 @@ SRCS=      ${SRCDIR}/main.c \
            ${SRCDIR}/urls.c \
            ${SRCDIR}/networking.c \
            ${SRCDIR}/http_handler.c \
-           ${SRCDIR}/conf.c
+           ${SRCDIR}/conf.c \
+           ${SRCDIR}/pkg_manager.c
 
 # --- Object Files Mapping ---
 # Maps source files to their respective object files in the build directory
@@ -30,7 +31,8 @@ OBJS=      ${BUILDDIR}/main.o \
            ${BUILDDIR}/urls.o \
            ${BUILDDIR}/networking.o \
            ${BUILDDIR}/http_handler.o \
-           ${BUILDDIR}/conf.o
+           ${BUILDDIR}/conf.o \
+           ${BUILDDIR}/pkg_manager.o
 
 # --- Compiler Configuration ---
 CC?=       cc
@@ -96,6 +98,10 @@ ${BUILDDIR}/conf.o: ${SRCDIR}/conf.c
 	@mkdir -p ${BUILDDIR}
 	${CC} ${CFLAGS} -c ${SRCDIR}/conf.c -o $@
 
+${BUILDDIR}/pkg_manager.o: ${SRCDIR}/pkg_manager.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/pkg_manager.c -o $@
+
 ${BUILDDIR}/http_handler.o: ${SRCDIR}/http_handler.c
 	@mkdir -p ${BUILDDIR}
 	${CC} ${CFLAGS} -c ${SRCDIR}/http_handler.c -o $@
@@ -145,9 +151,9 @@ integration-test: ${BUILDDIR}/${PROG}
 	bash ${TESTDIR}/integration_endpoints.sh
 
 # Compilation of the routes test binary
-${BUILDDIR}/routes_test: ${TESTDIR}/routes_test.c ${SRCDIR}/routes.c ${SRCDIR}/metrics.c ${SRCDIR}/man.c ${SRCDIR}/networking.c ${SRCDIR}/template_engine.c ${SRCDIR}/http_utils.c ${SRCDIR}/urls.c ${SRCDIR}/http_handler.c ${SRCDIR}/conf.c
+${BUILDDIR}/routes_test: ${TESTDIR}/routes_test.c ${SRCDIR}/routes.c ${SRCDIR}/metrics.c ${SRCDIR}/man.c ${SRCDIR}/networking.c ${SRCDIR}/template_engine.c ${SRCDIR}/http_utils.c ${SRCDIR}/urls.c ${SRCDIR}/http_handler.c ${SRCDIR}/conf.c ${SRCDIR}/pkg_manager.c
 	@mkdir -p ${BUILDDIR}
-	${CC} ${CFLAGS} ${LDFLAGS} -I${INCDIR} -o $@ ${TESTDIR}/routes_test.c ${SRCDIR}/networking.c ${SRCDIR}/routes.c ${SRCDIR}/metrics.c ${SRCDIR}/man.c ${SRCDIR}/template_engine.c ${SRCDIR}/http_utils.c ${SRCDIR}/http_handler.c ${SRCDIR}/conf.c ${SRCDIR}/urls.c ${LDADD}
+	${CC} ${CFLAGS} ${LDFLAGS} -I${INCDIR} -o $@ ${TESTDIR}/routes_test.c ${SRCDIR}/networking.c ${SRCDIR}/routes.c ${SRCDIR}/metrics.c ${SRCDIR}/man.c ${SRCDIR}/template_engine.c ${SRCDIR}/http_utils.c ${SRCDIR}/http_handler.c ${SRCDIR}/conf.c ${SRCDIR}/pkg_manager.c ${SRCDIR}/urls.c ${LDADD}
 
 # Compilation of the template engine test binary
 ${BUILDDIR}/template_test: ${TESTDIR}/template_test.c ${SRCDIR}/template_engine.c
