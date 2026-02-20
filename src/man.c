@@ -17,6 +17,31 @@
 #define MAX_JSON_SIZE (256 * 1024)
 #define MAX_OUTPUT_SIZE (10 * 1024 * 1024) //10 MB!
 
+/* Remove nroff overstrike sequences (for example "N\bN", "_\bX")
+ * from mandoc ASCII output so markdown fallback remains readable. */
+static void
+strip_overstrike_ascii(char *text, size_t *len)
+{
+	if (!text || !len)
+		return;
+
+	size_t in = 0;
+	size_t out = 0;
+
+	while (in < *len && text[in] != '\0') {
+		if (in + 2 < *len && text[in + 1] == '\b') {
+			text[out++] = text[in + 2];
+			in += 3;
+			continue;
+		}
+
+		text[out++] = text[in++];
+	}
+
+	text[out] = '\0';
+	*len = out;
+}
+
 static int
 is_valid_token(const char *s)
 {
@@ -537,7 +562,10 @@ man_render_page(const char *area, const char *section, const char *page,
 			"mandoc", "-T", "ascii", filepath, NULL
 		};
 		output = safe_popen_read_argv("/usr/bin/mandoc", argv_ascii,
-								 MAX_OUTPUT_SIZE, 10, out_len);
+							 MAX_OUTPUT_SIZE, 10, out_len);
+		if (output && *out_len > 0) {
+			strip_overstrike_ascii(output, out_len);
+		}
 	}
 
 	/* Optional debug logging for PDF output verification. */
