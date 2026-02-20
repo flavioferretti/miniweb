@@ -277,7 +277,7 @@ When proxied, client identity/protocol are read in this order:
 table <miniweb> { 127.0.0.1 }
 
 http protocol "https_proxy" {
-    tls
+    tls keypair "server"
 
     match request header set "X-Forwarded-For"   value "$REMOTE_ADDR"
     match request header set "X-Forwarded-Proto" value "https"
