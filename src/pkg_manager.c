@@ -200,12 +200,71 @@ pkg_info_json(const char *package_name)
 }
 
 char *
+pkg_files_json(const char *package_name)
+{
+	if (!is_safe_pkg_name(package_name))
+		return strdup("{\"error\":\"invalid package name\"}");
+
+	char *const argv[] = {"pkg_info", "-L", (char *)package_name, NULL};
+	char *output = safe_popen_read_argv("/usr/sbin/pkg_info", argv,
+					    PKG_CMD_MAX_OUTPUT, 5, NULL);
+
+	char *escaped_name = json_escape_string(package_name);
+	if (!escaped_name)
+		escaped_name = strdup("");
+
+	if (!output) {
+		char *json = malloc(strlen(escaped_name) + 80);
+		if (!json) {
+			free(escaped_name);
+			return NULL;
+		}
+		snprintf(json, strlen(escaped_name) + 80,
+			 "{\"package\":\"%s\",\"files\":[]}", escaped_name);
+		free(escaped_name);
+		return json;
+	}
+
+	char *json = malloc(PKG_JSON_MAX);
+	if (!json) {
+		free(escaped_name);
+		free(output);
+		return NULL;
+	}
+
+	size_t offset = 0;
+	offset += snprintf(json + offset, PKG_JSON_MAX - offset,
+			  "{\"package\":\"%s\",\"files\":[", escaped_name);
+	free(escaped_name);
+
+	int first = 1;
+	char *saveptr = NULL;
+	char *line = strtok_r(output, "\n", &saveptr);
+	while (line && offset < PKG_JSON_MAX - 256) {
+		line[strcspn(line, "\r")] = '\0';
+		if (*line != '\0') {
+			char *escaped_line = json_escape_string(line);
+			offset += snprintf(json + offset, PKG_JSON_MAX - offset,
+					   "%s\"%s\"", first ? "" : ",",
+					   escaped_line ? escaped_line : "");
+			free(escaped_line);
+			first = 0;
+		}
+		line = strtok_r(NULL, "\n", &saveptr);
+	}
+	free(output);
+
+	offset += snprintf(json + offset, PKG_JSON_MAX - offset, "]}");
+	return json;
+}
+
+char *
 pkg_which_json(const char *file_path)
 {
 	if (!file_path || file_path[0] != '/')
 		return strdup("{\"error\":\"path must be absolute\"}");
 
-	char *const argv[] = {"pkg_info", "-E", (char *)file_path, NULL};
+	char *const argv[] = {"pkg_info", "-W", (char *)file_path, NULL};
 	char *output = safe_popen_read_argv("/usr/sbin/pkg_info", argv,
 					    PKG_CMD_MAX_OUTPUT, 5, NULL);
 
@@ -283,6 +342,10 @@ pkg_api_handler(http_request_t *req)
 		if (!get_query_value(req->url, "path", value, sizeof(value)))
 			return http_send_error(req, 400, "Missing path parameter");
 		json = pkg_which_json(value);
+	} else if (strncmp(path, "/files", 6) == 0) {
+		if (!get_query_value(req->url, "name", value, sizeof(value)))
+			return http_send_error(req, 400, "Missing name parameter");
+		json = pkg_files_json(value);
 	} else {
 		return http_send_error(req, 404, "Unknown packages endpoint");
 	}

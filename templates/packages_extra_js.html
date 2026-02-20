@@ -6,6 +6,12 @@
 
   let currentTab = 'search';
 
+  const esc = (value) => String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
+
   const panel = (title, body) => `
     <article class="panel stat-card">
       <h3>${title}</h3>
@@ -19,6 +25,7 @@
       <button type="submit">Search</button>
     </form>
     <div id="pkg-search-result" class="muted">No query yet.</div>
+    <div id="pkg-search-expanded"></div>
   `);
 
   const infoView = () => panel('View single package info', `
@@ -44,12 +51,55 @@
     bindForms();
   };
 
-  const renderList = (container, items) => {
+  const renderList = (container, items, clickHandler) => {
     if (!items || !items.length) {
       container.innerHTML = '<p class="muted">No results.</p>';
       return;
     }
-    container.innerHTML = `<ul class="pkg-list">${items.map((item) => `<li><code>${item}</code></li>`).join('')}</ul>`;
+    container.innerHTML = `<ul class="pkg-list">${items.map((item) => {
+      const safe = esc(item);
+      const encoded = encodeURIComponent(item);
+      const cls = clickHandler ? ` class="pkg-list-button" type="button" data-package="${encoded}"` : '';
+      return `<li>${clickHandler ? `<button${cls}><code>${safe}</code></button>` : `<code>${safe}</code>`}</li>`;
+    }).join('')}</ul>`;
+
+    if (clickHandler) {
+      container.querySelectorAll('.pkg-list-button').forEach((button) => {
+        button.addEventListener('click', () => clickHandler(decodeURIComponent(button.dataset.package || '')));
+      });
+    }
+  };
+
+  const renderPackageDetails = async (container, pkgName) => {
+    container.innerHTML = '<p class="muted">Loading package info...</p>';
+    try {
+      const [infoResp, filesResp] = await Promise.all([
+        fetch(`/api/packages/info?name=${encodeURIComponent(pkgName)}`),
+        fetch(`/api/packages/files?name=${encodeURIComponent(pkgName)}`)
+      ]);
+      const infoData = await infoResp.json();
+      const filesData = await filesResp.json();
+      const info = infoData.info || infoData.error || 'No data';
+      const files = filesData.files || [];
+
+      container.innerHTML = `
+        <div class="pkg-detail panel stat-card">
+          <h4><code>${esc(pkgName)}</code></h4>
+          <details open>
+            <summary>Package information</summary>
+            <div class="pkg-output">${esc(info)}</div>
+          </details>
+          <details>
+            <summary>Package files (${files.length})</summary>
+            <div class="pkg-files-scroll">
+              ${files.length ? `<ul class="pkg-list">${files.map((file) => `<li><code>${esc(file)}</code></li>`).join('')}</ul>` : '<p class="muted">No files returned.</p>'}
+            </div>
+          </details>
+        </div>
+      `;
+    } catch {
+      container.innerHTML = '<p class="muted">Unable to load package details.</p>';
+    }
   };
 
   const bindForms = () => {
@@ -61,12 +111,17 @@
       event.preventDefault();
       const q = document.getElementById('pkg-search-query').value.trim();
       const target = document.getElementById('pkg-search-result');
+      const expanded = document.getElementById('pkg-search-expanded');
       if (!q) return;
+      expanded.innerHTML = '';
       target.textContent = 'Searching...';
       try {
         const resp = await fetch(`/api/packages/search?q=${encodeURIComponent(q)}`);
         const data = await resp.json();
-        renderList(target, data.packages || []);
+        renderList(target, data.packages || [], async (pkgName) => {
+          target.innerHTML = '';
+          await renderPackageDetails(expanded, pkgName);
+        });
       } catch {
         target.innerHTML = '<p class="muted">Search failed.</p>';
       }
@@ -82,7 +137,7 @@
         const resp = await fetch(`/api/packages/info?name=${encodeURIComponent(name)}`);
         const data = await resp.json();
         const info = data.info || data.error || 'No data';
-        target.innerHTML = `<div class="pkg-output">${info}</div>`;
+        target.innerHTML = `<div class="pkg-output">${esc(info)}</div>`;
       } catch {
         target.innerHTML = '<p class="muted">Info lookup failed.</p>';
       }
