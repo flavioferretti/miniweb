@@ -439,44 +439,31 @@ http_send_error(http_request_t *req, int status_code, const char *message)
 int
 http_send_json(http_request_t *req, const char *json)
 {
-	size_t json_len = strlen(json);
-	char header[512];
-	int header_len = snprintf(header, sizeof(header),
-				  "HTTP/1.1 200 OK\r\n"
-				  "Content-Type: application/json\r\n"
-				  "Content-Length: %zu\r\n"
-				  "Connection: %s\r\n"
-				  "\r\n",
-				  json_len,
-				  req->keep_alive ? "keep-alive" : "close");
+	http_response_t *resp = http_response_create();
+	if (!resp)
+		return -1;
 
-	if (write_all(req->fd, header, header_len) < 0)
-		return -1;
-	if (write_all(req->fd, json, json_len) < 0)
-		return -1;
-	return 0;
+	resp->content_type = "application/json";
+	http_response_set_body(resp, (char *)json, strlen(json), 0);
+
+	int ret = http_response_send(req, resp);
+	http_response_free(resp);
+	return ret;
 }
 
 /* Send HTML response */
 int
 http_send_html(http_request_t *req, const char *html)
 {
-	size_t html_len = strlen(html);
-	char header[512];
-	int header_len = snprintf(header, sizeof(header),
-				  "HTTP/1.1 200 OK\r\n"
-				  "Content-Type: text/html; charset=utf-8\r\n"
-				  "Content-Length: %zu\r\n"
-				  "Connection: %s\r\n"
-				  "\r\n",
-				  html_len,
-				  req->keep_alive ? "keep-alive" : "close");
+	http_response_t *resp = http_response_create();
+	if (!resp)
+		return -1;
 
-	if (write_all(req->fd, header, header_len) < 0)
-		return -1;
-	if (write_all(req->fd, html, html_len) < 0)
-		return -1;
-	return 0;
+	http_response_set_body(resp, (char *)html, strlen(html), 0);
+
+	int ret = http_response_send(req, resp);
+	http_response_free(resp);
+	return ret;
 }
 
 /* Versione corretta di http_send_file */
@@ -498,34 +485,30 @@ http_send_file(http_request_t *req, const char *path, const char *mime)
 		return http_send_error(req, 500, "Cannot stat file");
 	}
 
-	char header[4096];
-	int header_len = snprintf(header, sizeof(header),
-				  "HTTP/1.1 200 OK\r\n"
-				  "Content-Type: %s\r\n"
-				  "Content-Length: %lld\r\n"
-				  "Connection: %s\r\n"
-				  "\r\n",
-				  mime, (long long)st.st_size,
-				  req->keep_alive ? "keep-alive" : "close");
+	http_response_t *resp = http_response_create();
+	if (!resp) {
+		close(fd);
+		return -1;
+	}
+	resp->content_type = mime;
 
 	char *cached = NULL;
 	size_t cached_len = 0;
 	if (file_cache_lookup(path, &st, &cached, &cached_len)) {
-		struct iovec iov[2];
-		iov[0].iov_base = header;
-		iov[0].iov_len = (size_t)header_len;
-		iov[1].iov_base = cached;
-		iov[1].iov_len = cached_len;
-		int rc = writev_all(req->fd, iov, 2);
-		free(cached);
+		http_response_set_body(resp, cached, cached_len, 1);
+		int rc = http_response_send(req, resp);
+		http_response_free(resp);
 		close(fd);
 		return rc;
 	}
 
-	if (write_all(req->fd, header, (size_t)header_len) < 0) {
+	http_response_set_body(resp, NULL, (size_t)st.st_size, 0);
+	if (http_response_send(req, resp) < 0) {
+		http_response_free(resp);
 		close(fd);
 		return -1;
 	}
+	http_response_free(resp);
 
 	char file_buf[65536];
 	char *cache_copy = NULL;
