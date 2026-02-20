@@ -115,6 +115,64 @@ Enable verbose logging to standard error.
 Logs include connection accept/close events, worker dispatch, and
 security initialisation details.
 .El
+.Sh FEATURES
+.Bl -bullet -compact
+.It
+Real-time system metrics: CPU load, memory, swap, disk usage,
+network interfaces, and process summaries.
+.It
+Process monitoring with top 10 by CPU and top 10 by memory.
+.It
+Integrated manual page browser and search.
+.It
+Security hardening through
+.Xr pledge 2
+and
+.Xr unveil 2 .
+.It
+High-performance architecture based on
+.Xr kqueue 2
+plus a worker thread pool.
+.It
+RESTful JSON API for external integrations.
+.It
+No native TLS implementation by design; intended to run behind
+.Xr relayd 8 .
+.El
+.Sh QUICK START
+.Ss Prerequisites
+.Bl -bullet -compact
+.It
+OpenBSD 7.8 or later.
+.It
+Base development tools:
+.Xr clang 1
+and
+.Xr make 1 .
+.It
+Optional benchmark tooling:
+.Xr wrk 1
+and
+.Xr gnuplot 1 .
+.El
+.Ss Build
+.Bd -literal -offset indent
+$ make clean && make
+.Ed
+.Ss Build man page
+.Bd -literal -offset indent
+$ make man
+.Ed
+.Ss Run unit tests
+.Bd -literal -offset indent
+$ make unit-tests
+.Ed
+.Ss Run
+.Bd -literal -offset indent
+$ ./build/miniweb -v
+.Ed
+Then open
+.Lk http://127.0.0.1:9001 .
 .Sh ENDPOINTS
 .Nm
 provides the following HTTP endpoints.
@@ -253,6 +311,133 @@ Serves the site favicon from
 .Pa static/assets/favicon.svg
 as
 .Cm image/svg+xml .
+.El
+.Sh ARCHITECTURE
+.Ss Request lifecycle
+.Bd -literal -offset indent
+accept()
+   |
+   v
+kqueue dispatcher (main thread)
+   |  EV_DISPATCH -> event auto-disabled after delivery
+   v
+work queue (pthread_cond_wait, zero busy-waiting)
+   |
+   v
+worker thread (1 of N)
+   |  recv() -> parse -> route_match() -> handler()
+   v
+close(fd) + free_connection()
+.Ed
+.Pp
+The main thread performs accept and queueing only.
+Workers do not call
+.Xr kevent 2 ,
+which avoids worker-side races.
+Use of
+.Dv EV_DISPATCH
+ensures one delivery per readiness event, preventing two workers from
+processing the same connection concurrently.
+.Ss Key components
+.Bl -tag -width Ds
+.It Pa src/main.c
+Single
+.Xr kqueue 2
+owned by the dispatcher thread, connection pool indexed by file
+descriptor, generation counters for stale descriptor detection, and
+periodic idle timeout sweeps.
+.It Pa src/metrics.c
+System metrics through native interfaces only:
+.Xr sysctl 2 ,
+.Xr getloadavg 3 ,
+.Xr getmntinfo 3 ,
+.Xr getifaddrs 3 ;
+includes a retry loop around
+.Dv KERN_PROC_ALL
+snapshot sizing.
+.It Pa src/http_handler.c
+Thread-safe per-request scratch buffers for header extraction and
+effective client IP computation with precedence:
+X-Real-IP, then X-Forwarded-For (first value), then peer socket address.
+.It Pa src/template_engine.c
+Minimal
+.Cm {{TOKEN}}
+substitution-based rendering from files under
+.Pa templates/ .
+.El
+.Sh PERFORMANCE
+Measured on OpenBSD 7.8 (amd64, 4-core CPU):
+.Bl -tag -width Ds
+.It Pa /static/test.html
+34,771.76 requests/s peak;
+0.220 ms best average latency.
+.It Pa /api/metrics
+Approximately 300 requests/s in current benchmark conditions.
+.El
+.Pp
+Relative to an earlier static-file baseline of about 7,000 requests/s,
+the measured peak corresponds to roughly +396.74%% throughput
+(about 4.97x).
+.Sh SECURITY
+.Ss Sandboxing
+.Nm
+limits filesystem and execution access with
+.Xr unveil 2
+to:
+.Bd -literal -offset indent
+templates/          r
+static/             r
+/usr/share/man      r
+/usr/local/man      r
+/usr/X11R6/man      r
+/usr/bin/mandoc     x
+/usr/bin/man        x
+/usr/bin/apropos    x
+/bin/ps             x
+/usr/bin/netstat    x
+/bin/sh             x
+/etc/man.conf       r
+/etc/passwd         r
+/etc/group          r
+/etc/resolv.conf    r
+.Ed
+.Pp
+Current
+.Xr pledge 2
+promises:
+.Bd -literal -offset indent
+stdio rpath inet route proc exec vminfo ps getpw
+.Ed
+.Ss Additional mitigations
+.Bl -bullet -compact
+.It
+Static path traversal protection: requests containing
+.Sq ..
+or
+.Sq //
+are rejected.
+.It
+Connection limiter: excess accepted clients are answered with HTTP 503
+and immediately closed.
+.It
+Input sanitisation for manual page parameters before invoking
+.Xr mandoc 1 .
+.It
+Reverse-proxy headers are trusted only from
+.Cm trusted_proxy .
+.El
+.Ss Known limitations
+.Bl -bullet -compact
+.It
+No built-in TLS.
+.It
+No authentication layer.
+.It
+Some JSON fields can be truncated by fixed-size buffers under extreme
+input sizes.
+.It
+Timeout logic cannot preempt a kernel-level stall inside
+.Xr mandoc 1 .
 .El
 .Sh REVERSE PROXY
 .Nm
@@ -516,6 +701,68 @@ $ for p in / /docs /apiroot /networking \e
          -w '%{http_code}' https://example.com$p)"
   done
 .Ed
+.Sh DEVELOPMENT
+.Ss Testing
+.Bd -literal -offset indent
+$ make unit-tests
+
+$ for p in / /docs /apiroot /networking \
+      /api/metrics /api/networking \
+      /static/css/custom.css /favicon.ico; do
+    printf '%-30s %s\n' "$p" \
+      "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:9001$p)"
+  done
+
+$ curl -s 'http://127.0.0.1:9001/api/man/search?q=pledge'
+$ curl -s http://127.0.0.1:9001/api/metrics | jq .
+.Ed
+.Ss Debug build
+.Bd -literal -offset indent
+$ make DEBUG=1
+$ ./build/miniweb -v
+.Ed
+.Sh TROUBLESHOOTING
+.Bl -tag -width "[write_all] Too many EAGAIN retries" -compact
+.It Cm bind: Address already in use
+Another process already owns the selected listening port.
+.It Cm pledge: Operation not permitted
+Runtime attempted a syscall not included in the current promise set.
+.It Cm sysctl data query failed: Cannot allocate memory
+Process table changed during snapshot collection; retry logic handles
+temporary races.
+.It Cm [write_all] Too many EAGAIN retries
+Client socket remained back-pressured for too long; connection is dropped.
+.It Cm Man pages not rendering
+Verify
+.Xr mandoc 1
+availability and unveil permissions; run with
+.Fl v
+for detail.
+.El
+.Sh ROADMAP
+.Bl -bullet
+.It
+WebSocket support for live metric streaming.
+.It
+Historical data via ring-buffer storage and graphs.
+.It
+Alert thresholds and notifications.
+.It
+IPv6 support.
+.It
+Prometheus exporter endpoint.
+.It
+Potential ports to FreeBSD and NetBSD.
+.El
+.Sh LICENSE
+BSD 3-Clause License.
+.Sh ACKNOWLEDGMENTS
+Built on OpenBSD interfaces and security model, in particular
+.Xr kqueue 2 ,
+.Xr pledge 2 ,
+.Xr unveil 2 ,
+and
+.Xr sysctl 2 .
 .Sh DIAGNOSTICS
 .Ex -std
 .Pp
