@@ -192,6 +192,9 @@ Manual page browser with search powered by
 .Xr apropos 1 .
 .It Pa /networking
 Network interface overview including routes and DNS configuration.
+.It Pa /packages
+Local package manager interface for searching package names, inspecting package
+metadata, and mapping file paths to owning packages.
 .It Pa /apiroot
 API index page listing available endpoints and their response formats.
 .El
@@ -267,6 +270,24 @@ call overhead.
 .It Pa /api/networking
 Returns a JSON object with network interface details,
 routing table entries, and DNS resolver configuration.
+.El
+.Ss Packages API
+.Bl -tag -width Ds
+.It Pa /api/packages/search?q={query}
+Search installed packages by package name pattern via
+.Xr pkg_info 1
+.Cm -Q .
+.It Pa /api/packages/info?name={package}
+Return detailed information for one installed package via
+.Xr pkg_info 1 .
+.It Pa /api/packages/which?path={absolute_file_path}
+Return package ownership for an absolute file path via
+.Xr pkg_info 1
+.Cm -E .
+.It Pa /api/packages/files?name={package}
+Return the file list installed by a package via
+.Xr pkg_info 1
+.Cm -L .
 .El
 .Ss Manual Page API
 .Bl -tag -width "/api/man/search"

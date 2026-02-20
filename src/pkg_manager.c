@@ -264,7 +264,7 @@ pkg_which_json(const char *file_path)
 	if (!file_path || file_path[0] != '/')
 		return strdup("{\"error\":\"path must be absolute\"}");
 
-	char *const argv[] = {"pkg_info", "-W", (char *)file_path, NULL};
+	char *const argv[] = {"pkg_info", "-E", (char *)file_path, NULL};
 	char *output = safe_popen_read_argv("/usr/sbin/pkg_info", argv,
 					    PKG_CMD_MAX_OUTPUT, 5, NULL);
 
