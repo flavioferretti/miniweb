@@ -720,10 +720,7 @@ daemon_user="flavio"
 
 . /etc/rc.d/rc.subr
 
-# IMPORTANTE: Poiche\(aq lo script wrapper lancia un altro processo (miniweb),
-# rc.subr perderebbe traccia del PID. Usiamo rc_bg=YES.
 rc_bg=YES
-
 rc_cmd $1
 .Ed
 .Sh DEVELOPMENT
