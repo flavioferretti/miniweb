@@ -426,7 +426,13 @@ make DEBUG=1
 
 ## License
 
-BSD 3-Clause License — see [LICENSE](LICENSE).
+This project is licensed under the **BSD 3-Clause License** - see the [LICENSE](LICENSE) file for details.
+
+### Third-Party Assets
+
+This project includes the **Satoshi** font family, designed by [Indian Type Foundry](https://www.fontshare.com/fonts/satoshi).
+- **Font License:** The font is included under the [Fontshare Personal & Commercial Use License](https://www.fontshare.com/terms).
+- The font remains the property of its respective owners and is not covered by this project's BSD 3-Clause License.
 
 ## Acknowledgments
 
