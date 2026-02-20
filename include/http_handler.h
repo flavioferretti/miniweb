@@ -43,29 +43,50 @@ typedef struct http_response {
 /* Handler function type */
 typedef int (*http_handler_t)(http_request_t *req);
 
-/* ── Response helpers ───────────────────────────────────────────── */
+/** Allocate and initialize a new HTTP response object. */
 http_response_t *http_response_create(void);
+
+/** Set response status code. */
 void http_response_set_status(http_response_t *resp, int code);
+
+/** Set response body pointer, byte length, and ownership flag. */
 void http_response_set_body(http_response_t *resp, char *body,
-							size_t len, int must_free);
+								size_t len, int must_free);
+
+/** Append one HTTP header line to the response. */
 void http_response_add_header(http_response_t *resp,
-							  const char *name, const char *value);
+								  const char *name, const char *value);
+
+/** Serialize and send a complete HTTP response to the client socket. */
 int  http_response_send(http_request_t *req, http_response_t *resp);
+
+/** Free response object and owned body buffer when configured. */
 void http_response_free(http_response_t *resp);
 
-/* ── Request helpers ────────────────────────────────────────────── */
+/** Lookup one request header value by case-insensitive name. */
 const char *http_request_get_header(http_request_t *req, const char *name);
+
+/** Return client IP address, honoring trusted proxy forwarding headers. */
 const char *http_request_get_client_ip(http_request_t *req);
+
+/** Return 1 when request is HTTPS (direct or forwarded), else 0. */
 int         http_request_is_https(http_request_t *req);
 
-/* ── Quick response helpers ─────────────────────────────────────── */
+/** Send a plain-text error response with the given status code. */
 int http_send_error(http_request_t *req, int status_code, const char *message);
-int http_send_json (http_request_t *req, const char *json);
-int http_send_html (http_request_t *req, const char *html);
-int http_send_file (http_request_t *req, const char *path,
-					const char *content_type);
 
+/** Send JSON with HTTP 200 status. */
+int http_send_json (http_request_t *req, const char *json);
+
+/** Send HTML with HTTP 200 status. */
+int http_send_html (http_request_t *req, const char *html);
+
+/** Send a file from disk with explicit content type. */
+int http_send_file (http_request_t *req, const char *path,
+						const char *content_type);
+
+/** Render a template response with optional fallback template name. */
 int http_render_template(http_request_t *req, struct template_data *data,
-						 const char *fallback_template);
+							 const char *fallback_template);
 
 #endif /* HTTP_HANDLER_H */

@@ -66,32 +66,32 @@ favicon_handler(http_request_t *req)
 }
 
 /* Static file handler */
-/* static_handler - Gestisce CSS, JS, Immagini e HTML statici */
-/* routes.c - Gestione file statici */
+/* static_handler - Serve static CSS, JS, image, and HTML assets. */
+/* routes.c - static file serving helpers. */
 int
 static_handler(http_request_t *req)
 {
-	// req->url è tipo "/static/css/style.css"
-	// Dobbiamo rimuovere "/static/" e servire dalla directory giusta
+	// req->url is like "/static/css/style.css"
+	// Remove the "/static/" prefix and serve from the configured static directory.
 	const char *path = req->url;
 
-	// Salta il prefisso "/static/"
+	// Skip the "/static/" prefix.
 	if (strncmp(path, "/static/", 8) == 0) {
-		path += 8;  // ora path è "css/style.css"
+		path += 8;  // now path is "css/style.css"
 	}
 
-	// Prevenzione Directory Traversal
+	// Prevent directory traversal.
 	if (strstr(path, "..") || strstr(path, "//")) {
 		return http_send_error(req, 403, "Forbidden");
 	}
 
-	// Costruisci il percorso completo
+	// Build absolute file path.
 	char fullpath[512];
 	snprintf(fullpath, sizeof(fullpath), "%s/%s", config_static_dir, path);
 
 	// printf("DEBUG: static_handler trying to serve: %s\n", fullpath);
 
-	// Determina il MIME type
+	// Determine MIME type.
 	const char *mime = "application/octet-stream";
 	const char *ext = strrchr(path, '.');
 	if (ext) {

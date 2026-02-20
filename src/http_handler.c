@@ -94,13 +94,13 @@ write_all(int fd, const void *buf, size_t n)
 		}
 		p += w;
 		remaining -= (size_t)w;
-		retries = 0; /* Reset retries dopo un write riuscito */
+		retries = 0; /* Reset retries after a successful write. */
 	}
 	return 0;
 }
 
 /* Send HTTP response */
-/* Aggiungi questo debug temporaneo in http_response_send */
+/* Temporary debug note for http_response_send. */
 int http_response_send(http_request_t *req, http_response_t *resp)
 {
 	char header[4096];
@@ -144,18 +144,18 @@ int http_response_send(http_request_t *req, http_response_t *resp)
 	//fprintf(stderr, "[HTTP] Sending response: status=%d, type=%s, length=%zu\n",
 	//		resp->status_code, resp->content_type, resp->body_len);
 
-	/* Invia header */
+	/* Send headers. */
 	if (write_all(req->fd, header, header_len) < 0) {
 		fprintf(stderr, "[HTTP] Error writing headers\n");
 		return -1;
 	}
 
-	/* Per file grandi, diamo al client il tempo di processare gli header */
+	/* For large files, give the client time to process headers. */
 	if (resp->body_len > 65536) {  /* > 64KB */
 		usleep(5000);  /* 5ms delay */
 	}
 
-	/* Invia body */
+	/* Send body. */
 	if (resp->body && resp->body_len > 0) {
 		if (write_all(req->fd, resp->body, resp->body_len) < 0) {
 			fprintf(stderr, "[HTTP] Error writing body\n");
@@ -173,8 +173,8 @@ http_response_free(http_response_t *resp)
 	if (!resp)
 		return;
 
-	/* Se il flag free_body è 1, dobbiamo liberare il buffer allocato (es.
-	 * da fread) */
+	/* If free_body is 1, release the allocated body buffer (for example
+	  * from fread). */
 	if (resp->free_body && resp->body) {
 		free(resp->body);
 	}

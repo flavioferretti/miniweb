@@ -168,7 +168,7 @@ safe_popen_read_argv(const char *path, char *const argv[],
 		return NULL;
 	}
 
-	return buffer;  /* Nessun terminatore nullo aggiunto! */
+	return buffer;  /* No NUL terminator is added here. */
 }
 
 /* Convenience wrapper: run cmd through /bin/sh -c */
