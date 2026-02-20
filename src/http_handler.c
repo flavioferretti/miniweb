@@ -9,16 +9,37 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <poll.h>
 #include <sys/stat.h>
 #include <sys/uio.h>
 #include <unistd.h>
 #include <pthread.h>
-#include <sched.h>
 #include <time.h>
 
 #define WRITE_RETRY_LIMIT 256
+#define WRITE_WAIT_MS 100
 #define FILE_CACHE_SLOTS 32
 #define FILE_CACHE_MAX_BYTES (256 * 1024)
+
+static int
+wait_fd_writable(int fd)
+{
+	struct pollfd pfd;
+	pfd.fd = fd;
+	pfd.events = POLLOUT;
+	pfd.revents = 0;
+
+	for (;;) {
+		int rc = poll(&pfd, 1, WRITE_WAIT_MS);
+		if (rc > 0)
+			return 0;
+		if (rc == 0)
+			return -1;
+		if (errno == EINTR)
+			continue;
+		return -1;
+	}
+}
 
 typedef struct file_cache_entry {
 	char path[512];
@@ -168,7 +189,8 @@ write_all(int fd, const void *buf, size_t n)
 				if (retries++ > WRITE_RETRY_LIMIT) {
 					return -1;
 				}
-				sched_yield();
+				if (wait_fd_writable(fd) < 0)
+					return -1;
 				continue;
 			}
 			return -1;
@@ -197,7 +219,8 @@ writev_all(int fd, struct iovec *iov, int iovcnt)
 			if (errno == EAGAIN || errno == EWOULDBLOCK) {
 				if (retries++ > WRITE_RETRY_LIMIT)
 					return -1;
-				sched_yield();
+				if (wait_fd_writable(fd) < 0)
+					return -1;
 				continue;
 			}
 			return -1;
