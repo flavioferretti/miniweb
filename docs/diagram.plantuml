@@ -1,47 +1,133 @@
 @startuml
 skinparam handwritten false
 skinparam monochrome false
+skinparam shadowing false
+left to right direction
 
-package "<&aperture*1> Core & Network" {
-  [main.c] as Main #LightBlue
-  [http_handler.c] as HTTP #TECHNOLOGY
+skinparam package {
+  BorderColor #2d3436
 }
 
-package "<&fork*1> Routing" {
-  [urls.c] as URLS #TECHNOLOGY
-  [routes.c] as Routes #TECHNOLOGY
+skinparam component {
+  BackgroundColor #F7FBFF
+  BorderColor #2D3436
+  FontColor #1F2933
 }
 
-package "<&puzzle-piece*1> Modules" {
-  [metrics.c] as Metrics #Lavender
-  [networking.c] as Net #Lavender
-  [man.c] as Man #Lavender
+' =========================
+' AREA 1: PROJECT FUNCTIONS
+' =========================
+package "<&layers*1> Project functions" #EAF4FF {
+  component "main.c\n(queue_*, worker_thread, main)" as Main #A8D8FF
+  component "http_handler.c\n(http_response_*, http_send_*)" as HTTP #9ED9FF
+  component "urls.c\n(init_routes, route_match)" as URLS #B8E0FF
+  component "routes.c\n(view/static handlers)" as Routes #C4E8FF
+  component "metrics.c\n(get_system_metrics_json, metrics_*)" as Metrics #D6EFFF
+  component "networking.c\n(networking_get_*, networking_*_handler)" as Net #CFE6FF
+  component "man.c\n(man_api_handler, man_render_handler)" as Man #E3F2FF
+  component "template_engine.c\n(template_render*)" as Template #FFF2B2
+  component "http_utils.c\n(json_escape_string, safe_popen_read*)" as Utils #FFE6B2
+  component "conf.c\n(conf_defaults/load/dump)" as Conf #DFF7E2
 }
 
-package "<&layers*1> Utilities" {
-  [template_engine.c] as Template #LightGoldenRodYellow
-  [http_utils.c] as Utils #LightGoldenRodYellow
+' =============================
+' AREA 2: STD C / POSIX LIBRARY
+' =============================
+package "<&book*1> Std C / POSIX library" #FFF7E6 {
+  component "stdio.h\n(fopen/fclose/fread/fgets,\nprintf/fprintf/snprintf, sscanf)" as LibStdio #FFE1B3
+  component "stdlib.h + string.h\n(malloc/calloc/free, getenv,\nstr* family, qsort)" as LibStd #FFE8C9
+  component "pthread.h\n(pthread_*, cond/mutex ops)" as LibPthread #FFD8A8
+  component "network libc\n(inet_pton/ntop, htons, getifaddrs,\nif_indextoname, gethostname)" as LibNet #FFEED8
+  component "filesystem/dir libc\n(open/read/write, opendir/readdir,\nfstat, getmntinfo)" as LibFs #FFE4C4
+  component "process/time libc\n(getopt, time/localtime_r,\ngetpwuid_r, difftime, getloadavg)" as LibProc #FFEBCF
 }
 
-' Flusso Principale
-Main -> Main : kevent() (kqueue.h)
-Main -down-> HTTP : queue_push() -> worker_thread()
-HTTP -down-> URLS : route_match() (urls.h)
-URLS -> Routes : dispatching to handler
+' ==============
+' AREA 3: KERNEL
+' ==============
+package "<&cloud*1> Kernel / system calls" #FFE9EC {
+  component "kqueue/kevent" as Kevent #FFC6CF
+  component "socket/accept/bind/listen" as Ksock #FFB8C6
+  component "read/write/open/close/fcntl" as Kio #FFC9D4
+  component "sysctl/swapctl/uname" as Ksys #FFD6DE
+  component "signal/pledge/unveil" as Ksec #FFCCD6
+}
 
-' Handlers di Rotta
-Routes -down-> Template : render_template_response() (template_engine.h)
-Routes -down-> Metrics : metrics_handler() (metrics.h)
-Routes -> Net : networking_handler() (networking.h)
-Routes -> Man : man_handler() (man.h)
+' -------------------------
+' Project -> Project calls
+' -------------------------
+Main --> HTTP : http_send_error(), http_request_*\n(http_handler.h)
+Main --> URLS : init_routes(), route_match()\n(urls.h)
+Main --> Conf : conf_defaults/load/dump(), conf_apply_cli()\n(conf.h)
 
-' Approfondimento Moduli
-Metrics -down-> Utils : get_system_metrics_json() -> json_escape_string() (http_utils.h)
-Man -> Utils : man_render_page() -> safe_popen_read_argv() (http_utils.h)
-Net -> Net : networking_get_routes() (networking.h)
+URLS --> Routes : view_template_handler(), favicon_handler(),\nmetrics_handler(), networking_api_handler(),\nman_api_handler(), man_render_handler(), static_handler()\n(routes.h, metrics.h, networking.h, man.h)
 
-' Template Engine
-Template -> Template : read_file_content()
-Template -> Template : replace_all()
+Routes --> Template : template_render(), template_render_with_data()\n(template_engine.h)
+Routes --> HTTP : http_response_*, http_send_*\n(http_handler.h)
 
-@enduml<size:10><:globe_with_meridians:></size>
+Metrics --> HTTP : http_response_*, http_send_error()\n(http_handler.h)
+Metrics --> Utils : json_escape_string()\n(http_utils.h)
+
+Net --> HTTP : http_response_*, http_send_error(),\nhttp_render_template()\n(http_handler.h)
+
+Man --> HTTP : http_response_*, http_send_error()\n(http_handler.h)
+Man --> Utils : safe_popen_read_argv()\n(http_utils.h)
+
+Template --> Template : read_file_content(), read_template_file(),\nreplace_single(), replace_all()
+HTTP --> HTTP : write_all(), writev_all(),\nhttp_request_get_header()
+
+' -----------------------------------
+' Project -> Std C / POSIX lib calls
+' -----------------------------------
+Conf --> LibStdio : fopen/fgets/fclose/fprintf/snprintf\n(<stdio.h>)
+Conf --> LibStd : memset/strtol/strcasecmp/strcmp/strlen/strlcpy\n(<string.h>, <stdlib.h>, <strings.h>)
+Conf --> LibProc : getenv/getpwuid/getuid\n(<stdlib.h>, <pwd.h>, <unistd.h>)
+
+Main --> LibPthread : pthread_create/join, mutex/cond ops\n(<pthread.h>)
+Main --> LibNet : inet_pton/ntop, htons\n(<arpa/inet.h>)
+Main --> LibFs : recv/write/close/fcntl\n(<sys/socket.h>, <unistd.h>, <fcntl.h>)
+Main --> LibProc : time/getopt/atoi/signal\n(<time.h>, <unistd.h>, <stdlib.h>, <signal.h>)
+Main --> LibStd : calloc/free/memcpy/memset/str*\n(<stdlib.h>, <string.h>)
+
+HTTP --> LibStdio : snprintf\n(<stdio.h>)
+HTTP --> LibStd : calloc/malloc/free/memcpy/strlen/strchr/strstr\n(<stdlib.h>, <string.h>)
+HTTP --> LibNet : inet_ntop\n(<arpa/inet.h>)
+HTTP --> LibFs : open/read/write/writev/close/fstat\n(<fcntl.h>, <unistd.h>, <sys/uio.h>, <sys/stat.h>)
+
+Template --> LibStdio : fopen/fseek/ftell/fread/fclose/snprintf\n(<stdio.h>)
+Template --> LibStd : malloc/free/memcpy/strlen/strstr/strdup\n(<stdlib.h>, <string.h>)
+
+Metrics --> LibProc : time/localtime_r/strftime/getloadavg/difftime\n(<time.h>, <stdlib.h>)
+Metrics --> LibNet : getifaddrs/freeifaddrs/inet_ntop/gethostname\n(<ifaddrs.h>, <arpa/inet.h>, <unistd.h>)
+Metrics --> LibStd : malloc/calloc/free/qsort/snprintf/str*\n(<stdlib.h>, <string.h>, <stdio.h>)
+
+Net --> LibStdio : fopen/fgets/fclose/snprintf\n(<stdio.h>)
+Net --> LibNet : if_indextoname/inet_ntop/getifaddrs/freeifaddrs\n(<net/if.h>, <arpa/inet.h>, <ifaddrs.h>)
+Net --> LibStd : malloc/free/memset/str*\n(<stdlib.h>, <string.h>)
+
+Man --> LibStd : malloc/free/strdup/strlen/str*\n(<stdlib.h>, <string.h>)
+Man --> LibFs : opendir/readdir/closedir\n(<dirent.h>)
+
+Routes --> LibStd : snprintf/strncmp/strstr/strlen\n(<stdio.h>, <string.h>)
+URLS --> LibStd : strcmp/strncmp\n(<string.h>)
+Utils --> LibStd : malloc/strdup/strlen/isalnum\n(<stdlib.h>, <string.h>, <ctype.h>)
+
+' ----------------------
+' System call tracking
+' ----------------------
+Main --> Kevent : kqueue(), kevent()\n(<sys/event.h>)
+Main --> Ksock : socket(), bind(), listen(), accept(), setsockopt()\n(<sys/socket.h>)
+Main --> Kio : recv(), write(), close(), fcntl()\n(<sys/socket.h>, <unistd.h>, <fcntl.h>)
+Main --> Ksec : signal(), pledge(), unveil()\n(<signal.h>, <unistd.h>)
+
+HTTP --> Kio : open(), read(), write(), writev(), close()\n(<fcntl.h>, <unistd.h>, <sys/uio.h>)
+Metrics --> Ksys : sysctl(), swapctl(), uname()\n(<sys/sysctl.h>, <sys/swap.h>, <sys/utsname.h>)
+Net --> Ksys : sysctl()\n(<sys/sysctl.h>)
+
+' libc wrappers to kernel (conceptual)
+LibPthread --> Kio : futex/sched primitives (platform dependent)
+LibFs --> Kio : file descriptor syscalls
+LibNet --> Ksock : socket stack syscalls
+LibProc --> Ksys : time/proc/sysctl wrappers
+
+@enduml
