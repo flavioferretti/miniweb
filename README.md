@@ -146,6 +146,7 @@ To remove a page, remove the corresponding `view_routes[]` entry and rebuild.
 | `GET /api/packages/info?name={package}` | Show detailed package metadata for one package (`pkg_info`). |
 | `GET /api/packages/which?path={absolute_file_path}` | Find package owning an absolute path (`pkg_info -E`). |
 | `GET /api/packages/files?name={package}` | List files installed by a package (`pkg_info -L`). |
+| `GET /api/packages/list` | List all installed packages (`pkg_info -q`). |
 
 ### Manual Pages API
 

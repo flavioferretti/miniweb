@@ -44,10 +44,18 @@
     <div id="pkg-which-result" class="muted">No path provided.</div>
   `);
 
+  const listView = () => panel('List all installed packages', `
+    <form class="pkg-form" id="pkg-list-form">
+      <button type="submit">Load package list</button>
+    </form>
+    <div id="pkg-list-result" class="muted">No list loaded.</div>
+  `);
+
   const render = () => {
     if (currentTab === 'search') dashboard.innerHTML = searchView();
     if (currentTab === 'info') dashboard.innerHTML = infoView();
     if (currentTab === 'which') dashboard.innerHTML = whichView();
+    if (currentTab === 'list') dashboard.innerHTML = listView();
     bindForms();
   };
 
@@ -106,6 +114,7 @@
     const searchForm = document.getElementById('pkg-search-form');
     const infoForm = document.getElementById('pkg-info-form');
     const whichForm = document.getElementById('pkg-which-form');
+    const listForm = document.getElementById('pkg-list-form');
 
     searchForm?.addEventListener('submit', async (event) => {
       event.preventDefault();
@@ -155,6 +164,21 @@
         renderList(target, data.packages || []);
       } catch {
         target.innerHTML = '<p class="muted">Path lookup failed.</p>';
+      }
+    });
+
+    listForm?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const target = document.getElementById('pkg-list-result');
+      target.textContent = 'Loading installed package list...';
+      try {
+        const resp = await fetch('/api/packages/list');
+        const data = await resp.json();
+        renderList(target, data.packages || [], async (pkgName) => {
+          await renderPackageDetails(target, pkgName);
+        });
+      } catch {
+        target.innerHTML = '<p class="muted">Unable to load package list.</p>';
       }
     });
   };
