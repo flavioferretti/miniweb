@@ -887,12 +887,9 @@ get_system_metrics_json(void)
 	return json;
 }
 
+
 /**
- * HTTP HANDLER BONIFICATO
- * Sostituisce la vecchia funzione che usava MHD_Connection
- */
-/**
- * Handler HTTP Bonificato (Sostituisci la vecchia metrics_handler)
+ * Handler HTTP
  */
 int
 metrics_handler(http_request_t *req)

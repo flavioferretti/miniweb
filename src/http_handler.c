@@ -96,10 +96,6 @@ write_all(int fd, const void *buf, size_t n)
 		remaining -= (size_t)w;
 		retries = 0; /* Reset retries dopo un write riuscito */
 	}
-
-	//if (n > 0) { /* Log solo se abbiamo scritto qualcosa */
-		//fprintf(stderr, "[write_all] Wrote %zu bytes\n", n);
-	//}
 	return 0;
 }
 

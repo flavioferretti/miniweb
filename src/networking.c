@@ -28,18 +28,18 @@
 #include "../include/http_handler.h"
 
 #ifndef SA_SIZE
-#define SA_SIZE(sa)                                                            \
+#define SA_SIZE(sa)                                                   \
 (((sa)->sa_len == 0) ? sizeof(struct sockaddr) : (size_t)(sa)->sa_len)
 #endif
 
 /* Verbose logging */
 extern int config_verbose;
-#define LOG(...)                                                               \
-do {                                                                   \
-	if (config_verbose) {                                          \
-		fprintf(stderr, "[NETWORK] " __VA_ARGS__);             \
-		fprintf(stderr, "\n");                                 \
-	}                                                              \
+#define LOG(...)                                            \
+do {                                                        \
+	if (config_verbose) {                                   \
+		fprintf(stderr, "[NETWORK] " __VA_ARGS__);          \
+		fprintf(stderr, "\n");                              \
+	}                                                       \
 } while (0)
 
 

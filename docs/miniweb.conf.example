@@ -1,77 +1,80 @@
-# miniweb.conf — MiniWeb configuration file
+#miniweb.conf — MiniWeb configuration file
 #
-# Format: key<whitespace>value
-# Lines starting with # are comments. Blank lines are ignored.
-# Keys are case-insensitive.
+#Format : key < whitespace> value
+#Lines starting with #are comments.Blank lines are ignored.
+#Keys are case -insensitive.
 #
-# Lookup order (first file found wins):
-#   miniweb -f /path/to/file    explicit path from CLI
-#   ./miniweb.conf              current working directory
-#   $HOME/.miniweb.conf         user home directory
-#   /etc/miniweb.conf           system-wide
+#Lookup order(first file found wins):
+#miniweb - f / path / to / file explicit path from CLI
+#./ miniweb.conf current working directory
+#$HOME /.miniweb.conf user home directory
+#/ etc / miniweb.conf system - wide
 #
-# CLI flags always override file values:
-#   -p overrides port, -b overrides bind, -t overrides threads,
-#   -c overrides max_conns, -v overrides verbose.
+#CLI flags always override file values:
+#- p overrides port, - b overrides bind, - t overrides threads,
+#- c overrides max_conns, - v overrides verbose.
 
-# ── Network ──────────────────────────────────────────────────────────────────
+#-- Network -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
-# TCP port to listen on. Ports < 1024 require root.
-port        9001
+#TCP port to listen on.Ports < 1024 require root.
+port 9001
 
-# IPv4 address to bind to.
-# Use 127.0.0.1 when running behind relayd (recommended for production).
-# Use 0.0.0.0 to listen on all interfaces.
-bind        127.0.0.1
+#IPv4 address to bind to.
+#Use 127.0.0.1 when running behind relayd(recommended for production).
+#Use 0.0.0.0 to listen on all interfaces.
+    bind 127.0.0.1
 
-# ── Worker pool ──────────────────────────────────────────────────────────────
+#-- Worker pool -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
-# Number of worker threads. A value matching the CPU core count is a good
-# starting point. Hard maximum is THREAD_POOL_SIZE (compiled in, default 4).
-threads     4
+#Number of worker threads.A value matching the CPU core count is a good
+#starting point.Hard maximum is THREAD_POOL_SIZE(compiled in, default 4).
+    threads 4
 
-# Maximum number of concurrent connections. Connections beyond this limit
-# receive a 503 response immediately.
-max_conns   1280
+#Maximum number of concurrent connections.Connections beyond this limit
+#receive a 503 response immediately.
+    max_conns 1280
 
-# ── Timeouts / limits ────────────────────────────────────────────────────────
+#-- Timeouts /                                                                 \
+    limits -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
-# Idle connection timeout in seconds. Connections that have not sent a
-# complete HTTP request within this window are closed by the sweep loop.
-conn_timeout    30
+#Idle connection timeout in seconds.Connections that have not sent a
+#complete HTTP request within this window are closed by the sweep loop.
+    conn_timeout 30
 
-# Maximum request size in bytes. Requests larger than this receive a 400
-# response. Must be <= REQUEST_BUFFER_SIZE compiled into the binary (16384).
-max_req_size    16384
+#Maximum request size in bytes.Requests larger than this receive a 400
+#response.Must be <= REQUEST_BUFFER_SIZE compiled into the binary(16384).
+    max_req_size 16384
 
-# Timeout in seconds for mandoc(1) subprocess invocations.
-mandoc_timeout  10
+#Timeout in seconds for mandoc(1) subprocess invocations.
+    mandoc_timeout 10
 
-# ── Filesystem ───────────────────────────────────────────────────────────────
+#-- Filesystem -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -
 
-# Directory containing static assets (CSS, JS, images).
-# Relative paths are resolved from the server's working directory.
-# This path is passed to unveil(2) — change it before pledge is applied.
-static_dir      static
+#Directory containing static assets(CSS, JS, images).
+#Relative paths are resolved from the server's working directory.
+#This path is passed to unveil(2) — change it before pledge is applied.
+    static_dir static
 
-# Directory containing HTML templates.
-# Same working-directory rules as static_dir.
-templates_dir   templates
+#Directory containing HTML templates.
+#Same working - directory rules as static_dir.
+    templates_dir templates
 
-# Path to the mandoc(1) binary used for man page rendering.
-mandoc_path     /usr/bin/mandoc
+#Path to the mandoc(1) binary used for man page rendering.
+	mandoc_path /
+    usr / bin /
+    mandoc
 
-# ── Reverse proxy ────────────────────────────────────────────────────────────
+#-- Reverse proxy -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
-# IP address of the trusted reverse proxy (typically relayd on localhost).
-# X-Forwarded-For, X-Forwarded-Proto, and X-Real-IP headers are only
-# honoured when the TCP connection originates from this address.
-# Set to 0.0.0.0 to trust all sources (NOT recommended in production).
-trusted_proxy   127.0.0.1
+#IP address of the trusted reverse proxy(typically relayd on localhost).
+#X - Forwarded - For, X - Forwarded - Proto, and X - Real - IP headers are only
+#honoured when the TCP connection originates from this address.
+#Set to 0.0.0.0 to trust all sources(NOT recommended in production).
+	trusted_proxy 127.0.0.1
 
-# ── Logging ──────────────────────────────────────────────────────────────────
+#-- Logging -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
-# Verbose logging to stderr. Logs connection events and config at startup.
-# Equivalent to the -v flag.
-# Accepted values: yes / no / true / false / 1 / 0
-verbose         no
+#Verbose logging to stderr.Logs connection events and config at startup.
+#Equivalent to the - v flag.
+#Accepted values : yes / no / true / false / 1 / 0
+    verbose no

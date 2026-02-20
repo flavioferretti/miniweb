@@ -37,7 +37,7 @@
 #include "../include/routes.h"
 #include "../include/urls.h"
 
-/* ── Compile-time hard limits (not overridable at runtime) ────────────────── */
+/* -- Compile-time hard limits (not overridable at runtime) ------------------ */
 #define MAX_EVENTS          64
 #define MAX_CONNECTIONS     1280
 #define THREAD_POOL_SIZE    4
@@ -45,7 +45,7 @@
 #define LISTEN_BACKLOG      128
 #define QUEUE_CAPACITY      512
 
-/* ── Active configuration (populated in main before any thread starts) ────── */
+/* -- Active configuration (populated in main before any thread starts) ------ */
 static miniweb_conf_t config;
 
 int config_verbose = 0;   /* consulted by other translation units */
@@ -56,7 +56,7 @@ static volatile sig_atomic_t running = 1;
 static int kq_fd     = -1;
 static int listen_fd = -1;
 
-/* ── Connection pool ──────────────────────────────────────────────────────── */
+/* -- Connection pool -------------------------------------------------------- */
 typedef struct connection {
 	int              fd;
 	struct sockaddr_in addr;
@@ -71,7 +71,7 @@ static unsigned int   conn_gen[MAX_CONNECTIONS];
 static pthread_mutex_t conn_mutex = PTHREAD_MUTEX_INITIALIZER;
 static int            active_connections = 0;
 
-/* ── Work queue ───────────────────────────────────────────────────────────── */
+/* -- Work queue ------------------------------------------------------------- */
 typedef struct {
 	connection_t *items[QUEUE_CAPACITY];
 	int           head;
@@ -140,7 +140,7 @@ queue_broadcast_shutdown(work_queue_t *q)
 	pthread_mutex_unlock(&q->lock);
 }
 
-/* ── Connection pool helpers ──────────────────────────────────────────────── */
+/* -- Connection pool helpers ------------------------------------------------ */
 static connection_t *
 alloc_connection(int fd, struct sockaddr_in *addr)
 {
@@ -191,7 +191,7 @@ free_connection(int fd)
 	pthread_mutex_unlock(&conn_mutex);
 }
 
-/* ── Helpers ──────────────────────────────────────────────────────────────── */
+/* -- Helpers ---------------------------------------------------------------- */
 static void
 set_nonblock(int fd)
 {
@@ -253,7 +253,7 @@ send_error_direct(int fd, int code, const char *msg)
 	write(fd, body, blen);
 }
 
-/* ── Worker thread ────────────────────────────────────────────────────────── */
+/* -- Worker thread ---------------------------------------------------------- */
 /*
  * Each worker blocks on queue_pop(), processes one connection at a time,
  * then loops. No kevent() calls here — only the main thread touches kqueue.
@@ -271,7 +271,7 @@ worker_thread(void *arg)
 
 		int fd = conn->fd;
 
-		/* ── Read loop: accumulate until we have a full HTTP request ──── */
+		/* -- Read loop: accumulate until we have a full HTTP request ---- */
 		int request_done = 0;
 		while (!request_done) {
 			ssize_t n = recv(fd,
@@ -357,7 +357,7 @@ worker_thread(void *arg)
 	return NULL;
 }
 
-/* ── Accept helper (called from main loop) ────────────────────────────────── */
+/* -- Accept helper (called from main loop) ---------------------------------- */
 static void
 handle_accept(void)
 {
@@ -408,7 +408,7 @@ handle_accept(void)
 	}
 }
 
-/* ── Idle timeout sweep ───────────────────────────────────────────────────── */
+/* -- Idle timeout sweep ----------------------------------------------------- */
 static void
 sweep_idle_connections(void)
 {
@@ -428,7 +428,7 @@ sweep_idle_connections(void)
 	pthread_mutex_unlock(&conn_mutex);
 }
 
-/* ── Signal handler ───────────────────────────────────────────────────────── */
+/* -- Signal handler --------------------------------------------------------- */
 static void
 handle_signal(int sig)
 {
@@ -436,7 +436,7 @@ handle_signal(int sig)
 	running = 0;
 }
 
-/* ── CLI ──────────────────────────────────────────────────────────────────── */
+/* -- CLI -------------------------------------------------------------------- */
 static void
 usage(const char *prog)
 {
@@ -505,7 +505,7 @@ parse_args(int argc, char *argv[])
 		conf_dump(&config);
 }
 
-/* ── OpenBSD security ─────────────────────────────────────────────────────── */
+/* -- OpenBSD security ------------------------------------------------------- */
 static void
 apply_openbsd_security(void)
 {
@@ -550,7 +550,7 @@ apply_openbsd_security(void)
 	#endif
 }
 
-/* ── main ─────────────────────────────────────────────────────────────────── */
+/* -- main ------------------------------------------------------------------- */
 int
 main(int argc, char *argv[])
 {
@@ -566,7 +566,7 @@ main(int argc, char *argv[])
 	printf("Starting MiniWeb (kqueue) on %s:%d\n",
 		   config.bind_addr, config.port);
 
-	/* ── Listen socket ── */
+	/* -- Listen socket -- */
 	listen_fd = socket(AF_INET, SOCK_STREAM, 0);
 	if (listen_fd < 0) err(1, "socket");
 
@@ -584,7 +584,7 @@ main(int argc, char *argv[])
 	if (bind(listen_fd,   (struct sockaddr *)&sa, sizeof(sa)) < 0) err(1, "bind");
 	if (listen(listen_fd, LISTEN_BACKLOG) < 0)                      err(1, "listen");
 
-	/* ── kqueue ── */
+	/* -- kqueue -- */
 	kq_fd = kqueue();
 	if (kq_fd < 0) err(1, "kqueue");
 
@@ -595,7 +595,7 @@ main(int argc, char *argv[])
 	if (kevent(kq_fd, &chg, 1, NULL, 0, NULL) < 0)
 		err(1, "kevent: add listen");
 
-	/* ── Work queue + worker threads ── */
+	/* -- Work queue + worker threads -- */
 	queue_init(&wq);
 
 	pthread_t threads[THREAD_POOL_SIZE];
@@ -610,7 +610,7 @@ main(int argc, char *argv[])
 	"Press Ctrl+C to stop.\n\n",
 	config.threads, config.max_conns, config.port);
 
-	/* ── Main event loop (dispatcher only) ── */
+	/* -- Main event loop (dispatcher only) -- */
 	struct kevent events[MAX_EVENTS];
 	time_t last_sweep = time(NULL);
 
@@ -634,7 +634,7 @@ main(int argc, char *argv[])
 		for (int i = 0; i < n; i++) {
 			struct kevent *ev = &events[i];
 
-			/* ── New connection ── */
+			/* -- New connection -- */
 			if ((int)ev->ident == listen_fd) {
 				handle_accept();
 				continue;
@@ -644,7 +644,7 @@ main(int argc, char *argv[])
 			if (fd < 0 || fd >= MAX_CONNECTIONS)
 				continue;
 
-			/* ── Validate udata pointer against generation counter ── */
+			/* -- Validate udata pointer against generation counter -- */
 			connection_t *conn = (connection_t *)ev->udata;
 
 			pthread_mutex_lock(&conn_mutex);
@@ -659,7 +659,7 @@ main(int argc, char *argv[])
 				continue;
 			}
 
-			/* ── EOF or error: close immediately, don't bother queuing ── */
+			/* -- EOF or error: close immediately, don't bother queuing -- */
 			if (ev->flags & (EV_EOF | EV_ERROR)) {
 				close(fd);
 				free_connection(fd);
@@ -669,7 +669,7 @@ main(int argc, char *argv[])
 			if (ev->filter != EVFILT_READ)
 				continue;
 
-			/* ── Dispatch to worker pool ──
+			/* -- Dispatch to worker pool --
 			 * EV_DISPATCH already auto-disabled the event; the worker will
 			 * re-enable it via EV_ENABLE if it needs more data, or close the
 			 * fd when done (which removes the kevent automatically). */
@@ -682,7 +682,7 @@ main(int argc, char *argv[])
 		}
 	}
 
-	/* ── Graceful shutdown ── */
+	/* -- Graceful shutdown -- */
 	printf("\nShutting down...\n");
 	running = 0;
 	queue_broadcast_shutdown(&wq);
