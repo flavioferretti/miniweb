@@ -186,11 +186,11 @@ footer {
   .navbar-menu.show { display: flex; }
 }
 
-/* ── mandoc(1) HTML output ───────────────────────────────────────────────────
+/* -- mandoc(1) HTML output ---------------------------------------------------
  * Classes emitted by mandoc -T html. Integrated here so man pages rendered
  * by miniweb inherit the site theme (colors, font) without a separate file.
  * Ref: mandoc.css distributed with mandoc, stripped to the essential rules.
- * ─────────────────────────────────────────────────────────────────────────── */
+ * --------------------------------------------------------------------------- */
 
 /* Header / footer tables (NAME(SECTION) ... date ... OS) */
   .permalink {
@@ -213,7 +213,7 @@ footer {
   .Ic, code.In, .Fd,
   .Fn, .Cd            { font-weight: bold; font-family: inherit; }
 
-  /* ── Theme integration ──────────────────────────────────────────────────── */
+  /* -- Theme integration ---------------------------------------------------- */
 
   /* Wrap the entire mandoc page in a readable container */
   .Pp {

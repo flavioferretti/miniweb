@@ -20,7 +20,7 @@
 #include <string.h>
 #include <unistd.h>
 
-/* ── Helpers ──────────────────────────────────────────────────────────────── */
+/* -- Helpers ---------------------------------------------------------------- */
 
 /* Trim leading whitespace in-place; return pointer to first non-space char. */
 static char *
@@ -55,7 +55,7 @@ parse_int(const char *s, int *out, int lo, int hi)
     return 0;
 }
 
-/* ── Defaults ─────────────────────────────────────────────────────────────── */
+/* -- Defaults --------------------------------------------------------------- */
 void
 conf_defaults(miniweb_conf_t *conf)
 {
@@ -76,7 +76,7 @@ conf_defaults(miniweb_conf_t *conf)
     strlcpy(conf->trusted_proxy, "127.0.0.1",          sizeof(conf->trusted_proxy));
 }
 
-/* ── File lookup ──────────────────────────────────────────────────────────── */
+/* -- File lookup ------------------------------------------------------------ */
 
 /* Try to open a file; return FILE* or NULL without setting errno. */
 static FILE *
@@ -102,7 +102,7 @@ home_conf_path(char *buf, size_t len)
     return (n > 0 && (size_t)n < len) ? 0 : -1;
 }
 
-/* ── Core parser ──────────────────────────────────────────────────────────── */
+/* -- Core parser ------------------------------------------------------------ */
 static int
 parse_file(FILE *f, const char *path, miniweb_conf_t *conf)
 {
@@ -133,7 +133,7 @@ parse_file(FILE *f, const char *path, miniweb_conf_t *conf)
         /* Trim any trailing whitespace/comment from value */
         rtrim(val);
 
-        /* ── Dispatch ── */
+        /* -- Dispatch -- */
         #define KSTR(name, field) \
         if (strcasecmp(key, name) == 0) { \
             strlcpy(conf->field, val, sizeof(conf->field)); continue; }
@@ -203,7 +203,7 @@ parse_file(FILE *f, const char *path, miniweb_conf_t *conf)
     return errors ? -1 : 0;
 }
 
-/* ── Public API ───────────────────────────────────────────────────────────── */
+/* -- Public API ------------------------------------------------------------- */
 int
 conf_load(const char *explicit_path, miniweb_conf_t *conf)
 {

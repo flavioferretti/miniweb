@@ -160,43 +160,63 @@ pkg_search_json(const char *query)
 	return json;
 }
 
+
+/* Validate filesystem path for pkg_info -E: must be absolute, no shell chars */
+static int
+is_safe_path(const char *path)
+{
+	if (!path || path[0] != '/')
+		return 0;
+	for (const unsigned char *p = (const unsigned char *)path; *p; p++) {
+		if (*p < 0x20 || *p == 0x7f) return 0;
+		if (*p == ';' || *p == '|' || *p == '&' || *p == '`' ||
+			*p == '$' || *p == '>' || *p == '<' || *p == '\\' ||
+			*p == '"' || *p == '\'') return 0;
+	}
+	return 1;
+}
+
+/* Build {"raw":"<escaped output>"} — same idea as Node's
+ * res.end(JSON.stringify({ info: stdout.trim() })) */
+static char *
+make_raw_json(const char *output)
+{
+	if (!output || output[0] == '\0')
+		return strdup("{\"raw\":\"\",\"found\":false}");
+
+	/* trim trailing whitespace */
+	char *copy = strdup(output);
+	if (!copy) return NULL;
+	size_t len = strlen(copy);
+	while (len > 0 && (copy[len-1] == '\n' || copy[len-1] == '\r' ||
+		copy[len-1] == ' '  || copy[len-1] == '\t'))
+		copy[--len] = '\0';
+
+	char *esc = json_escape_string(copy);
+	free(copy);
+	if (!esc) return NULL;
+
+	size_t jlen = strlen(esc) + 32;
+	char *json = malloc(jlen);
+	if (!json) { free(esc); return NULL; }
+	snprintf(json, jlen, "{\"raw\":\"%s\",\"found\":true}", esc);
+	free(esc);
+	return json;
+}
+
+
 char *
 pkg_info_json(const char *package_name)
 {
 	if (!is_safe_pkg_name(package_name))
-		return strdup("{\"error\":\"invalid package name\"}");
+		return strdup("{\"found\":false,\"raw\":\"invalid package name\"}");
 
 	char *const argv[] = {"pkg_info", (char *)package_name, NULL};
 	char *output = safe_popen_read_argv("/usr/sbin/pkg_info", argv,
 										PKG_CMD_MAX_OUTPUT, 5, NULL);
-
-	if (!output)
-		return strdup("{\"error\":\"package not found\"}");
-
-	char *escaped_name = json_escape_string(package_name);
-	char *escaped_output = json_escape_string(output);
+	char *json = make_raw_json(output);
 	free(output);
-
-	if (!escaped_name || !escaped_output) {
-		free(escaped_name);
-		free(escaped_output);
-		return NULL;
-	}
-
-	char *json = malloc(strlen(escaped_name) + strlen(escaped_output) + 64);
-	if (!json) {
-		free(escaped_name);
-		free(escaped_output);
-		return NULL;
-	}
-
-	snprintf(json, strlen(escaped_name) + strlen(escaped_output) + 64,
-			 "{\"package\":\"%s\",\"info\":\"%s\"}",
-		  escaped_name, escaped_output);
-
-	free(escaped_name);
-	free(escaped_output);
-	return json;
+	return json ? json : strdup("{\"found\":false,\"raw\":\"\"}");
 }
 
 char *
@@ -299,114 +319,18 @@ pkg_list_json(void)
 	return json;
 }
 
-/* Validate a filesystem path: must be absolute, no shell metacharacters. */
-static int
-is_safe_path(const char *path)
-{
-	if (!path || path[0] != '/')
-		return 0;
-	for (const unsigned char *p = (const unsigned char *)path; *p; p++) {
-		/* Allow printable ASCII except shell metacharacters */
-		if (*p < 0x20 || *p == 0x7f)
-			return 0;
-		if (*p == ';' || *p == '|' || *p == '&' || *p == '`' ||
-			*p == '$' || *p == '>' || *p == '<' || *p == '\\' ||
-			*p == '\"' || *p == '\'' || *p == '\n' || *p == '\r')
-			return 0;
-	}
-	return 1;
-}
-
 char *
 pkg_which_json(const char *file_path)
 {
 	if (!is_safe_path(file_path))
-		return strdup("{\"error\":\"path must be absolute and contain no special characters\"}");
+		return strdup("{\"found\":false,\"raw\":\"path must be absolute and contain no shell metacharacters\"}");
 
 	char *const argv[] = {"pkg_info", "-E", (char *)file_path, NULL};
 	char *output = safe_popen_read_argv("/usr/sbin/pkg_info", argv,
 										PKG_CMD_MAX_OUTPUT, 5, NULL);
-
-	char *escaped_path = json_escape_string(file_path);
-	if (!escaped_path)
-		escaped_path = strdup("");
-
-	if (!output) {
-		char *json = malloc(strlen(escaped_path) + 80);
-		if (!json) { free(escaped_path); return NULL; }
-		snprintf(json, strlen(escaped_path) + 80,
-				 "{\"path\":\"%s\",\"raw\":\"\",\"packages\":[]}", escaped_path);
-		free(escaped_path);
-		return json;
-	}
-
-	/* raw: the verbatim output, exactly what the terminal shows */
-	char *escaped_raw = json_escape_string(output);
-	if (!escaped_raw) escaped_raw = strdup("");
-
-	/* packages: extract package names from lines of the form
-	 *   "Information for inst:pkgname-ver:"
-	 * pkg_info -E may also return just "pkgname-ver" on some versions. */
-	char *json = malloc(PKG_JSON_MAX);
-	if (!json) {
-		free(escaped_path); free(escaped_raw); free(output);
-		return NULL;
-	}
-
-	size_t offset = 0;
-	offset += snprintf(json + offset, PKG_JSON_MAX - offset,
-					   "{\"path\":\"%s\",\"raw\":\"%s\",\"packages\":[",
-					escaped_path, escaped_raw);
-	free(escaped_path);
-	free(escaped_raw);
-
-	int first = 1;
-	char *saveptr = NULL;
-	char *line = strtok_r(output, "\n", &saveptr);
-	while (line && offset < PKG_JSON_MAX - 256) {
-		line[strcspn(line, "\r")] = '\0';
-		if (*line == '\0') {
-			line = strtok_r(NULL, "\n", &saveptr);
-			continue;
-		}
-
-		/* Match "Information for inst:<pkgname>:" pattern */
-		const char *inst = strstr(line, "inst:");
-		const char *pkg = NULL;
-		char pkg_buf[256];
-
-		if (inst) {
-			inst += 5; /* skip "inst:" */
-			size_t len = strcspn(inst, ":\n\r");
-			if (len > 0 && len < sizeof(pkg_buf)) {
-				memcpy(pkg_buf, inst, len);
-				pkg_buf[len] = '\0';
-				pkg = pkg_buf;
-			}
-		} else {
-			/* Fallback: bare package name line (older pkg_info versions) */
-			size_t len = strcspn(line, " \t\n\r:");
-			if (len > 0 && len < sizeof(pkg_buf)) {
-				memcpy(pkg_buf, line, len);
-				pkg_buf[len] = '\0';
-				pkg = pkg_buf;
-			}
-		}
-
-		if (pkg && *pkg != '\0') {
-			char *escaped_pkg = json_escape_string(pkg);
-			offset += snprintf(json + offset, PKG_JSON_MAX - offset,
-							   "%s\"%s\"", first ? "" : ",",
-					  escaped_pkg ? escaped_pkg : "");
-			free(escaped_pkg);
-			first = 0;
-		}
-		line = strtok_r(NULL, "\n", &saveptr);
-	}
+	char *json = make_raw_json(output);
 	free(output);
-
-	offset += snprintf(json + offset, PKG_JSON_MAX - offset, "]}");
-	return json;
+	return json ? json : strdup("{\"found\":false,\"raw\":\"\"}");
 }
 
 int

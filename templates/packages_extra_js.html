@@ -145,8 +145,11 @@
       try {
         const resp = await fetch(`/api/packages/info?name=${encodeURIComponent(name)}`);
         const data = await resp.json();
-        const info = data.info || data.error || 'No data';
-        target.innerHTML = `<div class="pkg-output">${esc(info)}</div>`;
+        if (!data.found || !data.raw) {
+          target.innerHTML = `<p class="muted">Package <code>${esc(name)}</code> not found.</p>`;
+          return;
+        }
+        target.innerHTML = `<div class="pkg-output">${esc(data.raw)}</div>`;
       } catch {
         target.innerHTML = '<p class="muted">Info lookup failed.</p>';
       }
@@ -154,49 +157,18 @@
 
     whichForm?.addEventListener('submit', async (event) => {
       event.preventDefault();
-      const path = document.getElementById('pkg-which-path').value.trim();
+      const filePath = document.getElementById('pkg-which-path').value.trim();
       const target = document.getElementById('pkg-which-result');
-      if (!path) return;
-      target.textContent = 'Finding owner package...';
+      if (!filePath) return;
+      target.textContent = 'Looking up package owner...';
       try {
-        const resp = await fetch(`/api/packages/which?path=${encodeURIComponent(path)}`);
+        const resp = await fetch(`/api/packages/which?path=${encodeURIComponent(filePath)}`);
         const data = await resp.json();
-
-        if (data.error) {
-          target.innerHTML = `<p class="muted">${esc(data.error)}</p>`;
+        if (!data.found || !data.raw) {
+          target.innerHTML = `<p class="muted">No package owns <code>${esc(filePath)}</code>.</p>`;
           return;
         }
-
-        /* Show the verbatim terminal output first — same as pkg_info -E */
-        const rawBlock = data.raw
-          ? `<div class="pkg-output">${esc(data.raw)}</div>`
-          : '';
-
-        const pkgs = data.packages || [];
-        if (!pkgs.length && !data.raw) {
-          target.innerHTML = '<p class="muted">No package found for that path.</p>';
-          return;
-        }
-
-        /* Package name buttons for drilling into details */
-        const pkgLinks = pkgs.length
-          ? `<div style="margin-top:0.75rem"><strong>Owning package${pkgs.length > 1 ? 's' : ''}:</strong>`
-            + `<ul class="pkg-list">${pkgs.map(pkg =>
-                `<li><button class="pkg-list-button which-pkg-btn" type="button"
-                   data-package="${encodeURIComponent(pkg)}"><code>${esc(pkg)}</code></button></li>`
-              ).join('')}</ul></div>`
-          : '';
-
-        target.innerHTML = rawBlock + pkgLinks;
-
-        /* Clicking a package name loads its full details */
-        target.querySelectorAll('.which-pkg-btn').forEach(btn => {
-          btn.addEventListener('click', async () => {
-            const pkgName = decodeURIComponent(btn.dataset.package || '');
-            await renderPackageDetails(target, pkgName);
-          });
-        });
-
+        target.innerHTML = `<div class="pkg-output">${esc(data.raw)}</div>`;
       } catch {
         target.innerHTML = '<p class="muted">Path lookup failed.</p>';
       }

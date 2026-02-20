@@ -172,16 +172,16 @@ To remove a page, remove the corresponding `view_routes[]` entry and rebuild.
 
 ```text
 .
-├── Makefile
-├── README.md
-├── benchmark.sh
-├── build/
-├── docs/
-├── include/
-├── src/
-├── static/
-├── templates/
-└── tests/
+├-- Makefile
+├-- README.md
+├-- benchmark.sh
+├-- build/
+├-- docs/
+├-- include/
+├-- src/
+├-- static/
+├-- templates/
+└-- tests/
 ```
 
 ### Codebase diagram
