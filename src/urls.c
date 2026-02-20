@@ -61,6 +61,7 @@ init_routes(void)
 	register_route("GET", "/api/packages/info", pkg_api_handler);
 	register_route("GET", "/api/packages/which", pkg_api_handler);
 	register_route("GET", "/api/packages/files", pkg_api_handler);
+	register_route("GET", "/api/packages/list", pkg_api_handler);
 }
 
 route_handler_t
