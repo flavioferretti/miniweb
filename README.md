@@ -16,7 +16,7 @@ A lightweight HTTP server written in C99 for OpenBSD. Provides a system monitori
 - **Process Monitoring** — top processes by CPU and memory with live updates
 - **Man Page Browser** — search and render OpenBSD manual pages in HTML, plain text, PDF, or Markdown
 - **Security Hardened** — `pledge(2)` and `unveil(2)` sandboxing from startup
-- **High Performance** — kqueue dispatcher + worker thread pool, >7000 req/s on a 4-core system
+- **High Performance** — kqueue dispatcher + worker thread pool, up to 34,771 req/s on static content (OpenBSD 7.8, 4 cores)
 - **RESTful JSON API** — clean endpoints for integration with external monitoring tools
 - **No TLS, by design** — intended to run behind `relayd(8)` for TLS termination
 ---
@@ -331,14 +331,20 @@ Simple `{{TOKEN}}` substitution. Reads layout and page-content files from `templ
 
 ## Performance
 
-Measured on OpenBSD 7.8, AMD64, 4-core CPU, `wrk -t4 -c100 -d30s`:
+Measured on OpenBSD 7.8, AMD64, 4-core CPU.
 
 | Endpoint | Throughput | Avg latency |
 |---|---|---|
-| `/static/test.html` | **~7 000 req/s** | 0.36 ms |
+| `/static/test.html` | **34,771.76 req/s (peak)** | **0.220 ms (best avg)** |
 | `/api/metrics` | ~300 req/s | — |
 
-Peak throughput vs. the previous `libmicrohttpd`-based implementation: **+300%**.
+Latest static-file benchmark report (`wrk`, 30s, 4 threads, target `http://localhost:3000/static/test.html`):
+
+- Peak throughput: **34,771.76 req/s**
+- Best average latency: **0.220 ms**
+- Worst maximum latency: **118.010 ms**
+
+Peak throughput versus the earlier `~7,000 req/s` baseline is approximately **+396.74%** (about **4.97×**).
 
 Memory footprint at idle: ~8–12 MB resident. Under load with 4 workers: ~50–80% CPU across all cores.
 
@@ -490,7 +496,7 @@ Verify `mandoc` is installed and that `/usr/bin/mandoc` is unveiled. Check verbo
 - [ ] Prometheus exporter endpoint
 - [ ] Port to FreeBSD / NetBSD
 - [x] Native kqueue engine (replaced libmicrohttpd)
-- [x] EV_DISPATCH worker pool — eliminated busy-waiting, +300% throughput
+- [x] EV_DISPATCH worker pool — eliminated busy-waiting, static-file throughput now measured up to 34,771.76 req/s (~+396.74% vs ~7,000 req/s baseline)
 - [x] Configuration file (`miniweb.conf`) with full runtime knobs
 - [x] Unit test suite
 - [x] Thread-safe metric collection
