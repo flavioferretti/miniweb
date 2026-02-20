@@ -619,7 +619,7 @@ man_render_handler(http_request_t *req)
 	} else if (strcmp(format, "ps") == 0) {
 		resp->content_type = "application/postscript";
 	} else if (strcmp(format, "md") == 0) {
-		resp->content_type = "text/plain; charset=utf-8";
+		resp->content_type = "text/markdown; charset=utf-8";
 	} else {
 		resp->content_type = "text/html; charset=utf-8";
 	}
@@ -635,6 +635,10 @@ man_render_handler(http_request_t *req)
 	if (strcmp(format, "pdf") == 0) {
 		char content_disp[256];
 		snprintf(content_disp, sizeof(content_disp), "inline; filename=\"%s.pdf\"", page);
+		http_response_add_header(resp, "Content-Disposition", content_disp);
+	} else if (strcmp(format, "md") == 0) {
+		char content_disp[256];
+		snprintf(content_disp, sizeof(content_disp), "inline; filename=\"%s.md\"", page);
 		http_response_add_header(resp, "Content-Disposition", content_disp);
 	}
 
