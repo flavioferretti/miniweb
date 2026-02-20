@@ -88,7 +88,10 @@ Open <http://127.0.0.1:9001>.
 
 ## Endpoints
 
-All responses use `Connection: close` (persistent HTTP connections are not supported).
+Responses follow HTTP/1.1 connection semantics: keep-alive is enabled by default for
+HTTP/1.1 unless the client sends `Connection: close`.
+Handlers may also force close behavior, and each connection is capped at 64 served
+requests before being closed.
 
 ### Web Interface
 
@@ -428,7 +431,9 @@ MiniWeb may emit the following diagnostics to stderr:
 
 ## Standards
 
-HTTP handling targets HTTP/1.1 (RFC 7230–7235). Only `Connection: close` is supported; keep-alive and pipelining are not implemented.
+HTTP handling targets HTTP/1.1 (RFC 7230–7235). Persistent connections
+(keep-alive) are supported for sequential requests (no pipelining), with an
+internal per-connection cap of 64 requests.
 
 ## History
 
