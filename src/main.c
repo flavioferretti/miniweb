@@ -737,7 +737,7 @@ main(int argc, char *argv[])
 			 * fd when done (which removes the kevent automatically). */
 			if (queue_push(&wq, conn) < 0) {
 				/* Queue full: server overloaded, drop the connection */
-				send_error_direct(fd, 503, "Server busy");
+				send_error_response(fd, 503, "Server busy");
 				close(fd);
 				free_connection(fd);
 			}
