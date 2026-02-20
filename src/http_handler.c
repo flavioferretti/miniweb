@@ -10,8 +10,100 @@
 #include <string.h>
 #include <strings.h>
 #include <sys/stat.h>
+#include <sys/uio.h>
 #include <unistd.h>
-#include <poll.h>
+#include <pthread.h>
+#include <sched.h>
+#include <time.h>
+
+#define WRITE_RETRY_LIMIT 256
+#define FILE_CACHE_SLOTS 32
+#define FILE_CACHE_MAX_BYTES (256 * 1024)
+
+typedef struct file_cache_entry {
+	char path[512];
+	char *data;
+	size_t len;
+	time_t mtime;
+	time_t atime;
+} file_cache_entry_t;
+
+static file_cache_entry_t file_cache[FILE_CACHE_SLOTS];
+static pthread_mutex_t file_cache_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static void
+file_cache_store(const char *path, const struct stat *st, const char *data,
+		 size_t len)
+{
+	if (!path || !st || !data || len == 0 || len > FILE_CACHE_MAX_BYTES)
+		return;
+
+	pthread_mutex_lock(&file_cache_lock);
+	int slot = -1;
+	time_t oldest = 0;
+
+	for (int i = 0; i < FILE_CACHE_SLOTS; i++) {
+		if (file_cache[i].path[0] == '\0') {
+			slot = i;
+			break;
+		}
+		if (slot == -1 || file_cache[i].atime < oldest) {
+			oldest = file_cache[i].atime;
+			slot = i;
+		}
+	}
+
+	if (slot >= 0) {
+		free(file_cache[slot].data);
+		file_cache[slot].data = malloc(len);
+		if (file_cache[slot].data) {
+			memcpy(file_cache[slot].data, data, len);
+			strlcpy(file_cache[slot].path, path,
+				sizeof(file_cache[slot].path));
+			file_cache[slot].len = len;
+			file_cache[slot].mtime = st->st_mtime;
+			file_cache[slot].atime = time(NULL);
+		} else {
+			file_cache[slot].path[0] = '\0';
+			file_cache[slot].len = 0;
+			file_cache[slot].mtime = 0;
+			file_cache[slot].atime = 0;
+		}
+	}
+
+	pthread_mutex_unlock(&file_cache_lock);
+}
+
+static int
+file_cache_lookup(const char *path, const struct stat *st, char **out,
+		  size_t *out_len)
+{
+	int found = 0;
+
+	if (!path || !st || !out || !out_len || st->st_size <= 0 ||
+	    (size_t)st->st_size > FILE_CACHE_MAX_BYTES)
+		return 0;
+
+	pthread_mutex_lock(&file_cache_lock);
+	for (int i = 0; i < FILE_CACHE_SLOTS; i++) {
+		if (file_cache[i].path[0] == '\0')
+			continue;
+		if (strcmp(file_cache[i].path, path) == 0 &&
+		    file_cache[i].mtime == st->st_mtime) {
+			*out = malloc(file_cache[i].len);
+			if (*out) {
+				memcpy(*out, file_cache[i].data, file_cache[i].len);
+				*out_len = file_cache[i].len;
+				file_cache[i].atime = time(NULL);
+				found = 1;
+			}
+			break;
+		}
+	}
+	pthread_mutex_unlock(&file_cache_lock);
+
+	return found;
+}
 
 /* Create response */
 http_response_t *
@@ -73,29 +165,58 @@ write_all(int fd, const void *buf, size_t n)
 				continue;
 			}
 			if (errno == EAGAIN || errno == EWOULDBLOCK) {
-				/* Socket buffer pieno, aspettiamo un po' */
-				if (retries++ > 100) { /* Evita loop infinito */
-					//fprintf(stderr, "[write_all] Too many "
-					//		"EAGAIN retries\n");
+				if (retries++ > WRITE_RETRY_LIMIT) {
 					return -1;
 				}
-				struct pollfd pfd = {.fd = fd,
-						     .events = POLLOUT};
-				poll(&pfd, 1, 10); /* Aspetta 10ms */
+				sched_yield();
 				continue;
 			}
-			//fprintf(stderr, "[write_all] Error: %s\n",
-			//	strerror(errno));
 			return -1;
 		}
 		if (w == 0) {
-			//fprintf(stderr, "[write_all] Connection closed\n");
 			return -1;
 		}
 		p += w;
 		remaining -= (size_t)w;
 		retries = 0; /* Reset retries after a successful write. */
 	}
+	return 0;
+}
+
+static int
+writev_all(int fd, struct iovec *iov, int iovcnt)
+{
+	int idx = 0;
+	int retries = 0;
+
+	while (idx < iovcnt) {
+		ssize_t w = writev(fd, &iov[idx], iovcnt - idx);
+		if (w < 0) {
+			if (errno == EINTR)
+				continue;
+			if (errno == EAGAIN || errno == EWOULDBLOCK) {
+				if (retries++ > WRITE_RETRY_LIMIT)
+					return -1;
+				sched_yield();
+				continue;
+			}
+			return -1;
+		}
+		if (w == 0)
+			return -1;
+
+		retries = 0;
+		size_t left = (size_t)w;
+		while (idx < iovcnt && left >= iov[idx].iov_len) {
+			left -= iov[idx].iov_len;
+			idx++;
+		}
+		if (idx < iovcnt && left > 0) {
+			iov[idx].iov_base = (char *)iov[idx].iov_base + left;
+			iov[idx].iov_len -= left;
+		}
+	}
+
 	return 0;
 }
 
@@ -122,11 +243,12 @@ int http_response_send(http_request_t *req, http_response_t *resp)
 						  "HTTP/1.1 %d %s\r\n"
 						  "Content-Type: %s\r\n"
 						  "Content-Length: %zu\r\n"
-						  "Connection: close\r\n"
-						  "Server: MiniWeb/kqueue\r\n",
-					   resp->status_code, status_text,
-					   resp->content_type,
-					   resp->body_len);
+					  "Connection: %s\r\n"
+					  "Server: MiniWeb/kqueue\r\n",
+				   resp->status_code, status_text,
+				   resp->content_type,
+				   resp->body_len,
+				   req->keep_alive ? "keep-alive" : "close");
 
 	/* Append custom headers if they fit */
 	if (resp->headers_len > 0) {
@@ -144,23 +266,20 @@ int http_response_send(http_request_t *req, http_response_t *resp)
 	//fprintf(stderr, "[HTTP] Sending response: status=%d, type=%s, length=%zu\n",
 	//		resp->status_code, resp->content_type, resp->body_len);
 
-	/* Send headers. */
-	if (write_all(req->fd, header, header_len) < 0) {
-		fprintf(stderr, "[HTTP] Error writing headers\n");
-		return -1;
-	}
+	struct iovec iov[2];
+	iov[0].iov_base = header;
+	iov[0].iov_len = (size_t)header_len;
+	iov[1].iov_base = resp->body;
+	iov[1].iov_len = resp->body_len;
 
-	/* For large files, give the client time to process headers. */
-	if (resp->body_len > 65536) {  /* > 64KB */
-		usleep(5000);  /* 5ms delay */
-	}
-
-	/* Send body. */
 	if (resp->body && resp->body_len > 0) {
-		if (write_all(req->fd, resp->body, resp->body_len) < 0) {
-			fprintf(stderr, "[HTTP] Error writing body\n");
+		if (writev_all(req->fd, iov, 2) < 0) {
+			fprintf(stderr, "[HTTP] Error writing response\n");
 			return -1;
 		}
+	} else if (write_all(req->fd, header, (size_t)header_len) < 0) {
+		fprintf(stderr, "[HTTP] Error writing headers\n");
+		return -1;
 	}
 
 	return 0;
@@ -303,9 +422,10 @@ http_send_json(http_request_t *req, const char *json)
 				  "HTTP/1.1 200 OK\r\n"
 				  "Content-Type: application/json\r\n"
 				  "Content-Length: %zu\r\n"
-				  "Connection: close\r\n"
+				  "Connection: %s\r\n"
 				  "\r\n",
-				  json_len);
+				  json_len,
+				  req->keep_alive ? "keep-alive" : "close");
 
 	if (write_all(req->fd, header, header_len) < 0)
 		return -1;
@@ -324,9 +444,10 @@ http_send_html(http_request_t *req, const char *html)
 				  "HTTP/1.1 200 OK\r\n"
 				  "Content-Type: text/html; charset=utf-8\r\n"
 				  "Content-Length: %zu\r\n"
-				  "Connection: close\r\n"
+				  "Connection: %s\r\n"
 				  "\r\n",
-				  html_len);
+				  html_len,
+				  req->keep_alive ? "keep-alive" : "close");
 
 	if (write_all(req->fd, header, header_len) < 0)
 		return -1;
@@ -359,28 +480,52 @@ http_send_file(http_request_t *req, const char *path, const char *mime)
 				  "HTTP/1.1 200 OK\r\n"
 				  "Content-Type: %s\r\n"
 				  "Content-Length: %lld\r\n"
-				  "Connection: close\r\n"
+				  "Connection: %s\r\n"
 				  "\r\n",
-				  mime, (long long)st.st_size);
+				  mime, (long long)st.st_size,
+				  req->keep_alive ? "keep-alive" : "close");
 
-	if (write_all(req->fd, header, header_len) < 0) {
+	char *cached = NULL;
+	size_t cached_len = 0;
+	if (file_cache_lookup(path, &st, &cached, &cached_len)) {
+		struct iovec iov[2];
+		iov[0].iov_base = header;
+		iov[0].iov_len = (size_t)header_len;
+		iov[1].iov_base = cached;
+		iov[1].iov_len = cached_len;
+		int rc = writev_all(req->fd, iov, 2);
+		free(cached);
+		close(fd);
+		return rc;
+	}
+
+	if (write_all(req->fd, header, (size_t)header_len) < 0) {
 		close(fd);
 		return -1;
 	}
 
-	char file_buf[32768];
+	char file_buf[65536];
+	char *cache_copy = NULL;
+	size_t cache_used = 0;
+	if ((size_t)st.st_size > 0 && (size_t)st.st_size <= FILE_CACHE_MAX_BYTES)
+		cache_copy = malloc((size_t)st.st_size);
+
 	ssize_t n;
 	while ((n = read(fd, file_buf, sizeof(file_buf))) > 0) {
-		ssize_t total = 0;
-		while (total < n) {
-			ssize_t w = write(req->fd, file_buf + total, n - total);
-			if (w < 0) {
-				close(fd);
-				return -1;
-			}
-			total += w;
+		if (cache_copy && cache_used + (size_t)n <= (size_t)st.st_size) {
+			memcpy(cache_copy + cache_used, file_buf, (size_t)n);
+			cache_used += (size_t)n;
+		}
+		if (write_all(req->fd, file_buf, (size_t)n) < 0) {
+			free(cache_copy);
+			close(fd);
+			return -1;
 		}
 	}
+
+	if (cache_copy && cache_used == (size_t)st.st_size)
+		file_cache_store(path, &st, cache_copy, cache_used);
+	free(cache_copy);
 
 	close(fd);
 	// printf("DEBUG: Successfully sent file: %s (%lld bytes)\n",
