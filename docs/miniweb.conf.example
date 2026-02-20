@@ -14,7 +14,7 @@
 #- p overrides port, - b overrides bind, - t overrides threads,
 #- c overrides max_conns, - v overrides verbose.
 
-#-- Network -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+#-- Network -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -
 
 #TCP port to listen on.Ports < 1024 require root.
 port 9001
@@ -24,8 +24,7 @@ port 9001
 #Use 0.0.0.0 to listen on all interfaces.
     bind 127.0.0.1
 
-#-- Worker pool -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
-
+#-- Worker pool -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -
 #Number of worker threads.A value matching the CPU core count is a good
 #starting point.Hard maximum is THREAD_POOL_SIZE(compiled in, default 4).
     threads 4
@@ -34,8 +33,7 @@ port 9001
 #receive a 503 response immediately.
     max_conns 1280
 
-#-- Timeouts /                                                                 \
-    limits -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+#-- Timeouts lmits -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -
 
 #Idle connection timeout in seconds.Connections that have not sent a
 #complete HTTP request within this window are closed by the sweep loop.
@@ -48,7 +46,7 @@ port 9001
 #Timeout in seconds for mandoc(1) subprocess invocations.
     mandoc_timeout 10
 
-#-- Filesystem -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -
+#-- Filesystem -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 #Directory containing static assets(CSS, JS, images).
 #Relative paths are resolved from the server's working directory.
@@ -60,9 +58,7 @@ port 9001
     templates_dir templates
 
 #Path to the mandoc(1) binary used for man page rendering.
-	mandoc_path /
-    usr / bin /
-    mandoc
+	mandoc_path /usr/bin/mandoc
 
 #-- Reverse proxy -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
