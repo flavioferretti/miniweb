@@ -6,6 +6,8 @@
 #include "../include/urls.h"
 
 int config_verbose = 0;
+char config_static_dir[] = "static";
+char config_templates_dir[] = "templates";
 
 int main(void)
 {

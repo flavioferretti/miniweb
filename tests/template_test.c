@@ -4,6 +4,8 @@
 #include <string.h>
 #include "../include/template_engine.h"
 
+char config_templates_dir[] = "templates";
+
 int main(void)
 {
 	char *out = NULL;
