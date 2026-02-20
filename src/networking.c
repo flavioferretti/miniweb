@@ -411,7 +411,7 @@ networking_get_json(void)
  * HTTP HANDLERS
  * ======================================================================== */
 
-/* Handler per la pagina visuale della rete (Dashboard Networking) */
+/* Handler for the networking dashboard page. */
 int
 networking_handler(http_request_t *req)
 {

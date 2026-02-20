@@ -546,17 +546,16 @@ http_render_template(http_request_t *req, struct template_data *data,
 {
 	char *output = NULL;
 
-	/* Tenta il rendering con i dati */
+	/* Try rendering with structured template data first. */
 	if (template_render_with_data(data, &output) != 0) {
-		/* Se fallisce e abbiamo un contenuto di pagina, prova il
-		 * rendering semplice */
+		/* If that fails and page content exists, try basic rendering. */
 		if (data->page_content &&
 		    template_render(data->page_content, &output) != 0) {
-			/* Se fallisce tutto, usa il fallback o manda 500 */
+			/* If all rendering paths fail, use fallback or return 500. */
 			return http_send_error(
 			    req, 500,
 			    fallback_template ? fallback_template
-					      : "Template rendering failed");
+				      : "Template rendering failed");
 		}
 	}
 
@@ -566,8 +565,7 @@ http_render_template(http_request_t *req, struct template_data *data,
 		return -1;
 	}
 
-	/* Il parametro '1' indica a http_response_set_body di liberare la
-	 * memoria di 'output' */
+	/* Parameter '1' tells http_response_set_body to free 'output'. */
 	http_response_set_body(resp, output, strlen(output), 1);
 
 	int ret = http_response_send(req, resp);

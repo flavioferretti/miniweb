@@ -42,7 +42,7 @@ is_valid_section(const char *section)
 	return 1;
 }
 
-/* Risolve il path della pagina man usando 'man -w' */
+/* Resolve the man page path using 'man -w'. */
 static char *
 resolve_man_path(const char *name, const char *section)
 {
@@ -124,14 +124,14 @@ man_get_section_pages_json(const char *area, const char *section)
 	char dir_path[256];
 	const char *base = "/usr/share/man";
 
-	// Selezione del path base in base all'area
+	/* Select base path from the requested area. */
 	if (strcmp(area, "packages") == 0) {
 		base = "/usr/local/man";
 	} else if (strcmp(area, "x11") == 0) {
 		base = "/usr/X11R6/man";
 	}
 
-	// Costruisce il path della cartella, es: /usr/X11R6/man/man1
+	/* Build section directory path, for example /usr/X11R6/man/man1. */
 	snprintf(dir_path, sizeof(dir_path), "%s/man%s", base, section);
 
 	DIR *dr = opendir(dir_path);
@@ -145,7 +145,7 @@ man_get_section_pages_json(const char *area, const char *section)
 		return NULL;
 	}
 
-	// Inizializzazione JSON
+	/* Initialize JSON output. */
 	strlcpy(json, "{\"pages\":[", MAX_JSON_SIZE);
 
 	struct dirent *de;
@@ -160,9 +160,9 @@ man_get_section_pages_json(const char *area, const char *section)
 		if (de->d_type == DT_DIR)
 			continue;
 
-		/* * FILTRO: Il file deve terminare esattamente con .<sezione>
-		 * Esempio: xterm.1 in man1 -> OK.
-		 * Esempio: i386 (directory) -> Scartato da DT_DIR.
+		/* Filter: filename must end exactly with .<section>.
+		 * Example: xterm.1 in man1 -> accepted.
+		 * Example: i386 (directory) -> skipped by DT_DIR.
 		 */
 		char *dot = strrchr(de->d_name, '.');
 		if (dot && strcmp(dot + 1, section) == 0) {
@@ -410,19 +410,18 @@ man_api_handler(http_request_t *req)
 			}
 
 			if (query && *query != '\0') {
-				/* IMPORTANTE: qui chiamiamo la funzione che restituisce
-				 * TESTO, non JSON */
+				/* Important: call the function that returns plain text,
+				 * not JSON. */
 				json = man_api_search_raw(query);
 			} else {
 				json = strdup("");
 			}
 		}
-		/* Caso dinamico: /api/man/system/1 */
+		/* Dynamic endpoint case: /api/man/system/1 */
 		else {
 			char area[32] = {0};
 			char section[16] = {0};
-			/* Usiamo una copia locale del path limitata a path_len per
-			 * sscanf */
+			/* Use a local path copy capped at path_len for sscanf. */
 			char path_tmp[64] = {0};
 			if (path_len < sizeof(path_tmp)) {
 				strncpy(path_tmp, path, path_len);
@@ -439,14 +438,14 @@ man_api_handler(http_request_t *req)
 			}
 		}
 
-		/* 3. Invio della risposta */
+		/* 3. Send the response */
 		if (!json) {
 			return http_send_error(req, 500, "Internal Server Error");
 		}
 
 		http_response_t *resp = http_response_create();
 		http_response_set_status(resp, 200);
-		/* Se stiamo rispondendo a una ricerca, usiamo text/plain per il JS */
+		/* For search responses, use text/plain for client-side JS handling. */
 		if (strncmp(path, "/search", 7) == 0) {
 			resp->content_type = "text/plain; charset=utf-8";
 		} else {
@@ -455,7 +454,7 @@ man_api_handler(http_request_t *req)
 		http_response_add_header(resp, "Access-Control-Allow-Origin", "*");
 
 		http_response_set_body(resp, json, strlen(json),
-							   1); /* 1 = libera json */
+			   1); /* 1 = free json */
 
 		int ret = http_response_send(req, resp);
 		http_response_free(resp);
@@ -478,7 +477,7 @@ man_render_page(const char *area, const char *section, const char *page,
 	 * the resolved filepath when needed. */
 	(void)area;
 
-	/* 1. Resolve physical file path via 'man -w' with full MANPATH */
+	/* 1. Resolve physical file path via 'man -w' with full MANPATH. */
 	char *const argv_w[] = {
 		"man", "-M", "/usr/share/man:/usr/local/man:/usr/X11R6/man",
 		"-w", (char *)section, (char *)page, NULL
@@ -500,8 +499,8 @@ man_render_page(const char *area, const char *section, const char *page,
 		return NULL;
 	}
 
-	/* 3. Scelta del formato per mandoc */
-	const char *t_arg = "html"; // default
+	/* 3. Select mandoc output format. */
+	const char *t_arg = "html"; /* default */
 	if (strcmp(format, "pdf") == 0)
 		t_arg = "pdf";
 	else if (strcmp(format, "ps") == 0)
@@ -509,20 +508,18 @@ man_render_page(const char *area, const char *section, const char *page,
 	else if (strcmp(format, "md") == 0)
 		t_arg = "markdown";
 
-	/* 4. Esecuzione di mandoc - IMPORTANTE: usiamo out_len per ottenere la
-	 * lunghezza reale */
+	/* 4. Execute mandoc. Keep out_len as the authoritative output size. */
 	/* For HTML output, pass -O style= so mandoc links our stylesheet
 	 * instead of embedding its own minimal inline CSS.
 	 * Other formats (pdf, ps, markdown) do not support -O style. */
-	/* 4. Esecuzione di mandoc */
-	char *argv_m[10]; // Buffer sufficiente per gli argomenti
+	char *argv_m[10]; /* Sufficient argument buffer. */
 	int argc = 0;
 
 	argv_m[argc++] = "mandoc";
 	argv_m[argc++] = "-T";
 	argv_m[argc++] = (char *)t_arg;
 
-	/* Aggiungiamo -O solo per l'HTML */
+	/* Add -O only for HTML output. */
 	if (strcmp(t_arg, "html") == 0) {
 		argv_m[argc++] = "-Ostyle=/static/css/custom.css";
 	}
@@ -533,25 +530,35 @@ man_render_page(const char *area, const char *section, const char *page,
 	char *output = safe_popen_read_argv("/usr/bin/mandoc", argv_m,
 										MAX_OUTPUT_SIZE, 10, out_len);
 
-	/* Aggiungi questo debug temporaneo per verificare l'output */
+	/* Fallback for man(7) pages that cannot be converted to markdown.
+	 * Return plain ASCII text instead of surfacing a 404 for .md requests. */
+	if (!output && strcmp(format, "md") == 0) {
+		char *const argv_ascii[] = {
+			"mandoc", "-T", "ascii", filepath, NULL
+		};
+		output = safe_popen_read_argv("/usr/bin/mandoc", argv_ascii,
+								 MAX_OUTPUT_SIZE, 10, out_len);
+	}
+
+	/* Optional debug logging for PDF output verification. */
 	if (config_verbose && strcmp(format, "pdf") == 0 && output && *out_len > 0) {
 		fprintf(stderr, "[MAN] PDF generated: size=%zu bytes\n", *out_len);
 		fprintf(stderr, "[MAN] PDF signature: %02x %02x %02x %02x\n",
 				(unsigned char)output[0], (unsigned char)output[1],
 				(unsigned char)output[2], (unsigned char)output[3]);
-		/* Un PDF valido inizia con %PDF (25 50 44 46) */
+		/* A valid PDF starts with %PDF (25 50 44 46). */
 	}
 
-	/* Pulizia */
+	/* Cleanup. */
 	free(filepath);
 
 	return output; /* output is raw binary, out_len contains the length
-	esatta */
+				 exact length */
 }
 
 /**
- * Handler per il rendering visuale delle pagine man.
- * URL previsto: /man/{area}/{section}/{page}[.format]
+	* Handler for visual rendering of man pages.
+	* Expected URL: /man/{area}/{section}/{page}[.format]
  */
 int
 man_render_handler(http_request_t *req)
@@ -561,7 +568,7 @@ man_render_handler(http_request_t *req)
 	char page[64] = "";
 	char format[16] = "html";
 
-	/* 1. Parsing dell'URL (es: /man/system/1/ls.html) */
+	/* 1. Parse URL (example: /man/system/1/ls.html). */
 	if (strncmp(req->url, "/man/", 5) != 0) {
 		return http_send_error(req, 400, "Invalid URL");
 	}
@@ -589,13 +596,13 @@ man_render_handler(http_request_t *req)
 		strncpy(page, token, sizeof(page) - 1);
 	}
 
-	/* 2. Validazione minima */
+	/* 2. Minimal validation. */
 	if (page[0] == '\0' || section[0] == '\0') {
 		return http_send_error(req, 400,
 							   "Missing section or page name");
 	}
 
-	/* 3. Rendering */
+	/* 3. Render content. */
 	size_t out_len = 0;
 	char *output = man_render_page(area, section, page, format, &out_len);
 
@@ -603,21 +610,21 @@ man_render_handler(http_request_t *req)
 		return http_send_error(req, 404, "Manual page not found");
 	}
 
-	/* 4. Preparazione Risposta */
+	/* 4. Build response. */
 	http_response_t *resp = http_response_create();
 
-	// Imposta il Content-Type corretto
+	/* Set the appropriate Content-Type. */
 	if (strcmp(format, "pdf") == 0) {
 		resp->content_type = "application/pdf";
 	} else if (strcmp(format, "ps") == 0) {
 		resp->content_type = "application/postscript";
 	} else if (strcmp(format, "md") == 0) {
-		resp->content_type = "text/markdown; charset=utf-8";
+		resp->content_type = "text/plain; charset=utf-8";
 	} else {
 		resp->content_type = "text/html; charset=utf-8";
 	}
 
-	/* 5. Aggiunta Content-Length (fondamentale per file binari/PDF) */
+	/* 5. Add Content-Length (essential for binary formats like PDF). */
 	char clen[32];
 	snprintf(clen, sizeof(clen), "%zu", out_len);
 	http_response_add_header(resp, "Content-Length", clen);
@@ -631,11 +638,10 @@ man_render_handler(http_request_t *req)
 		http_response_add_header(resp, "Content-Disposition", content_disp);
 	}
 
-	/* 6. Impostazione del corpo (http_response_set_body libera 'output'
-	 * automaticamente) */
+	/* 6. Set body (http_response_set_body frees 'output' automatically). */
 	http_response_set_body(resp, output, out_len, 1);
 
-	/* 7. Invio */
+	/* 7. Send response. */
 	int ret = http_response_send(req, resp);
 	http_response_free(resp);
 
