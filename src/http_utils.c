@@ -107,7 +107,7 @@ safe_popen_read_argv(const char *path, char *const argv[],
 	/* Parent */
 	close(pipefd[1]);
 
-	char *buffer = malloc(max_size);
+	char *buffer = malloc(max_size + 1);
 	if (!buffer) {
 		close(pipefd[0]);
 		kill(pid, SIGKILL);
@@ -168,7 +168,9 @@ safe_popen_read_argv(const char *path, char *const argv[],
 		return NULL;
 	}
 
-	return buffer;  /* No NUL terminator is added here. */
+	buffer[total] = '\0';
+
+	return buffer;  /* NUL-terminated. */
 }
 
 /* Convenience wrapper: run cmd through /bin/sh -c */
