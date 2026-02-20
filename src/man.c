@@ -154,7 +154,7 @@ man_get_section_pages_json(const char *area, const char *section)
 	// ecc.
 
 	while ((de = readdir(dr)) != NULL) {
-		// Salta file nascosti e cartelle (come i386, alpha)
+		// Skip hidden files and architecture subdirectories (for example i386, alpha).
 		if (de->d_name[0] == '.')
 			continue;
 		if (de->d_type == DT_DIR)
@@ -242,8 +242,8 @@ man_api_search_raw(const char *query)
 	if (!query || strlen(query) < 2)
 		return strdup("");
 
-	/* Rimuoviamo -M /usr/share/man per usare il path di sistema completo
-	 *      che include /usr/local/man dopo il tuo makewhatis */
+	/* Use the full manual search path so results can include /usr/local/man
+	 * after the local makewhatis database has been generated. */
 	// char *const argv[] = {"apropos", (char *)query, NULL};
 	char *const argv[] = {
 		"apropos", "-M",
@@ -251,7 +251,7 @@ man_api_search_raw(const char *query)
 		(char *)query, NULL
 	};
 
-	/* Aumentiamo il buffer perché apropos può restituire molto testo */
+	/* Increase buffer size because apropos may return a lot of text. */
 	char *output = safe_popen_read_argv("/usr/bin/apropos", argv,
 										1024 * 1024, 5, NULL);
 
@@ -260,16 +260,16 @@ man_api_search_raw(const char *query)
 	return output;
 }
 
-/* --- Handlers HTTP (Usano http_queue_* dal tuo http_utils.h) --- */
+/* --- HTTP handlers (using the native http_send_* helpers) --- */
 /**
- * Gestisce le chiamate API JSON per le pagine man
+ * Handle JSON API requests for manual pages.
  */
 int
 man_api_handler(http_request_t *req)
 {
 	char *json = NULL;
 
-	/* 1. Trova l'inizio del comando dopo /api/man */
+	/* 1. Find the command segment after /api/man */
 	const char *api_base = "/api/man";
 	const char *path = strstr(req->url, api_base);
 	if (!path) {
@@ -277,12 +277,12 @@ man_api_handler(http_request_t *req)
 	}
 	path += strlen(api_base);
 
-	/* 2. Isola la query string dal path principale */
+	/* 2. Isolate query string from the path segment. */
 	const char *query_string = strchr(path, '?');
 	size_t path_len =
 	query_string ? (size_t)(query_string - path) : strlen(path);
 
-	/* --- ROUTING LOGIC --- */
+	/* --- Routing logic --- */
 
 	/* /api/man/resolve?name=kqueue&section=2
 	 * Resolves the real area+path of a man page via 'man -w' so the FE
@@ -392,11 +392,11 @@ man_api_handler(http_request_t *req)
 			const char *query = NULL;
 			char query_buf[256] = {0};
 
-			/* Controllo se è /api/man/search/open (formato JS) */
+			/* Check whether path is /api/man/search/open (JS format). */
 			if (path[7] == '/') {
-				query = path + 8; // Prende tutto quello dopo lo slash
+				query = path + 8; // Take everything after the slash
 			}
-			/* Controllo se è /api/man/search?q=open (formato curl) */
+			/* Check whether path is /api/man/search?q=open (curl format). */
 			else {
 				const char *q_param = strstr(path, "q=");
 				if (q_param) {
@@ -545,7 +545,7 @@ man_render_page(const char *area, const char *section, const char *page,
 	/* Pulizia */
 	free(filepath);
 
-	return output; /* output è raw binary, out_len contiene la lunghezza
+	return output; /* output is raw binary, out_len contains the length
 	esatta */
 }
 

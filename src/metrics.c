@@ -8,11 +8,11 @@
 #include <sys/mount.h>
 #include <sys/proc.h>
 #include <sys/swap.h>
-#include <sys/utsname.h>  /* INDISPENSABILE per uname e struct utsname */
+#include <sys/utsname.h>  /* Required for uname() and struct utsname. */
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <net/if.h>
-#include <ifaddrs.h>      /* INDISPENSABILE per getifaddrs e struct ifaddrs */
+#include <ifaddrs.h>      /* Required for getifaddrs() and struct ifaddrs. */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,7 +20,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <time.h>
-#include <pwd.h>          /* Per struct passwd (nomi utenti processi) */
+#include <pwd.h>          /* For struct passwd (process usernames). */
 
 #include "../include/metrics.h"
 #include "../include/config.h"
@@ -32,7 +32,7 @@
 
 
 
-/* Macro per il logging basata sulla config globale */
+/* Logging macro controlled by global configuration. */
 #define LOG(...)                                            \
 do {                                                        \
 	if (config_verbose) {                                   \
@@ -44,14 +44,14 @@ do {                                                        \
 
 static struct kinfo_proc *get_procs_snapshot(size_t *nprocs);
 
-/* Funzione di comparazione per qsort: ordina per RSS decrescente */
+/* qsort comparator: sort by descending RSS. */
 static int
 compare_memory(const void *a, const void *b)
 {
 	const struct kinfo_proc *pa = a;
 	const struct kinfo_proc *pb = b;
 
-	/* p_vm_rssize è la dimensione del Resident Set Size in pagine */
+	/* p_vm_rssize is resident set size in pages. */
 	if (pa->p_vm_rssize < pb->p_vm_rssize)
 		return 1;
 	if (pa->p_vm_rssize > pb->p_vm_rssize)
@@ -59,13 +59,13 @@ compare_memory(const void *a, const void *b)
 	return 0;
 }
 
-/* Helper per ottenere la lista di tutti i processi */
+/* Helper to snapshot all running processes. */
 static struct kinfo_proc *
 get_procs_snapshot(size_t *nprocs)
 {
 	int mib[6];
 	size_t size;
-	struct kinfo_proc *kp = NULL; /* Inizializza a NULL */
+	struct kinfo_proc *kp = NULL; /* Initialize to NULL. */
 	int retry = 0;
 	size_t elem_size;
 	int nelem;
@@ -107,7 +107,7 @@ get_procs_snapshot(size_t *nprocs)
 		if (errno != ENOMEM) {
 			LOG("sysctl data query failed: %s", strerror(errno));
 			free(kp);
-			kp = NULL; /* CRITICO: Reset a NULL dopo free */
+			kp = NULL; /* Critical: reset pointer to NULL after free. */
 			return NULL;
 		}
 
@@ -115,11 +115,11 @@ get_procs_snapshot(size_t *nprocs)
 		"again...",
 		retry, nelem);
 		free(kp);
-		kp = NULL; /* CRITICO: Reset a NULL dopo free */
+		kp = NULL; /* Critical: reset pointer to NULL after free. */
 	}
 
 	LOG("Failed to get process list after %d retries", retry);
-	/* kp è garantito NULL qui */
+	/* kp is guaranteed to be NULL here. */
 	return NULL;
 }
 
@@ -410,7 +410,7 @@ metrics_get_top_cpu_processes(ProcessInfo *processes, int max_processes)
 		strlcpy(temp[valid_count].command, kp[i].p_comm,
 				sizeof(temp[valid_count].command));
 
-		/* CRITICO: Usa getpwuid_r() invece di getpwuid() */
+		/* Critical: use getpwuid_r() instead of getpwuid(). */
 		struct passwd pwd;
 		struct passwd *result;
 		char pwbuf[1024];
@@ -429,7 +429,7 @@ metrics_get_top_cpu_processes(ProcessInfo *processes, int max_processes)
 			valid_count++;
 	}
 
-	/* Ordina per CPU decrescente */
+	/* Sort by descending CPU usage. */
 	for (int i = 0; i < valid_count - 1; i++) {
 		for (int j = 0; j < valid_count - i - 1; j++) {
 			if (temp[j].cpu_percent < temp[j + 1].cpu_percent) {
@@ -495,7 +495,7 @@ metrics_get_top_memory_processes(ProcessInfo *processes, int max_processes)
 		strlcpy(processes[count].command, kp[i].p_comm,
 				sizeof(processes[count].command));
 
-		/* CRITICO: Usa getpwuid_r() invece di getpwuid() */
+		/* Critical: use getpwuid_r() instead of getpwuid(). */
 		struct passwd pwd;
 		struct passwd *result;
 		char pwbuf[1024];
@@ -519,7 +519,7 @@ metrics_get_top_memory_processes(ProcessInfo *processes, int max_processes)
 	return count;
 }
 
-/* 1. Statistiche generali */
+/* 1. Aggregate process counters. */
 int
 metrics_get_process_stats(int *total, int *running, int *sleeping, int *zombie)
 {
@@ -797,7 +797,7 @@ append_top_memory_processes_json(char *buffer, size_t size)
 	snprintf(ptr, size, "]");
 }
 
-/* Questa funzione deve essere chiamata in get_system_metrics_json */
+/* This helper is intended for get_system_metrics_json(). */
 static void
 append_process_stats_json(char *json, size_t size)
 {
@@ -824,7 +824,7 @@ get_system_metrics_json(void)
 	char timestamp[64];
 	char hostname[256];
 	time_t now;
-	struct tm tm_buf; /* Buffer per localtime_r */
+	struct tm tm_buf; /* Buffer for localtime_r(). */
 
 	char cpu_json[256];
 	char memory_json[512];
@@ -840,7 +840,7 @@ get_system_metrics_json(void)
 
 	time(&now);
 
-	/* CRITICO: Usa localtime_r() invece di localtime() */
+	/* Critical: use localtime_r() instead of localtime(). */
 	struct tm *tm_ptr = localtime_r(&now, &tm_buf);
 	if (tm_ptr) {
 		strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S",
@@ -896,18 +896,18 @@ metrics_handler(http_request_t *req)
 {
 	char *json = get_system_metrics_json();
 	if (!json) {
-		return http_send_error(req, 500, "Incapace di generare le metriche");
+		return http_send_error(req, 500, "Unable to generate metrics");
 	}
 
 	http_response_t *resp = http_response_create();
 	resp->status_code = 200;
 	resp->content_type = "application/json";
 
-	/* Permettiamo l'accesso da dashboard esterne */
+	/* Allow access from external dashboards. */
 	http_response_add_header(resp, "Access-Control-Allow-Origin", "*");
 
-	/* Passiamo il JSON al corpo della risposta.
-	 *      Il flag '1' dice al sistema di liberare la memoria automaticamente. */
+	/* Attach JSON as response body.
+	 *      The '1' flag tells the response layer to free memory automatically. */
 	http_response_set_body(resp, json, strlen(json), 1);
 
 	int ret = http_response_send(req, resp);
