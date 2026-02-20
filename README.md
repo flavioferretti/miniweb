@@ -100,6 +100,7 @@ requests before being closed.
 | `GET /` | Dashboard with system overview |
 | `GET /docs` | Manual page browser with `apropos(1)` search |
 | `GET /networking` | Interfaces, routes, DNS configuration |
+| `GET /packages` | Package manager UI (search/info/which-owner) |
 | `GET /apiroot` | API index page |
 
 ### Add or Remove Regular Pages (`/`, `/docs`, ...)
@@ -136,6 +137,15 @@ To remove a page, remove the corresponding `view_routes[]` entry and rebuild.
 | `GET /api/networking` | Interfaces, routes, resolver JSON |
 
 `/api/metrics` includes hostname, OS version, uptime, load averages, memory, swap, per-filesystem disk usage, network status, top process lists (CPU/memory), and process counters.
+
+### Packages API
+
+| Endpoint | Description |
+|---|---|
+| `GET /api/packages/search?q={query}` | Search installed packages by name pattern (`pkg_info -Q`). |
+| `GET /api/packages/info?name={package}` | Show detailed package metadata for one package (`pkg_info`). |
+| `GET /api/packages/which?path={absolute_file_path}` | Find package owning an absolute path (`pkg_info -E`). |
+| `GET /api/packages/files?name={package}` | List files installed by a package (`pkg_info -L`). |
 
 ### Manual Pages API
 
