@@ -273,37 +273,35 @@ request_keep_alive(const char *buf, const char *version)
 }
 
 static void
-send_error_direct(int fd, int code, const char *msg)
+send_error_response(int fd, int code, const char *msg)
 {
-	char body[1024];
-	int  blen = snprintf(body, sizeof(body),
-						 "<!DOCTYPE html><html><head><meta charset=\"UTF-8\">"
-						 "<title>%d Error</title>"
-						 "</head><body><h1>%d Error</h1><p>%s</p>"
-						 "<hr><p><a href=\"/\">MiniWeb</a> on OpenBSD</p>"
-						 "</body></html>",
-					  code, code, msg ? msg : "");
+	http_request_t req = {
+		.fd = fd,
+		.method = "GET",
+		.url = "/",
+		.version = "HTTP/1.1",
+		.keep_alive = 0,
+	};
 
-	const char *st;
-	switch (code) {
-		case 400: st = "Bad Request";           break;
-		case 403: st = "Forbidden";             break;
-		case 404: st = "Not Found";             break;
-		case 503: st = "Service Unavailable";   break;
-		default:  st = "Internal Server Error"; break;
-	}
+	(void)http_send_error(&req, code, msg);
+}
 
-	char hdr[512];
-	int  hlen = snprintf(hdr, sizeof(hdr),
-						 "HTTP/1.1 %d %s\r\n"
-						 "Content-Type: text/html; charset=utf-8\r\n"
-						 "Content-Length: %d\r\n"
-						 "Connection: close\r\n"
-						 "\r\n",
-					  code, st, blen);
+static int
+try_rearm_keepalive(connection_t *conn)
+{
+	if (!conn)
+		return 0;
+	if (conn->requests_served >= MAX_KEEPALIVE_REQUESTS)
+		return 0;
 
-	write(fd, hdr,  hlen);
-	write(fd, body, blen);
+	conn->requests_served++;
+	conn->bytes_read = 0;
+	conn->buffer[0] = '\0';
+	conn->last_activity = time(NULL);
+
+	struct kevent ev;
+	EV_SET(&ev, conn->fd, EVFILT_READ, EV_ENABLE, 0, 0, conn);
+	return kevent(kq_fd, &ev, 1, NULL, 0, NULL) == 0;
 }
 
 /* -- Worker thread ---------------------------------------------------------- */
@@ -357,7 +355,7 @@ worker_thread(void *arg)
 				request_done = 1;
 			} else if (conn->bytes_read >= (size_t)config.max_req_size - 1) {
 				/* Request too large */
-				send_error_direct(fd, 400, "Request Too Large");
+				send_error_response(fd, 400, "Request Too Large");
 				break;
 			} else {
 				/* Partial read: try again (socket is non-blocking, so if
@@ -388,18 +386,8 @@ worker_thread(void *arg)
 				};
 				handler(&req);
 				keep_alive = req.keep_alive;
-				if (keep_alive &&
-				    conn->requests_served < MAX_KEEPALIVE_REQUESTS) {
-					conn->requests_served++;
-					conn->bytes_read = 0;
-					conn->buffer[0] = '\0';
-					conn->last_activity = time(NULL);
-
-					struct kevent ev;
-					EV_SET(&ev, fd, EVFILT_READ, EV_ENABLE, 0, 0, conn);
-					if (kevent(kq_fd, &ev, 1, NULL, 0, NULL) == 0)
-						close_conn = 0;
-				}
+				if (keep_alive && try_rearm_keepalive(conn))
+					close_conn = 0;
 			} else {
 				http_request_t req = {
 					.fd          = fd,
@@ -412,21 +400,11 @@ worker_thread(void *arg)
 					.client_addr = &conn->addr,
 				};
 				http_send_error(&req, 404, "Not Found");
-				if (req.keep_alive &&
-				    conn->requests_served < MAX_KEEPALIVE_REQUESTS) {
-					conn->requests_served++;
-					conn->bytes_read = 0;
-					conn->buffer[0] = '\0';
-					conn->last_activity = time(NULL);
-
-					struct kevent ev;
-					EV_SET(&ev, fd, EVFILT_READ, EV_ENABLE, 0, 0, conn);
-					if (kevent(kq_fd, &ev, 1, NULL, 0, NULL) == 0)
-						close_conn = 0;
-				}
+				if (req.keep_alive && try_rearm_keepalive(conn))
+					close_conn = 0;
 			}
 				} else {
-					send_error_direct(fd, 400, "Bad Request");
+					send_error_response(fd, 400, "Bad Request");
 				}
 		}
 
@@ -466,7 +444,7 @@ handle_accept(void)
 
 		connection_t *conn = alloc_connection(cfd, &caddr);
 		if (!conn) {
-			send_error_direct(cfd, 503, "Server busy");
+			send_error_response(cfd, 503, "Server busy");
 			close(cfd);
 			if (config.verbose)
 				fprintf(stderr, "Connection limit reached, rejected fd=%d\n", cfd);
