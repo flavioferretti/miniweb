@@ -725,6 +725,12 @@ man_render_page(const char *area, const char *section, const char *page,
 	char *output = safe_popen_read_argv("/usr/bin/mandoc", argv_m,
 										MAX_OUTPUT_SIZE, 10, out_len);
 
+	/* Normalize mandoc ASCII output so text downloads/rendering are clean
+	 * across browsers (no nroff overstrike backspace sequences). */
+	if (output && *out_len > 0 && strcmp(format, "txt") == 0) {
+		strip_overstrike_ascii(output, out_len);
+	}
+
 	/* Fallback for man(7) pages that cannot be converted to markdown.
 	 * Return plain ASCII text instead of surfacing a 404 for .md requests. */
 	if (!output && strcmp(format, "md") == 0) {
