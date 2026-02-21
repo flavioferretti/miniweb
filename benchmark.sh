@@ -5,6 +5,7 @@
 #
 
 set -eu
+
 SERVER_PORT="${SERVER_PORT:-3000}"
 BASE_URL="http://localhost:${SERVER_PORT}"
 TEST_DURATION="${TEST_DURATION:-20}"
@@ -15,86 +16,82 @@ ASSETS_DIR="${OUTPUT_ROOT}/benchmark_assets"
 TIMESTAMP="$(date '+%Y-%m-%d %H:%M:%S')"
 CSV_FILE="${ASSETS_DIR}/results.csv"
 HTML_FILE="${OUTPUT_ROOT}/benchmark.html"
-GNUPLOT_SCRIPT="${ASSETS_DIR}/plot.gp"
 
-# Endpoint definitions
+# ---------------------------------------------------------------------------
+# Endpoint definitions  (IDs, URLs, human names — must stay in sync)
+# PDF and PS endpoints are excluded: wrk cannot benchmark binary streams.
+# ---------------------------------------------------------------------------
 set -A ENDPOINT_IDS -- \
-    "STATIC_HTML" "STATIC_CSS" "STATIC_JS" "STATIC_IMG" \
-    "PAGE_HOME" "PAGE_DOCS" "PAGE_NETWORKING" "PACKAGES_UI" "API_ROOT" \
-    "API_METRICS" "API_NETWORKING" \
-    "API_PKG_SEARCH" "API_PKG_INFO" "API_PKG_WHICH" "API_PKG_FILES" "API_PKG_LIST" \
-    "MAN_SEARCH" "MAN_HTML" "MAN_HTML_EXT" "MAN_MD" "MAN_PDF" "MAN_PS"
+    "STATIC_HTML"    "STATIC_CSS"      "STATIC_JS"       "STATIC_IMG" \
+    "PAGE_HOME"      "PAGE_DOCS"       "PAGE_NETWORKING" "PACKAGES_UI"    "API_ROOT" \
+    "API_METRICS"    "API_NETWORKING" \
+    "API_PKG_SEARCH" "API_PKG_INFO"    "API_PKG_FILES" \
+    "MAN_SEARCH"     "MAN_HTML"        "MAN_HTML_EXT"    "MAN_MD"
 
 set -A ENDPOINT_URLS -- \
-    "/static/test.html" "/static/css/custom.css" "/static/js/theme_toggler.js" "/static/assets/favicon.svg" \
-    "/" "/docs" "/networking" "/packages" "/apiroot" \
-    "/api/metrics" "/api/networking" \
-    "/api/packages/search?q=curl" "/api/packages/info?name=curl" "/api/packages/which?path=/bin/ls" "/api/packages/files?name=curl" "/api/packages/list" \
-    "/api/man/search?q=pledge" "/man/1/1/ls" "/man/1/1/ls.html" "/man/1/1/ls.md" "/man/1/1/ls.pdf" "/man/1/1/ls.ps"
+    "/static/test.html"                    "/static/css/custom.css"            "/static/js/theme_toggler.js"  "/static/assets/favicon.svg" \
+    "/"                                    "/docs"                             "/networking"                  "/packages"                  "/apiroot" \
+    "/api/metrics"                         "/api/networking" \
+    "/api/packages/search?q=curl"          "/api/packages/info?name=curl"      "/api/packages/files?name=curl" \
+    "/api/man/search?q=pledge"             "/man/1/1/ls"                       "/man/1/1/ls.html"             "/man/1/1/ls.md"
 
 set -A ENDPOINT_NAMES -- \
-    "Static HTML" "Static CSS" "Static JS" "Static Image" \
-    "Home Dashboard" "Documentation" "Networking" "Packages UI" "API Index" \
-    "System Metrics API" "Network Info API" \
-    "Package Search (curl)" "Package Info (curl)" "Package Owner (/bin/ls)" "Package Files (curl)" "Package List" \
-    "Man Search (pledge)" "Man Page (ls, HTML)" "Man Page (ls, .html)" "Man Page (ls, Markdown)" "Man Page (ls, PDF)" "Man Page (ls, PostScript)"
+    "Static HTML"         "Static CSS"           "Static JS"             "Static Image" \
+    "Home Dashboard"      "Documentation"        "Networking"            "Packages UI"          "API Index" \
+    "System Metrics API"  "Network Info API" \
+    "Package Search"      "Package Info"         "Package Files" \
+    "Man Search"          "Man Page (HTML)"      "Man Page (.html)"      "Man Page (Markdown)"
 
+# ---------------------------------------------------------------------------
 # Helper functions
+# ---------------------------------------------------------------------------
 trim_value() {
-  printf '%s' "$1" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
+    printf '%s' "$1" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
 }
 
 to_ms() {
-  typeset raw num unit
-  raw="$(trim_value "$1" | tr -d ',')"
-  num="$(printf '%s' "$raw" | sed 's/[^0-9.]//g')"
-  unit="$(printf '%s' "$raw" | sed 's/[0-9.]//g')"
-
-  [ -z "$num" ] && num="0"
-
-  case "$unit" in
-    us) awk -v n="$num" 'BEGIN { printf "%.3f", n/1000 }' ;;
-    ms|'') awk -v n="$num" 'BEGIN { printf "%.3f", n }' ;;
-    s) awk -v n="$num" 'BEGIN { printf "%.3f", n*1000 }' ;;
-    m) awk -v n="$num" 'BEGIN { printf "%.3f", n*60000 }' ;;
-    *) awk -v n="$num" 'BEGIN { printf "%.3f", n }' ;;
-  esac
+    typeset raw num unit
+    raw="$(trim_value "$1" | tr -d ',')"
+    num="$(printf '%s' "$raw" | sed 's/[^0-9.]//g')"
+    unit="$(printf '%s' "$raw" | sed 's/[0-9.]//g')"
+    [ -z "$num" ] && num="0"
+    case "$unit" in
+        us)    awk -v n="$num" 'BEGIN { printf "%.3f", n/1000 }' ;;
+        ms|'') awk -v n="$num" 'BEGIN { printf "%.3f", n }' ;;
+        s)     awk -v n="$num" 'BEGIN { printf "%.3f", n*1000 }' ;;
+        m)     awk -v n="$num" 'BEGIN { printf "%.3f", n*60000 }' ;;
+        *)     awk -v n="$num" 'BEGIN { printf "%.3f", n }' ;;
+    esac
 }
 
 to_mbsec() {
-  typeset raw num unit
-  raw="$(trim_value "$1" | tr -d ',')"
-  num="$(printf '%s' "$raw" | sed 's/[^0-9.]//g')"
-  unit="$(printf '%s' "$raw" | sed 's/[0-9.]//g')"
-
-  [ -z "$num" ] && num="0"
-
-  case "$unit" in
-    B) awk -v n="$num" 'BEGIN { printf "%.3f", n/1048576 }' ;;
-    KB) awk -v n="$num" 'BEGIN { printf "%.3f", n/1024 }' ;;
-    MB|'') awk -v n="$num" 'BEGIN { printf "%.3f", n }' ;;
-    GB) awk -v n="$num" 'BEGIN { printf "%.3f", n*1024 }' ;;
-    *) awk -v n="$num" 'BEGIN { printf "%.3f", n }' ;;
-  esac
+    typeset raw num unit
+    raw="$(trim_value "$1" | tr -d ',')"
+    num="$(printf '%s' "$raw" | sed 's/[^0-9.]//g')"
+    unit="$(printf '%s' "$raw" | sed 's/[0-9.]//g')"
+    [ -z "$num" ] && num="0"
+    case "$unit" in
+        B)     awk -v n="$num" 'BEGIN { printf "%.3f", n/1048576 }' ;;
+        KB)    awk -v n="$num" 'BEGIN { printf "%.3f", n/1024 }' ;;
+        MB|'') awk -v n="$num" 'BEGIN { printf "%.3f", n }' ;;
+        GB)    awk -v n="$num" 'BEGIN { printf "%.3f", n*1024 }' ;;
+        *)     awk -v n="$num" 'BEGIN { printf "%.3f", n }' ;;
+    esac
 }
 
-# Health check
 check_endpoint() {
     typeset url="$1"
-    typeset full_url="${BASE_URL}${url}"
-
-    curl -s -G --max-time 10 -o /dev/null -w '%{http_code}' "$full_url" 2>/dev/null || echo "000"
+    curl -s -G --max-time 10 -o /dev/null -w '%{http_code}' "${BASE_URL}${url}" 2>/dev/null || printf '000'
 }
 
-# Get HTTP code
 get_http_code() {
     typeset url="$1"
-    typeset full_url="${BASE_URL}${url}"
-
-    curl -s -G --max-time 3 -o /dev/null -w '%{http_code}' "$full_url" 2>/dev/null || echo "000"
+    curl -s -G --max-time 3 -o /dev/null -w '%{http_code}' "${BASE_URL}${url}" 2>/dev/null || printf '000'
 }
 
-# Check dependencies
+# ---------------------------------------------------------------------------
+# Startup banner + dependency checks
+# ---------------------------------------------------------------------------
 printf 'MiniWeb Benchmark\n'
 printf '=============================================\n'
 printf 'Server URL  : %s\n' "$BASE_URL"
@@ -103,27 +100,29 @@ printf 'Duration    : %ss\n' "$TEST_DURATION"
 printf 'Connections : %s\n\n' "$CONNECTIONS"
 
 for cmd in wrk gnuplot curl awk sed; do
-  if ! command -v "$cmd" >/dev/null 2>&1; then
-    echo "ERROR: missing dependency '$cmd'" >&2
-    exit 1
-  fi
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        printf 'ERROR: missing dependency "%s"\n' "$cmd" >&2
+        exit 1
+    fi
 done
 
 if ! curl -s --max-time 3 "${BASE_URL}/static/test.html" >/dev/null 2>&1; then
-  echo "ERROR: server is unreachable at $BASE_URL" >&2
-  exit 1
+    printf 'ERROR: server is unreachable at %s\n' "$BASE_URL" >&2
+    exit 1
 fi
 
 mkdir -p "$ASSETS_DIR"
 
-cat > "$CSV_FILE" <<'CSV'
-connections,req_sec,latency_avg_ms,latency_stdev_ms,latency_max_ms,transfer_mb_sec,total_requests,errors_non_2xx,endpoint_name,endpoint_url,http_code,status
-CSV
+# CSV header
+printf 'endpoint_id,connections,req_sec,latency_avg_ms,latency_stdev_ms,latency_max_ms,transfer_mb_sec,total_requests,errors_non_2xx,endpoint_name,endpoint_url,http_code,status\n' \
+    > "$CSV_FILE"
 
-# Run benchmarks per ogni endpoint
+# ---------------------------------------------------------------------------
+# Run benchmarks
+# ---------------------------------------------------------------------------
 total_endpoints=${#ENDPOINT_IDS[*]}
 i=0
-while [ $i -lt $total_endpoints ]; do
+while [ "$i" -lt "$total_endpoints" ]; do
     id="${ENDPOINT_IDS[$i]}"
     name="${ENDPOINT_NAMES[$i]}"
     url="${ENDPOINT_URLS[$i]}"
@@ -131,78 +130,58 @@ while [ $i -lt $total_endpoints ]; do
 
     printf '\n▶ Testing: %s\n' "$name"
     printf '  URL: %s\n' "${BASE_URL}${url}"
+    printf '  Health check ... '
 
-    # Health check
-    printf '    Health check ... '
-    http_check=$(check_endpoint "$url")
+    http_check="$(check_endpoint "$url")"
 
     case "$http_check" in
         200|201|202|204|301|302|304)
             printf 'OK (HTTP %s)\n' "$http_check"
             ;;
         *)
-            printf 'FAILED (HTTP %s) - skipping endpoint\n' "$http_check"
+            printf 'FAILED (HTTP %s) — skipping endpoint\n' "$http_check"
             for conn in $CONNECTIONS; do
-                printf '%s,%s,%s,%s,%s,%s,%s,%s,"%s","%s",%s,HEALTH_FAILED\n' \
-                    "$conn" "0" "0" "0" "0" "0" "0" "0" "$name" "$url" "$http_check" >> "$CSV_FILE"
+                printf '%s,%s,0,0,0,0,0,0,0,"%s","%s",%s,HEALTH_FAILED\n' \
+                    "$id" "$conn" "$name" "$url" "$http_check" >> "$CSV_FILE"
             done
             i=$((i + 1))
-            sync
             continue
             ;;
     esac
 
-    # Test per ogni livello di connessione
     for conn in $CONNECTIONS; do
-        printf '    Connections: %3d ... ' "$conn"
+        printf '  Connections: %3d ... ' "$conn"
 
-        # Per PDF/PS solo check disponibilità
-        case "$url" in
-            *.pdf|*.ps)
-                http_code=$(get_http_code "$url")
-                printf '%s,%s,%s,%s,%s,%s,%s,%s,"%s","%s",%s,BINARY\n' \
-                    "$conn" "0" "0" "0" "0" "0" "1" "0" "$name" "$url" "$http_code" >> "$CSV_FILE"
-                printf 'OK (binary)\n'
-                continue
-                ;;
-        esac
-
-        # wrk test
         full_url="${BASE_URL}${url}"
         run_output="$(wrk -t"$THREADS" -c"$conn" -d"${TEST_DURATION}"s --latency "$full_url" 2>&1)"
+        printf '%s\n' "$run_output" > "${ASSETS_DIR}/${safe_name}_${conn}.txt"
 
-        # Salva output raw
-        echo "$run_output" > "${ASSETS_DIR}/${safe_name}_${conn}.txt"
-
-        # Estrai metriche
-        req_sec="$(echo "$run_output" | awk '/Requests\/sec:/ {print $2; exit}')"
+        req_sec="$(printf '%s\n' "$run_output" | awk '/Requests\/sec:/ {print $2; exit}')"
         [ -z "$req_sec" ] && req_sec="0"
 
-        transfer_raw="$(echo "$run_output" | awk '/Transfer\/sec:/ {print $2; exit}')"
+        transfer_raw="$(printf '%s\n' "$run_output" | awk '/Transfer\/sec:/ {print $2; exit}')"
         [ -z "$transfer_raw" ] && transfer_raw="0MB"
 
-        total_requests="$(echo "$run_output" | awk '/requests in/ {print $1; exit}')"
+        total_requests="$(printf '%s\n' "$run_output" | awk '/requests in/ {print $1; exit}')"
         [ -z "$total_requests" ] && total_requests="0"
 
-        non_2xx="$(echo "$run_output" | awk '/Non-2xx or 3xx responses:/ {print $5; exit}')"
+        non_2xx="$(printf '%s\n' "$run_output" | awk '/Non-2xx or 3xx responses:/ {print $5; exit}')"
         [ -z "$non_2xx" ] && non_2xx="0"
 
-        latency_line="$(echo "$run_output" | awk '/Latency/ {print; exit}')"
+        latency_line="$(printf '%s\n' "$run_output" | awk '/^[[:space:]]*Latency/ {print; exit}')"
         if [ -n "$latency_line" ]; then
-            latency_avg="$(to_ms "$(echo "$latency_line" | awk '{print $2}')")"
-            latency_stdev="$(to_ms "$(echo "$latency_line" | awk '{print $3}')")"
-            latency_max="$(to_ms "$(echo "$latency_line" | awk '{print $4}')")"
+            latency_avg="$(to_ms "$(printf '%s\n' "$latency_line" | awk '{print $2}')")"
+            latency_stdev="$(to_ms "$(printf '%s\n' "$latency_line" | awk '{print $3}')")"
+            latency_max="$(to_ms "$(printf '%s\n' "$latency_line" | awk '{print $4}')")"
         else
-            latency_avg="0"
-            latency_stdev="0"
-            latency_max="0"
+            latency_avg="0"; latency_stdev="0"; latency_max="0"
         fi
 
         transfer_mb="$(to_mbsec "$transfer_raw")"
-        http_code=$(get_http_code "$url")
+        http_code="$(get_http_code "$url")"
 
-        printf '%s,%s,%s,%s,%s,%s,%s,%s,"%s","%s",%s,OK\n' \
-            "$conn" "$req_sec" "$latency_avg" "$latency_stdev" "$latency_max" \
+        printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,"%s","%s",%s,OK\n' \
+            "$id" "$conn" "$req_sec" "$latency_avg" "$latency_stdev" "$latency_max" \
             "$transfer_mb" "$total_requests" "$non_2xx" "$name" "$url" "$http_code" \
             >> "$CSV_FILE"
 
@@ -213,69 +192,188 @@ while [ $i -lt $total_endpoints ]; do
     i=$((i + 1))
 done
 
-# --- GRAFICI (STILE ORIGINALE) ---
-cat > "$GNUPLOT_SCRIPT" <<GP
-set datafile separator ','
-set key outside right top
-set grid
-set border lw 1.2
-set style line 1 lc rgb '#2563eb' lw 2 pt 7 ps 1.1
-set style line 2 lc rgb '#dc2626' lw 2 pt 7 ps 1.1
-set style line 3 lc rgb '#d97706' lw 2 pt 7 ps 1.1
-set style line 4 lc rgb '#16a34a' lw 2 pt 7 ps 1.1
-set style line 5 lc rgb '#7c3aed' lw 2 pt 7 ps 1.1
+# ---------------------------------------------------------------------------
+# Gnuplot — overall graphs (aggregate all endpoints)
+# ---------------------------------------------------------------------------
+GNUPLOT_SCRIPT="${ASSETS_DIR}/plot_overall.gp"
 
-set terminal svg size 1200,480 dynamic enhanced font 'Arial,11'
-
-set output '${ASSETS_DIR}/throughput.svg'
-set title 'Throughput by Concurrent Connections'
-set xlabel 'Concurrent connections'
-set ylabel 'Requests/sec'
-plot '${CSV_FILE}' using 1:2 skip 1 with linespoints ls 1 title 'Requests/sec'
-
-set output '${ASSETS_DIR}/latency.svg'
-set title 'Average and Max Latency'
-set xlabel 'Concurrent connections'
-set ylabel 'Latency (ms)'
-plot '${CSV_FILE}' using 1:3 skip 1 with linespoints ls 2 title 'Average latency', \
-     '${CSV_FILE}' using 1:5 skip 1 with linespoints ls 3 title 'Max latency'
-
-set output '${ASSETS_DIR}/latency_stdev.svg'
-set title 'Latency Stability (Standard Deviation)'
-set xlabel 'Concurrent connections'
-set ylabel 'Std Dev (ms)'
-plot '${CSV_FILE}' using 1:4 skip 1 with linespoints ls 5 title 'Latency stdev'
-
-set output '${ASSETS_DIR}/transfer.svg'
-set title 'Transfer Rate'
-set xlabel 'Concurrent connections'
-set ylabel 'MB/sec'
-plot '${CSV_FILE}' using 1:6 skip 1 with linespoints ls 4 title 'Transfer MB/sec'
-
-set output '${ASSETS_DIR}/efficiency.svg'
-set title 'Connection Efficiency'
-set xlabel 'Concurrent connections'
-set ylabel 'Req/sec per connection'
-plot '${CSV_FILE}' using 1:(\$2/\$1) skip 1 with linespoints ls 1 title 'Efficiency'
-GP
+# Build the overall gnuplot script using printf to avoid heredoc expansion issues
+{
+printf 'set datafile separator ","\n'
+printf 'set key outside right top\n'
+printf 'set grid\n'
+printf 'set border lw 1.2\n'
+printf 'set style line 1 lc rgb "#2563eb" lw 2 pt 7 ps 1.1\n'
+printf 'set style line 2 lc rgb "#dc2626" lw 2 pt 7 ps 1.1\n'
+printf 'set style line 3 lc rgb "#d97706" lw 2 pt 7 ps 1.1\n'
+printf 'set style line 4 lc rgb "#16a34a" lw 2 pt 7 ps 1.1\n'
+printf 'set style line 5 lc rgb "#7c3aed" lw 2 pt 7 ps 1.1\n'
+printf 'set terminal svg size 1200,480 dynamic enhanced font "Arial,11"\n'
+printf '\n'
+printf 'set output "%s/throughput.svg"\n' "$ASSETS_DIR"
+printf 'set title "Throughput by Concurrent Connections (all endpoints)"\n'
+printf 'set xlabel "Concurrent connections"\n'
+printf 'set ylabel "Requests/sec"\n'
+printf 'plot "%s" using 2:3 skip 1 with linespoints ls 1 title "Requests/sec"\n' "$CSV_FILE"
+printf '\n'
+printf 'set output "%s/latency.svg"\n' "$ASSETS_DIR"
+printf 'set title "Average and Max Latency (all endpoints)"\n'
+printf 'set xlabel "Concurrent connections"\n'
+printf 'set ylabel "Latency (ms)"\n'
+printf 'plot "%s" using 2:4 skip 1 with linespoints ls 2 title "Avg latency", \\\n' "$CSV_FILE"
+printf '     "%s" using 2:6 skip 1 with linespoints ls 3 title "Max latency"\n' "$CSV_FILE"
+printf '\n'
+printf 'set output "%s/latency_stdev.svg"\n' "$ASSETS_DIR"
+printf 'set title "Latency Stability (all endpoints)"\n'
+printf 'set xlabel "Concurrent connections"\n'
+printf 'set ylabel "Std Dev (ms)"\n'
+printf 'plot "%s" using 2:5 skip 1 with linespoints ls 5 title "Latency stdev"\n' "$CSV_FILE"
+printf '\n'
+printf 'set output "%s/transfer.svg"\n' "$ASSETS_DIR"
+printf 'set title "Transfer Rate (all endpoints)"\n'
+printf 'set xlabel "Concurrent connections"\n'
+printf 'set ylabel "MB/sec"\n'
+printf 'plot "%s" using 2:7 skip 1 with linespoints ls 4 title "Transfer MB/sec"\n' "$CSV_FILE"
+printf '\n'
+printf 'set output "%s/efficiency.svg"\n' "$ASSETS_DIR"
+printf 'set title "Connection Efficiency (all endpoints)"\n'
+printf 'set xlabel "Concurrent connections"\n'
+printf 'set ylabel "Req/sec per connection"\n'
+printf 'plot "%s" using 2:($3/$2) skip 1 with linespoints ls 1 title "Efficiency"\n' "$CSV_FILE"
+} > "$GNUPLOT_SCRIPT"
 
 gnuplot "$GNUPLOT_SCRIPT"
 
-# --- STATISTICHE ---
-peak_req=$(awk -F, 'NR>1 && $2>0 {print $2}' "$CSV_FILE" | sort -n | tail -1)
-best_latency=$(awk -F, 'NR>1 && $3>0 {print $3}' "$CSV_FILE" | sort -n | head -1)
-worst_latency=$(awk -F, 'NR>1 && $5>0 {print $5}' "$CSV_FILE" | sort -n -r | head -1)
+# ---------------------------------------------------------------------------
+# Per-endpoint graphs
+# ---------------------------------------------------------------------------
+i=0
+while [ "$i" -lt "$total_endpoints" ]; do
+    id="${ENDPOINT_IDS[$i]}"
+    name="${ENDPOINT_NAMES[$i]}"
+    safe_name="$(printf '%s' "$id" | tr '[:upper:]' '[:lower:]')"
+    ep_csv="${ASSETS_DIR}/${safe_name}.csv"
+    gp_file="${ASSETS_DIR}/plot_${safe_name}.gp"
 
-# --- HTML REPORT ---
-TABLE_ROWS="$(awk -F, 'NR>1 {
-    status_class = "http-ok"
-    if ($12 == "BINARY") status_class = "binary"
-    if ($12 == "HEALTH_FAILED") status_class = "http-error"
-    printf "            <tr><td>%s</td><td>%s</td><td>%s</td><td>%.1f</td><td>%.2f</td><td>%.2f</td><td>%.2f</td><td>%s</td><td class=\"%s\">%s</td><td>%s</td></tr>\n",
-           $9, $10, $1, $2, $3, $5, $6, $7, status_class, $11, $12
-}' "$CSV_FILE")"
+    # Extract per-endpoint CSV
+    printf 'connections,req_sec,latency_avg_ms,latency_max_ms,transfer_mb_sec\n' > "$ep_csv"
+    awk -F, -v eid="$id" 'NR>1 && $1==eid && $13=="OK" {printf "%s,%s,%s,%s,%s\n",$2,$3,$4,$6,$7}' \
+        "$CSV_FILE" >> "$ep_csv"
 
-cat > "$HTML_FILE" <<HTML
+    # Check if there is any data to plot
+    lines="$(awk 'NR>1' "$ep_csv" | wc -l | tr -d ' ')"
+    if [ "$lines" -gt 0 ]; then
+        {
+        printf 'set datafile separator ","\n'
+        printf 'set key outside right top\n'
+        printf 'set grid\n'
+        printf 'set border lw 1.2\n'
+        printf 'set style line 1 lc rgb "#2563eb" lw 2 pt 7 ps 1.1\n'
+        printf 'set style line 2 lc rgb "#dc2626" lw 2 pt 7 ps 1.1\n'
+        printf 'set style line 3 lc rgb "#16a34a" lw 2 pt 7 ps 1.1\n'
+        printf 'set terminal svg size 900,380 dynamic enhanced font "Arial,11"\n'
+        printf '\n'
+        printf 'set output "%s/%s_throughput.svg"\n' "$ASSETS_DIR" "$safe_name"
+        printf 'set title "%s — Throughput"\n' "$name"
+        printf 'set xlabel "Concurrent connections"\n'
+        printf 'set ylabel "Requests/sec"\n'
+        printf 'plot "%s" using 1:2 skip 1 with linespoints ls 1 title "Req/sec"\n' "$ep_csv"
+        printf '\n'
+        printf 'set output "%s/%s_latency.svg"\n' "$ASSETS_DIR" "$safe_name"
+        printf 'set title "%s — Latency"\n' "$name"
+        printf 'set xlabel "Concurrent connections"\n'
+        printf 'set ylabel "Latency (ms)"\n'
+        printf 'plot "%s" using 1:3 skip 1 with linespoints ls 2 title "Avg latency", \\\n' "$ep_csv"
+        printf '     "%s" using 1:4 skip 1 with linespoints ls 1 title "Max latency"\n' "$ep_csv"
+        } > "$gp_file"
+        gnuplot "$gp_file"
+    fi
+
+    i=$((i + 1))
+done
+
+# ---------------------------------------------------------------------------
+# Summary statistics
+# ---------------------------------------------------------------------------
+peak_req="$(awk -F, 'NR>1 && $3+0>0 {print $3}' "$CSV_FILE" | sort -n | tail -1)"
+best_latency="$(awk -F, 'NR>1 && $4+0>0 {print $4}' "$CSV_FILE" | sort -n | head -1)"
+worst_latency="$(awk -F, 'NR>1 && $6+0>0 {print $6}' "$CSV_FILE" | sort -n | tail -1)"
+avg_req="$(awk -F, 'NR>1 && $3+0>0 {s+=$3; c++} END {if(c>0) printf "%.1f", s/c; else print "0"}' "$CSV_FILE")"
+avg_lat="$(awk -F, 'NR>1 && $4+0>0 {s+=$4; c++} END {if(c>0) printf "%.2f", s/c; else print "0"}' "$CSV_FILE")"
+
+# ---------------------------------------------------------------------------
+# Build per-endpoint HTML sections
+# ---------------------------------------------------------------------------
+ENDPOINT_SECTIONS=""
+i=0
+while [ "$i" -lt "$total_endpoints" ]; do
+    id="${ENDPOINT_IDS[$i]}"
+    name="${ENDPOINT_NAMES[$i]}"
+    url="${ENDPOINT_URLS[$i]}"
+    safe_name="$(printf '%s' "$id" | tr '[:upper:]' '[:lower:]')"
+
+    # Table rows for this endpoint
+    ep_rows="$(awk -F, -v eid="$id" 'NR>1 && $1==eid {
+        sc="http-ok"
+        if ($13=="HEALTH_FAILED") sc="http-error"
+        printf "<tr><td>%s</td><td>%.1f</td><td>%.2f</td><td>%.2f</td><td>%.3f</td><td>%s</td><td class=\"%s\">%s</td><td>%s</td></tr>\n",
+            $2, $3, $4, $6, $7, $8, sc, $12, $13
+    }' "$CSV_FILE")"
+
+    # Check if per-endpoint graphs exist
+    tput_svg="${ASSETS_DIR}/${safe_name}_throughput.svg"
+    lat_svg="${ASSETS_DIR}/${safe_name}_latency.svg"
+    graph_block=""
+    if [ -f "$tput_svg" ] && [ -f "$lat_svg" ]; then
+        graph_block="<div class=\"ep-graphs\">
+              <div class=\"graph\"><img src=\"/static/benchmark_assets/${safe_name}_throughput.svg\" alt=\"Throughput ${name}\"></div>
+              <div class=\"graph\"><img src=\"/static/benchmark_assets/${safe_name}_latency.svg\" alt=\"Latency ${name}\"></div>
+            </div>"
+    fi
+
+    section="
+      <section class=\"panel ep-section\" id=\"ep-${safe_name}\">
+        <h2>${name}</h2>
+        <p class=\"meta ep-url\"><code>${url}</code></p>
+        ${graph_block}
+        <div class=\"details\">
+          <table>
+            <thead>
+              <tr>
+                <th>Connections</th><th>Req/sec</th><th>Avg Latency (ms)</th>
+                <th>Max Latency (ms)</th><th>Transfer (MB/s)</th>
+                <th>Total requests</th><th>HTTP</th><th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+${ep_rows}
+            </tbody>
+          </table>
+        </div>
+      </section>"
+
+    ENDPOINT_SECTIONS="${ENDPOINT_SECTIONS}${section}"
+    i=$((i + 1))
+done
+
+# ---------------------------------------------------------------------------
+# Build endpoint nav links
+# ---------------------------------------------------------------------------
+NAV_LINKS=""
+i=0
+while [ "$i" -lt "$total_endpoints" ]; do
+    id="${ENDPOINT_IDS[$i]}"
+    name="${ENDPOINT_NAMES[$i]}"
+    safe_name="$(printf '%s' "$id" | tr '[:upper:]' '[:lower:]')"
+    NAV_LINKS="${NAV_LINKS}<a href=\"#ep-${safe_name}\" class=\"ep-nav-link\">${name}</a>"
+    i=$((i + 1))
+done
+
+# ---------------------------------------------------------------------------
+# Write HTML report
+# ---------------------------------------------------------------------------
+{
+cat <<HTMLHEAD
 <!doctype html>
 <html lang="en">
 <head>
@@ -284,20 +382,47 @@ cat > "$HTML_FILE" <<HTML
   <title>MiniWeb Benchmark Report</title>
   <link rel="stylesheet" href="/static/css/custom.css" />
   <style>
-    .benchmark-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin: 1rem 0 1.5rem; }
-    .stat-card h3 { margin: 0 0 .35rem; font-size: .95rem; color: var(--text-muted); }
-    .stat-card p { margin: 0; font-size: 1.3rem; font-weight: 700; }
-    .graphs { display:grid; gap: 1rem; }
-    .graph img { width:100%; height:auto; border:1px solid var(--border); border-radius: .8rem; background-color: #ccc; }
-    .details { overflow:auto; }
-    table { width:100%; border-collapse: collapse; }
-    th, td { text-align:left; padding: .55rem .6rem; border-bottom: 1px solid var(--border); font-size: .95rem; }
-    th { color: var(--text-muted); font-weight: 600; }
-    .meta { font-size: .95rem; color: var(--text-muted); }
-    code { background: var(--surface-2); padding: 0.1rem 0.4rem; border-radius: .4rem; }
-    .http-ok { color: #10b981; }
-    .http-error { color: #ef4444; }
-    .binary { color: #8b5cf6; font-style: italic; }
+    /* ---- Benchmark-specific styles ---- */
+    .benchmark-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin: 1rem 0 1.5rem;
+    }
+    .stat-card h3 { margin: 0 0 .35rem; font-size: .9rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
+    .stat-card p  { margin: 0; font-size: 1.4rem; font-weight: 700; }
+    .meta         { font-size: .9rem; color: var(--text-muted); }
+    .ep-url       { margin-bottom: .75rem; }
+    code          { background: var(--surface-2); padding: .1rem .4rem; border-radius: .35rem; font-size: .9em; }
+    .graphs, .ep-graphs {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    .graph img    { width: 100%; height: auto; border: 1px solid var(--border); border-radius: .7rem; }
+    .details      { overflow-x: auto; }
+    table         { width: 100%; border-collapse: collapse; font-size: .9rem; }
+    th, td        { text-align: left; padding: .45rem .6rem; border-bottom: 1px solid var(--border); }
+    th            { color: var(--text-muted); font-weight: 600; white-space: nowrap; }
+    .http-ok      { color: #10b981; font-weight: 600; }
+    .http-error   { color: #ef4444; font-weight: 600; }
+    /* Endpoint nav */
+    .ep-nav       { display: flex; flex-wrap: wrap; gap: .4rem; margin: 1rem 0 1.5rem; }
+    .ep-nav-link  {
+      display: inline-block;
+      padding: .25rem .65rem;
+      border-radius: 99px;
+      font-size: .82rem;
+      background: var(--surface-2);
+      color: var(--text);
+      text-decoration: none;
+      border: 1px solid var(--border);
+      transition: background .15s;
+    }
+    .ep-nav-link:hover { background: var(--surface-3, #e2e8f0); }
+    .ep-section   { margin-top: 1.5rem; scroll-margin-top: 4rem; }
+    .overall-section { margin-top: .5rem; }
   </style>
 </head>
 <body>
@@ -305,60 +430,64 @@ cat > "$HTML_FILE" <<HTML
     <div class="container header-row">
       <a class="brand" href="/">MiniWeb</a>
       <nav class="navbar-menu"><a class="nav-link active" href="/static/benchmark.html">Benchmark</a></nav>
-      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle theme">◐</button>
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle theme">&#9680;</button>
     </div>
   </header>
 
   <main class="app-shell">
     <div class="container">
-      <section class="panel">
+
+      <!-- ===== SUMMARY ===== -->
+      <section class="panel overall-section">
         <h1>Benchmark Report</h1>
-        <p class="meta">Generated: ${TIMESTAMP} · Base URL: ${BASE_URL} · Duration: ${TEST_DURATION}s · Threads: ${THREADS}</p>
+        <p class="meta">Generated: ${TIMESTAMP} &nbsp;·&nbsp; Base URL: <code>${BASE_URL}</code> &nbsp;·&nbsp; Duration: ${TEST_DURATION}s &nbsp;·&nbsp; Threads: ${THREADS}</p>
 
         <div class="benchmark-grid">
           <article class="panel stat-card"><h3>Peak throughput</h3><p>${peak_req:-0} req/s</p></article>
+          <article class="panel stat-card"><h3>Avg throughput</h3><p>${avg_req:-0} req/s</p></article>
           <article class="panel stat-card"><h3>Best avg latency</h3><p>${best_latency:-0} ms</p></article>
           <article class="panel stat-card"><h3>Worst max latency</h3><p>${worst_latency:-0} ms</p></article>
+          <article class="panel stat-card"><h3>Grand avg latency</h3><p>${avg_lat:-0} ms</p></article>
         </div>
 
         <div class="graphs">
-          <article class="graph"><h2>Throughput</h2><img src="/static/benchmark_assets/throughput.svg" alt="Throughput graph"></article>
-          <article class="graph"><h2>Latency (avg vs max)</h2><img src="/static/benchmark_assets/latency.svg" alt="Latency graph"></article>
-          <article class="graph"><h2>Latency standard deviation</h2><img src="/static/benchmark_assets/latency_stdev.svg" alt="Latency deviation graph"></article>
-          <article class="graph"><h2>Transfer rate</h2><img src="/static/benchmark_assets/transfer.svg" alt="Transfer graph"></article>
-          <article class="graph"><h2>Connection efficiency</h2><img src="/static/benchmark_assets/efficiency.svg" alt="Efficiency graph"></article>
+          <article class="graph"><h3>Throughput (all)</h3><img src="/static/benchmark_assets/throughput.svg" alt="Throughput"></article>
+          <article class="graph"><h3>Latency avg vs max (all)</h3><img src="/static/benchmark_assets/latency.svg" alt="Latency"></article>
+          <article class="graph"><h3>Latency std dev (all)</h3><img src="/static/benchmark_assets/latency_stdev.svg" alt="Latency stdev"></article>
+          <article class="graph"><h3>Transfer rate (all)</h3><img src="/static/benchmark_assets/transfer.svg" alt="Transfer"></article>
+          <article class="graph"><h3>Efficiency (all)</h3><img src="/static/benchmark_assets/efficiency.svg" alt="Efficiency"></article>
         </div>
       </section>
 
-      <section class="panel details" style="margin-top:1rem;">
-        <h2>Detailed run stats</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Endpoint</th>
-              <th>URL</th>
-              <th>Connections</th>
-              <th>Req/sec</th>
-              <th>Avg latency (ms)</th>
-              <th>Max latency (ms)</th>
-              <th>Transfer (MB/s)</th>
-              <th>Total requests</th>
-              <th>HTTP</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-${TABLE_ROWS}
-          </tbody>
-        </table>
+      <!-- ===== ENDPOINT NAV ===== -->
+      <section class="panel" style="margin-top:1rem;">
+        <h2>Jump to endpoint</h2>
+        <nav class="ep-nav">
+HTMLHEAD
+
+printf '%s\n' "$NAV_LINKS"
+
+cat <<HTMLMID
+        </nav>
       </section>
+
+      <!-- ===== PER-ENDPOINT SECTIONS ===== -->
+HTMLMID
+
+printf '%s\n' "$ENDPOINT_SECTIONS"
+
+cat <<HTMLFOOT
     </div>
   </main>
   <script src="/static/js/theme_toggler.js"></script>
 </body>
 </html>
-HTML
+HTMLFOOT
+} > "$HTML_FILE"
 
+# ---------------------------------------------------------------------------
+# Done
+# ---------------------------------------------------------------------------
 printf '\nBenchmark complete.\n'
 printf '▶  HTML report : http://localhost:%s/static/benchmark.html\n' "$SERVER_PORT"
 printf '▶  CSV results : %s\n' "$CSV_FILE"
