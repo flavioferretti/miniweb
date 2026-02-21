@@ -103,6 +103,10 @@ static_handler(http_request_t *req)
 		else if (strcmp(ext, ".jpg") == 0 || strcmp(ext, ".jpeg") == 0) mime = "image/jpeg";
 		else if (strcmp(ext, ".gif") == 0) mime = "image/gif";
 		else if (strcmp(ext, ".ico") == 0) mime = "image/x-icon";
+		else if (strcmp(ext, ".pdf") == 0) mime = "application/pdf";
+		else if (strcmp(ext, ".ps") == 0) mime = "application/postscript";
+		else if (strcmp(ext, ".md") == 0) mime = "text/markdown; charset=utf-8";
+		else if (strcmp(ext, ".txt") == 0) mime = "text/plain; charset=utf-8";
 	}
 
 	return http_send_file(req, fullpath, mime);

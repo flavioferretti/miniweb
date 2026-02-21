@@ -13,6 +13,7 @@
 #include "../include/http_handler.h"
 #include "../include/http_utils.h"
 #include "../include/man.h"
+#include "../include/routes.h"
 
 #define MAX_JSON_SIZE (256 * 1024)
 #define MAX_OUTPUT_SIZE (10 * 1024 * 1024) //10 MB!
@@ -259,6 +260,89 @@ area_from_path(const char *filepath)
 	if (strncmp(filepath, "/usr/X11R6/", 11) == 0) return "x11";
 	if (strncmp(filepath, "/usr/local/",  11) == 0) return "packages";
 	return "system";
+}
+
+static int
+mkdir_p(const char *dir)
+{
+	if (!dir || *dir == '\0')
+		return -1;
+
+	char tmp[512];
+	strlcpy(tmp, dir, sizeof(tmp));
+
+	for (char *p = tmp + 1; *p; p++) {
+		if (*p != '/')
+			continue;
+		*p = '\0';
+		if (mkdir(tmp, 0755) < 0 && errno != EEXIST)
+			return -1;
+		*p = '/';
+	}
+
+	if (mkdir(tmp, 0755) < 0 && errno != EEXIST)
+		return -1;
+
+	return 0;
+}
+
+static int
+write_file_binary(const char *path, const char *buf, size_t len)
+{
+	if (!path || !buf || len == 0)
+		return -1;
+
+	int fd = open(path, O_CREAT | O_TRUNC | O_WRONLY, 0644);
+	if (fd < 0)
+		return -1;
+
+	size_t off = 0;
+	while (off < len) {
+		ssize_t w = write(fd, buf + off, len - off);
+		if (w <= 0) {
+			close(fd);
+			return -1;
+		}
+		off += (size_t)w;
+	}
+
+	close(fd);
+	return 0;
+}
+
+static const char *
+mime_for_format(const char *format)
+{
+	if (strcmp(format, "pdf") == 0)
+		return "application/pdf";
+	if (strcmp(format, "ps") == 0)
+		return "application/postscript";
+	if (strcmp(format, "md") == 0)
+		return "text/markdown; charset=utf-8";
+	if (strcmp(format, "txt") == 0)
+		return "text/plain; charset=utf-8";
+	return "text/html; charset=utf-8";
+}
+
+static int
+build_cache_paths(const char *area, const char *section, const char *page,
+				  const char *format, char *rel, size_t rel_len,
+				  char *abs, size_t abs_len)
+{
+	if (!area || !section || !page || !format || !rel || !abs)
+		return -1;
+
+	int n = snprintf(rel, rel_len, "/static/man/%s/%s/%s.%s", area,
+				 section, page, format);
+	if (n < 0 || (size_t)n >= rel_len)
+		return -1;
+
+	n = snprintf(abs, abs_len, "%s/man/%s/%s/%s.%s", config_static_dir,
+			 area, section, page, format);
+	if (n < 0 || (size_t)n >= abs_len)
+		return -1;
+
+	return 0;
 }
 
 char *
@@ -532,6 +616,8 @@ man_render_page(const char *area, const char *section, const char *page,
 		t_arg = "ps";
 	else if (strcmp(format, "md") == 0)
 		t_arg = "markdown";
+	else if (strcmp(format, "txt") == 0)
+		t_arg = "ascii";
 
 	/* 4. Execute mandoc. Keep out_len as the authoritative output size. */
 	/* For HTML output, pass -O style= so mandoc links our stylesheet
@@ -629,6 +715,25 @@ man_render_handler(http_request_t *req)
 		return http_send_error(req, 400,
 							   "Missing section or page name");
 	}
+	if (strcmp(format, "html") != 0 && strcmp(format, "pdf") != 0 &&
+		strcmp(format, "ps") != 0 && strcmp(format, "md") != 0 &&
+		strcmp(format, "txt") != 0) {
+		return http_send_error(req, 400, "Unsupported format");
+	}
+
+	char cache_rel[512];
+	char cache_abs[512];
+	if (build_cache_paths(area, section, page, format, cache_rel,
+					  sizeof(cache_rel), cache_abs,
+					  sizeof(cache_abs)) == 0 &&
+		access(cache_abs, R_OK) == 0) {
+		const char *original_url = req->url;
+		req->url = cache_rel;
+		int cached = static_handler(req);
+		req->url = original_url;
+		if (cached == 0)
+			return 0;
+	}
 
 	/* 3. Render content. */
 	size_t out_len = 0;
@@ -642,15 +747,7 @@ man_render_handler(http_request_t *req)
 	http_response_t *resp = http_response_create();
 
 	/* Set the appropriate Content-Type. */
-	if (strcmp(format, "pdf") == 0) {
-		resp->content_type = "application/pdf";
-	} else if (strcmp(format, "ps") == 0) {
-		resp->content_type = "application/postscript";
-	} else if (strcmp(format, "md") == 0) {
-		resp->content_type = "text/markdown; charset=utf-8";
-	} else {
-		resp->content_type = "text/html; charset=utf-8";
-	}
+	resp->content_type = mime_for_format(format);
 
 	/* 5. Add Content-Length (essential for binary formats like PDF). */
 	char clen[32];
@@ -668,6 +765,16 @@ man_render_handler(http_request_t *req)
 		char content_disp[256];
 		snprintf(content_disp, sizeof(content_disp), "inline; filename=\"%s.md\"", page);
 		http_response_add_header(resp, "Content-Disposition", content_disp);
+	}
+
+	char cache_dir[512];
+	strlcpy(cache_dir, cache_abs, sizeof(cache_dir));
+	char *last_slash = strrchr(cache_dir, '/');
+	if (last_slash) {
+		*last_slash = '\0';
+		if (mkdir_p(cache_dir) == 0) {
+			(void)write_file_binary(cache_abs, output, out_len);
+		}
 	}
 
 	/* 6. Set body (http_response_set_body frees 'output' automatically). */
