@@ -230,6 +230,8 @@ Measured on OpenBSD 7.8, amd64, 4-core CPU with `wrk` (4 threads, 30 s run):
 
 The elevated p99 at 150 connections on `/static/test.html` reflects connection-limit backpressure (some requests receive 503); static throughput remains stable above **16,000 req/s**.
 
+Latest merged performance work (PR-41) changed allocator/cache strategy more than wire protocol behavior, so raw throughput is intentionally very close to previous numbers (sometimes slightly lower), while CPU time drops under stress due to fewer hot-path allocations and less cache pollution.
+
 ## Security
 
 ### Sandboxing
@@ -238,7 +240,7 @@ The elevated p99 at 150 connections on `/static/test.html` reflects connection-l
 
 ```text
 templates/          r
-static/             r
+static/             rwc
 /usr/share/man      r
 /usr/local/man      r
 /usr/X11R6/man      r
@@ -257,6 +259,7 @@ static/             r
 /usr/sbin           r
 /bin                r
 /sbin               r
+/usr/local/bin      r
 /etc/passwd         r
 /etc/group          r
 /etc/resolv.conf    r
@@ -367,6 +370,22 @@ key    value
 - Workers block on `pthread_cond_wait` (no spin), and the dispatcher is the single owner of `kevent()`, which keeps scheduling predictable.
 - Keep-alive rearm (`EV_ENABLE`) avoids full reconnect overhead for sequential requests.
 
+### Latest merged PR summary (PR-41)
+
+- Replaced per-accept `calloc/free` connection lifecycle with a fixed-size connection slab + free-stack in `main.c`.
+- Added a pooled `http_response_t` allocator in `http_handler.c` (256 reusable response objects).
+- Hardened static file cache behavior with:
+  - insertion token budget (`FILE_CACHE_INSERTS_PER_SEC=8`),
+  - two-hit admission before entering the main cache,
+  - age-based eviction (`FILE_CACHE_MAX_AGE_SEC=120`) for both cache entries and admission candidates.
+
+Why this improves efficiency even if req/s is similar:
+
+- **Less allocator churn**: under concurrent keep-alive traffic, reusing connection/response objects cuts repeated malloc/free and reduces allocator lock contention.
+- **Better CPU cache locality**: slab/pool objects are reused in-place, so hot metadata stays warmer in L1/L2.
+- **Less memory pollution**: one-shot static files are less likely to evict useful cache entries thanks to admission + rate limiting.
+- **More predictable tail behavior**: stale-file eviction and bounded insert rate avoid bursty memory growth and allocator spikes.
+
 ### Strategic improvements for spawn/parallel response throughput
 
 - **Batch kevent changes**: where possible, accumulate multiple `EV_ENABLE`/`EV_ADD` operations and flush with one `kevent()` call to reduce syscall pressure.
@@ -382,16 +401,16 @@ key    value
 
 ### Memory allocation/deallocation analysis
 
-- **Connection lifecycle (`main.c`)**: one `calloc` per accepted connection and one `free` on close/timeout; predictable and bounded by `MAX_CONNECTIONS`.
-- **Static file cache (`http_handler.c`)**: cache stores heap copies and performs `malloc/free` on replacement. Under churn on many similarly-sized files this can increase allocator pressure.
-- **File-send path**: uncached file responses may allocate a temporary full-file copy (`cache_copy`) up to cache limit for insertion.
-- **Response objects**: `http_response_create/free` are per-response allocations; frequent but small and short-lived.
+- **Connection lifecycle (`main.c`)**: now uses a preallocated fixed-size slab + free-stack; no per-accept heap allocation in the hot path.
+- **Static file cache (`http_handler.c`)**: still allocates payload copies, but insertion is token-limited, gated by two-hit admission, and stale entries are evicted by age.
+- **File-send path**: uncached file responses may still allocate a temporary full-file copy (`cache_copy`) up to cache limit for insertion.
+- **Response objects**: now served from a mutex-protected pool (`256` slots), avoiding frequent heap allocation/free for `http_response_t`.
 
 Potential follow-ups:
 
-- use a small object pool/slab for `connection_t` and `http_response_t` to reduce allocator overhead;
-- cap cache insertion rate or add simple admission policy (e.g., only cache after 2nd hit);
-- periodically evict stale cache slots by age to avoid cold entries holding memory.
+- evaluate lock-sharding or per-thread response pools to reduce mutex contention at very high thread counts;
+- measure token budget (`FILE_CACHE_INSERTS_PER_SEC`) per workload class (static-heavy vs API-heavy) and tune accordingly;
+- consider a zero-copy `sendfile(2)` path for larger static files where platform/runtime behavior is favorable.
 
 ## Hard-coded caps and effective ranges
 
@@ -412,6 +431,9 @@ Some limits are compile-time constants (hard caps), while others are configurabl
 | `WRITE_WAIT_MS` | 100 | fixed poll wait ms | Poll wait step used by write retry loop. |
 | `FILE_CACHE_SLOTS` | 32 | fixed entries | Number of in-memory static file cache slots. |
 | `FILE_CACHE_MAX_BYTES` | 262144 | `1..262144` bytes per cached file | Files above threshold bypass memory cache. |
+| `FILE_CACHE_INSERTS_PER_SEC` | 8 | fixed inserts/second | Token budget that rate-limits cache insertions. |
+| `FILE_CACHE_MAX_AGE_SEC` | 120 | fixed seconds | Age-based eviction threshold for cache entries and admission candidates. |
+| Response pool size | 256 | fixed objects | Upper bound of reusable `http_response_t` objects before allocation fails. |
 
 ### Configurable caps and parser ranges
 

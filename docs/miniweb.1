@@ -1,7 +1,7 @@
 .\" Copyright (c) 2026 MiniWeb Contributors
 .\" BSD 3-Clause License
 .\"
-.Dd February 18, 2026
+.Dd February 21, 2026
 .Dt MINIWEB 1
 .Os
 .Sh NAME
@@ -267,9 +267,8 @@ Top 10 processes by memory usage.
 Process counts: total, running, sleeping, zombie.
 .El
 .Pp
-Metrics are cached to reduce
-.Xr sysctl 2
-call overhead.
+Metrics are collected on request from native interfaces
+without shelling out to external helper commands.
 .It Pa /api/networking
 Returns a JSON object with network interface details,
 routing table entries, and DNS resolver configuration.
@@ -408,6 +407,13 @@ for one-shot readiness delivery.
 The work queue is already implemented as a circular buffer
 .Pq head/tail/count over fixed capacity .
 .Pp
+Latest merged implementation work
+.Pq PR-41
+focused on efficiency rather than headline throughput: connection and
+response object pooling, plus static cache admission/rate/age controls.
+This keeps requests/s close to previous runs while reducing allocator and
+CPU pressure under sustained concurrency.
+.Pp
 Strategic performance points:
 .Bl -bullet -compact
 .It
@@ -430,20 +436,16 @@ pipelining or async multi-response buffering is introduced.
 Memory allocation hotspots:
 .Bl -bullet -compact
 .It
-One
-.Xr calloc 3
-per accepted connection and one
-.Xr free 3
-on close/timeout.
+Connection objects now come from a preallocated slab and are returned to
+a free-stack on close/timeout (no hot-path per-accept heap allocation).
 .It
 Static file cache replacement performs
 .Xr malloc 3 /
 .Xr free 3
 for cached payload copies.
 .It
-Per-response allocation/free for
 .Vt http_response_t
-objects.
+objects now come from a fixed pool (256 entries) guarded by a mutex.
 .El
 .Sh PERFORMANCE
 Measured on OpenBSD 7.8 (amd64, 4-core CPU) with
@@ -499,6 +501,12 @@ wait cycle.
 32 in-memory static file cache entries.
 .It Dv FILE_CACHE_MAX_BYTES
 256 KiB maximum size per cached file.
+.It Dv FILE_CACHE_INSERTS_PER_SEC
+8 cache insertions per second (token budget).
+.It Dv FILE_CACHE_MAX_AGE_SEC
+120 seconds max age before cache/candidate eviction.
+.It Dv RESPONSE_POOL_ITEMS
+256 reusable HTTP response objects in the internal pool.
 .El
 .Pp
 Effective runtime ranges for user-configurable caps:
@@ -528,7 +536,7 @@ limits filesystem and execution access with
 to:
 .Bd -literal -offset indent
 templates/          r
-static/             r
+static/             rwc
 /usr/share/man      r
 /usr/local/man      r
 /usr/X11R6/man      r
@@ -547,6 +555,7 @@ static/             r
 /usr/sbin           r
 /bin                r
 /sbin               r
+/usr/local/bin      r
 /etc/passwd         r
 /etc/group          r
 /etc/resolv.conf    r
