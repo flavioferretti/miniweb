@@ -778,6 +778,14 @@ man_render_handler(http_request_t *req)
 		char content_disp[256];
 		snprintf(content_disp, sizeof(content_disp), "inline; filename=\"%s.md\"", page);
 		http_response_add_header(resp, "Content-Disposition", content_disp);
+	} else if (strcmp(format, "txt") == 0) {
+		char content_disp[256];
+		snprintf(content_disp, sizeof(content_disp), "inline; filename=\"%s.txt\"", page);
+		http_response_add_header(resp, "Content-Disposition", content_disp);
+	} else if (strcmp(format, "ps") == 0) {
+		char content_disp[256];
+		snprintf(content_disp, sizeof(content_disp), "attachment; filename=\"%s.ps\"", page);
+		http_response_add_header(resp, "Content-Disposition", content_disp);
 	}
 
 	char cache_dir[512];
