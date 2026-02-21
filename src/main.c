@@ -576,7 +576,7 @@ apply_openbsd_security(void)
 
 	/* Filesystem paths from config */
 	unveil(config.templates_dir, "r");
-	unveil(config.static_dir,    "r");
+	unveil(config.static_dir,    "rwc");
 
 	/* Man page infrastructure */
 	unveil("/usr/share/man",    "r");
