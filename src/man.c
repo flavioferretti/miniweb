@@ -348,11 +348,9 @@ add_content_disposition_for_format(http_response_t *resp,
 		snprintf(content_disp, sizeof(content_disp), "inline; filename=\"%s.pdf\"", page);
 		http_response_add_header(resp, "Content-Disposition", content_disp);
 	} else if (strcmp(format, "md") == 0) {
-		snprintf(content_disp, sizeof(content_disp), "inline; filename=\"%s.md\"", page);
-		http_response_add_header(resp, "Content-Disposition", content_disp);
+		http_response_add_header(resp, "Content-Disposition", "inline");
 	} else if (strcmp(format, "txt") == 0) {
-		snprintf(content_disp, sizeof(content_disp), "inline; filename=\"%s.txt\"", page);
-		http_response_add_header(resp, "Content-Disposition", content_disp);
+		http_response_add_header(resp, "Content-Disposition", "inline");
 	} else if (strcmp(format, "ps") == 0) {
 		snprintf(content_disp, sizeof(content_disp), "attachment; filename=\"%s.ps\"", page);
 		http_response_add_header(resp, "Content-Disposition", content_disp);
@@ -839,23 +837,7 @@ man_render_handler(http_request_t *req)
 	http_response_add_header(resp, "Pragma", "no-cache");
 	http_response_add_header(resp, "Expires", "0");
 
-	if (strcmp(format, "pdf") == 0) {
-		char content_disp[256];
-		snprintf(content_disp, sizeof(content_disp), "inline; filename=\"%s.pdf\"", page);
-		http_response_add_header(resp, "Content-Disposition", content_disp);
-	} else if (strcmp(format, "md") == 0) {
-		char content_disp[256];
-		snprintf(content_disp, sizeof(content_disp), "inline; filename=\"%s.md\"", page);
-		http_response_add_header(resp, "Content-Disposition", content_disp);
-	} else if (strcmp(format, "txt") == 0) {
-		char content_disp[256];
-		snprintf(content_disp, sizeof(content_disp), "inline; filename=\"%s.txt\"", page);
-		http_response_add_header(resp, "Content-Disposition", content_disp);
-	} else if (strcmp(format, "ps") == 0) {
-		char content_disp[256];
-		snprintf(content_disp, sizeof(content_disp), "attachment; filename=\"%s.ps\"", page);
-		http_response_add_header(resp, "Content-Disposition", content_disp);
-	}
+	add_content_disposition_for_format(resp, format, page);
 
 	char cache_dir[512];
 	strlcpy(cache_dir, cache_abs, sizeof(cache_dir));
