@@ -12,30 +12,7 @@
 #include "../include/metrics.h"
 #include "../include/networking.h"
 #include "../include/routes.h"
-#include "../include/template_engine.h"
 #include "../include/urls.h"
-
-/* Template rendering helper */
-int
-render_template_response(http_request_t *req, struct template_data *data)
-{
-	char *output = NULL;
-
-	if (template_render_with_data(data, &output) != 0) {
-		if (data->page_content &&
-			template_render(data->page_content, &output) != 0) {
-			return http_send_error(req, 500, "Template rendering failed");
-			}
-	}
-
-	http_response_t *resp = http_response_create();
-	http_response_set_body(resp, output, strlen(output), 1); /* Free output */
-
-	int ret = http_response_send(req, resp);
-	http_response_free(resp);
-
-	return ret;
-}
 
 /* Generic template-backed view handler */
 int
@@ -53,7 +30,7 @@ view_template_handler(http_request_t *req)
 		.extra_js_file = view->extra_js,
 	};
 
-	return render_template_response(req, &data);
+	return http_render_template(req, &data, "Template rendering failed");
 }
 
 /* Favicon handler */

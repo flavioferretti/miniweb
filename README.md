@@ -212,11 +212,14 @@ close(fd) + free_connection()
 
 Main thread handles accept + queueing only; workers never call `kevent()`. `EV_DISPATCH` ensures one worker handles one readiness event.
 
+Internal refactoring keeps connection teardown logic in one path (`free_connection()`), and view rendering in one path (`http_render_template()`), reducing duplicated code across handlers and timeout/shutdown flows.
+
 ### Key Components
 
 - `src/main.c`: dispatcher + pool, fd-indexed connection table, generation checks, idle timeout sweeps
+- `src/urls.c`: declarative route tables (`view_routes[]`) plus grouped registration helpers for view and package API endpoints
+- `src/http_handler.c`: shared response helpers, including centralized template rendering (`http_render_template`)
 - `src/metrics.c`: metrics via `sysctl(2)` and other native interfaces with retry loop for `KERN_PROC_ALL`
-- `src/http_handler.c`: thread-safe request scratch buffers for header/client-IP helpers
 - `src/template_engine.c`: simple `{{TOKEN}}` substitution from `templates/`
 
 ## Performance
