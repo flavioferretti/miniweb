@@ -263,7 +263,7 @@ area_from_path(const char *filepath)
 }
 
 static int
-mkdir_p(const char *dir)
+mkdir_p(const char *dir, const char *base_dir)
 {
 	if (!dir || *dir == '\0')
 		return -1;
@@ -271,7 +271,20 @@ mkdir_p(const char *dir)
 	char tmp[512];
 	strlcpy(tmp, dir, sizeof(tmp));
 
-	for (char *p = tmp + 1; *p; p++) {
+	/* Under unveil, attempting mkdir() on parent paths outside base_dir
+	 * can return ENOENT even when those parents exist. Start recursive
+	 * creation from the unveiled static_dir prefix. */
+	char *start = tmp;
+	if (base_dir && *base_dir) {
+		size_t base_len = strlen(base_dir);
+		if (strncmp(tmp, base_dir, base_len) == 0) {
+			start = tmp + base_len;
+			if (*start == '/')
+				start++;
+		}
+	}
+
+	for (char *p = start; *p; p++) {
 		if (*p != '/')
 			continue;
 		*p = '\0';
@@ -772,8 +785,21 @@ man_render_handler(http_request_t *req)
 	char *last_slash = strrchr(cache_dir, '/');
 	if (last_slash) {
 		*last_slash = '\0';
-		if (mkdir_p(cache_dir) == 0) {
-			(void)write_file_binary(cache_abs, output, out_len);
+		if (mkdir_p(cache_dir, config_static_dir) == 0) {
+			if (write_file_binary(cache_abs, output, out_len) != 0 &&
+				config_verbose) {
+				fprintf(stderr,
+					"[MAN] cache write failed: %s (errno=%d: %s)\n",
+					cache_abs, errno, strerror(errno));
+			} else if (config_verbose) {
+				fprintf(stderr,
+					"[MAN] cache write ok: %s (%zu bytes)\n",
+					cache_abs, out_len);
+			}
+		} else if (config_verbose) {
+			fprintf(stderr,
+				"[MAN] cache directory create failed: %s (errno=%d: %s)\n",
+				cache_dir, errno, strerror(errno));
 		}
 	}
 

@@ -322,6 +322,12 @@ PDF.
 .It Cm .ps
 PostScript.
 .El
+.Pp
+Rendered man pages are cached for reuse under
+.Pa static/man/ Ns Ar area Ns / Ns Ar section Ns / Ns Ar page Ns . Ns Ar ext
+\(em equivalently
+.Pa {static_dir}/man/...
+using the configured static directory.
 .El
 .Ss Static Files
 .Bl -tag -width Ds
@@ -454,7 +460,7 @@ Current
 .Xr pledge 2
 promises:
 .Bd -literal -offset indent
-stdio rpath inet route proc exec vminfo ps getpw
+stdio rpath wpath cpath inet route proc exec vminfo ps getpw
 .Ed
 .Ss Additional mitigations
 .Bl -bullet -compact
@@ -878,7 +884,7 @@ A system call was attempted outside the current
 .Xr pledge 2
 promise set.
 The required promises are:
-.Cm stdio rpath inet route proc exec vminfo ps getpw .
+.Cm stdio rpath wpath cpath inet route proc exec vminfo ps getpw .
 .It Dq sysctl data query failed: Cannot allocate memory
 The process table is growing faster than the buffer can be resized.
 .Nm

@@ -611,7 +611,7 @@ apply_openbsd_security(void)
 	unveil(NULL, NULL);
 
 	const char *promises =
-	"stdio rpath inet route proc exec vminfo ps getpw";
+	"stdio rpath wpath cpath inet route proc exec vminfo ps getpw";
 	if (pledge(promises, NULL) == -1) {
 		perror("pledge");
 		fprintf(stderr, "Continuing without pledge...\n");
