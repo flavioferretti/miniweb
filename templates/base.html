@@ -57,12 +57,14 @@
 
         root.setAttribute('data-theme', themeToApply);
         // Salviamo la scelta specifica (dark o light) nel localStorage
-        localStorage.setItem('miniweb-theme', themeToApply);
+        localStorage.setItem(themeKey, themeToApply);
       };
 
       // 2. Al caricamento: Recupera dal localStorage o usa il default
       // Nota: se il localStorage è vuoto, usiamo 'auto' o 'light'
-      const savedTheme = localStorage.getItem('miniweb-theme') || 'auto';
+      /* Key is per-host so each MiniWeb instance remembers its own theme */
+      const themeKey = 'miniweb-theme:' + location.hostname + (location.port ? ':' + location.port : '');
+      const savedTheme = localStorage.getItem(themeKey) || 'auto';
       applyTheme(savedTheme);
 
       // 3. Gestione del Click sul pulsante
