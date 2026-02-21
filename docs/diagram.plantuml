@@ -18,13 +18,14 @@ skinparam component {
 ' AREA 1: PROJECT FUNCTIONS
 ' =========================
 package "<&layers*1> Project functions" #EAF4FF {
-  component "main.c\n(queue_*, worker_thread, main)" as Main #A8D8FF
-  component "http_handler.c\n(http_response_*, http_send_*)" as HTTP #9ED9FF
+  component "main.c\n(queue_*, worker_thread,\nconnection slab/free-stack, main)" as Main #A8D8FF
+  component "http_handler.c\n(http_response_* pool,\nfile cache admission/eviction, http_send_*)" as HTTP #9ED9FF
   component "urls.c\n(init_routes, route_match,\nregister_route, find_view_route)" as URLS #B8E0FF
   component "routes.c\n(view/static/favicon handlers,\nrender_template_response)" as Routes #C4E8FF
   component "metrics.c\n(get_system_metrics_json, metrics_*)" as Metrics #D6EFFF
   component "networking.c\n(networking_get_*, networking_*_handler)" as Net #CFE6FF
   component "man.c\n(man_api_handler, man_render_handler)" as Man #E3F2FF
+  component "pkg_manager.c\n(pkg_*_json, pkg_api_handler)" as Pkg #D9F7FF
   component "template_engine.c\n(template_render*)" as Template #FFF2B2
   component "http_utils.c\n(json_escape_string, safe_popen_read*)" as Utils #FFE6B2
   component "conf.c\n(conf_defaults/load/dump)" as Conf #DFF7E2
@@ -64,6 +65,7 @@ URLS --> Routes : view_template_handler(), favicon_handler(),\nstatic_handler()\
 URLS --> Metrics : metrics_handler()\n(metrics.h)
 URLS --> Net : networking_api_handler()\n(networking.h)
 URLS --> Man : man_api_handler(), man_render_handler()\n(man.h)
+URLS --> Pkg : pkg_api_handler()\n(pkg_manager.h)
 
 Routes --> Template : template_render(), template_render_with_data()\n(template_engine.h)
 Routes --> HTTP : http_response_*, http_send_*\n(http_handler.h)
@@ -75,6 +77,9 @@ Net --> HTTP : http_response_*, http_send_error(),\nhttp_render_template()\n(htt
 
 Man --> HTTP : http_response_*, http_send_error()\n(http_handler.h)
 Man --> Utils : safe_popen_read_argv()\n(http_utils.h)
+
+Pkg --> HTTP : http_response_*, http_send_json(),\nhttp_send_error()\n(http_handler.h)
+Pkg --> Utils : safe_popen_read_argv(),\njson_escape_string()\n(http_utils.h)
 
 Template --> Template : read_file_content(), read_template_file(),\nreplace_single(), replace_all()
 HTTP --> HTTP : write_all(), writev_all(),\nhttp_request_get_header()
@@ -110,10 +115,29 @@ Net --> LibStd : malloc/free/memset/str*\n(<stdlib.h>, <string.h>)
 
 Man --> LibStd : malloc/free/strdup/strlen/str*\n(<stdlib.h>, <string.h>)
 Man --> LibFs : opendir/readdir/closedir\n(<dirent.h>)
+Pkg --> LibStd : malloc/free/strtol/strtok_r/str*\n(<stdlib.h>, <string.h>)
 
 Routes --> LibStd : snprintf/strncmp/strstr/strlen\n(<stdio.h>, <string.h>)
 URLS --> LibStd : strcmp/strncmp\n(<string.h>)
 Utils --> LibStd : malloc/strdup/strlen/isalnum\n(<stdlib.h>, <string.h>, <ctype.h>)
+
+note right of Main
+  Hard caps (compiled):
+  MAX_CONNECTIONS=1280
+  THREAD_POOL_SIZE=4
+  REQUEST_BUFFER_SIZE=16384
+  QUEUE_CAPACITY=512
+  MAX_KEEPALIVE_REQUESTS=64
+end note
+
+note right of HTTP
+  Cache/pool strategy:
+  FILE_CACHE_SLOTS=32
+  FILE_CACHE_MAX_BYTES=256KiB
+  FILE_CACHE_INSERTS_PER_SEC=8
+  FILE_CACHE_MAX_AGE_SEC=120s
+  response pool=256 objects
+end note
 
 ' ----------------------
 ' System call tracking
