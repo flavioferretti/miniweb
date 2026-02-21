@@ -8,7 +8,8 @@
 #include "../include/pkg_manager.h"
 
 #define PKG_JSON_MAX (1024 * 1024)
-#define PKG_CMD_MAX_OUTPUT (8 * 1024 * 1024)
+#define PKG_CMD_MAX_OUTPUT  (8 * 1024 * 1024)
+#define PKG_WHICH_TIMEOUT   60   /* pkg_info -E scans all packages: can take ~30s */
 
 static int
 is_safe_pkg_name(const char *name)
@@ -142,6 +143,9 @@ pkg_search_json(const char *query)
 
 		while (line && offset < PKG_JSON_MAX - 256) {
 			line[strcspn(line, "\r")] = '\0';
+			/* pkg_info -Q appends " (installed)" — strip it */
+			char *tag = strstr(line, " (installed)");
+			if (tag) *tag = '\0';
 			if (*line != '\0') {
 				char *line_escaped = json_escape_string(line);
 				offset += snprintf(json + offset, PKG_JSON_MAX - offset,
@@ -327,7 +331,7 @@ pkg_which_json(const char *file_path)
 
 	char *const argv[] = {"pkg_info", "-E", (char *)file_path, NULL};
 	char *output = safe_popen_read_argv("/usr/sbin/pkg_info", argv,
-										PKG_CMD_MAX_OUTPUT, 5, NULL);
+										PKG_CMD_MAX_OUTPUT, PKG_WHICH_TIMEOUT, NULL);
 	char *json = make_raw_json(output);
 	free(output);
 	return json ? json : strdup("{\"found\":false,\"raw\":\"\"}");

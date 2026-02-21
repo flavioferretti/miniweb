@@ -87,7 +87,7 @@
       ]);
       const infoData = await infoResp.json();
       const filesData = await filesResp.json();
-      const info = infoData.info || infoData.error || 'No data';
+      const info = infoData.raw || '';  /* API returns {raw, found} */
       const files = filesData.files || [];
 
       container.innerHTML = `
@@ -157,15 +157,19 @@
 
     whichForm?.addEventListener('submit', async (event) => {
       event.preventDefault();
-      const filePath = document.getElementById('pkg-which-path').value.trim();
+      const path = document.getElementById('pkg-which-path').value.trim();
       const target = document.getElementById('pkg-which-result');
-      if (!filePath) return;
-      target.textContent = 'Looking up package owner...';
+      if (!path) return;
+      target.innerHTML = '<p class="muted">Scanning packages… this may take up to 30 seconds.</p>';
       try {
-        const resp = await fetch(`/api/packages/which?path=${encodeURIComponent(filePath)}`);
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 90000);
+        const resp = await fetch(`/api/packages/which?path=${encodeURIComponent(path)}`,
+                                 { signal: controller.signal });
+        clearTimeout(timer);
         const data = await resp.json();
         if (!data.found || !data.raw) {
-          target.innerHTML = `<p class="muted">No package owns <code>${esc(filePath)}</code>.</p>`;
+          target.innerHTML = `<p class="muted">No package owns <code>${esc(path)}</code>.</p>`;
           return;
         }
         target.innerHTML = `<div class="pkg-output">${esc(data.raw)}</div>`;

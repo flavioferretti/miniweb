@@ -134,6 +134,9 @@ High-performance architecture based on
 .Xr kqueue 2
 plus a worker thread pool.
 .It
+OpenBSD package manager interface: search packages, inspect metadata,
+map file paths to owning packages, and list installed package files.
+.It
 RESTful JSON API for external integrations.
 .It
 No native TLS implementation by design; intended to run behind
@@ -392,18 +395,29 @@ substitution-based rendering from files under
 .Pa templates/ .
 .El
 .Sh PERFORMANCE
-Measured on OpenBSD 7.8 (amd64, 4-core CPU):
-.Bl -tag -width Ds
-.It Pa /static/test.html
-34,771.76 requests/s peak;
-0.220 ms best average latency.
-.It Pa /api/metrics
-Approximately 300 requests/s in current benchmark conditions.
+Measured on OpenBSD 7.8 (amd64, 4-core CPU) with
+.Xr wrk 1
+.Pq 4 threads, 30 s run :
+.Bl -tag -width "/static/test.html (150 conns)"
+.It Pa /static/test.txt Pq 100 connections
+15,842.60 requests/s;
+avg latency 6.25 ms
+.Pq p50 6.42 ms, p99 9.30 ms .
+.It Pa /static/test.html Pq 150 connections
+16,357.15 requests/s;
+avg latency 15.91 ms
+.Pq p50 7.06 ms, p99 143.26 ms .
+.It Pa /apiroot Pq 100 connections
+11,094.69 requests/s;
+avg latency 9.03 ms
+.Pq p50 8.70 ms, p99 13.19 ms .
 .El
 .Pp
-Relative to an earlier static-file baseline of about 7,000 requests/s,
-the measured peak corresponds to roughly +396.74%% throughput
-(about 4.97x).
+The elevated p99 at 150 connections on
+.Pa /static/test.html
+reflects connection-limit backpressure
+.Pq a portion of requests receives 503 ,
+not handler overhead; static throughput remains stable above 16,000 requests/s.
 .Sh SECURITY
 .Ss Sandboxing
 .Nm
@@ -423,6 +437,14 @@ static/             r
 /usr/bin/netstat    x
 /bin/sh             x
 /etc/man.conf       r
+/dev/null           rw
+/usr/sbin/pkg_info  x
+/var/db/pkg         r
+/usr/local          r
+/usr/bin            r
+/usr/sbin           r
+/bin                r
+/sbin               r
 /etc/passwd         r
 /etc/group          r
 /etc/resolv.conf    r
@@ -647,6 +669,22 @@ Unveiled for execution.
 .It Pa /usr/bin/netstat
 .It Pa /bin/sh
 Unveiled for execution by metric and networking collectors.
+.It Pa /usr/sbin/pkg_info
+Package information tool.
+Unveiled for execution by the packages API.
+.It Pa /var/db/pkg
+Installed package database.
+Unveiled read-only for
+.Xr pkg_info 1 .
+.It Pa /usr/local
+.It Pa /usr/bin
+.It Pa /usr/sbin
+.It Pa /bin
+.It Pa /sbin
+Unveiled read-only so that
+.Xr pkg_info 1
+.Fl E
+can stat arbitrary file paths across the standard directory trees.
 .El
 .Sh EXAMPLES
 Start the server on the default port with verbose logging:
@@ -719,12 +757,14 @@ relay "http_redirect" {
 .Pp
 Verify that all endpoints respond correctly through the proxy:
 .Bd -literal -offset indent
-$ for p in / /docs /apiroot /networking \e
+$ for p in / /docs /apiroot /networking /packages \e
       /api/metrics /api/networking \e
+      '/api/packages/search?q=curl' \e
+      '/api/man/search?q=pledge' \e
       /static/css/custom.css /favicon.ico; do
-    printf '%-30s %s\en' "$p" \e
+    printf '%-44s %s\en' "$p" \e
       "$(curl -sk -o /dev/null \e
-         -w '%{http_code}' https://example.com$p)"
+         -w '%{http_code}' "https://example.com$p")"
   done
 .Ed
 .Pp
@@ -884,9 +924,11 @@ In early 2026 it was rewritten to use a native
 dispatcher with a
 .Dv EV_DISPATCH Ns -based
 worker pool, removing the external library dependency and improving
-throughput from roughly 7000 requests per second to 34771.76 requests
-per second on static-file benchmarks on a four-core system
-(approximately +396.74%, or 4.97x).
+throughput from roughly 7,000 requests per second to over 16,000
+requests per second on static-file benchmarks on a four-core system
+(approximately +128%, measured with
+.Xr wrk 1
+at 100\(en150 concurrent connections).
 A configuration file facility was added shortly after,
 replacing all hardcoded values with a runtime-configurable
 .Pa miniweb.conf

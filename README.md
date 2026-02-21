@@ -33,6 +33,7 @@ At startup, MiniWeb loads configuration from file (if found), then applies CLI o
 - Real-time metrics: CPU load, memory, swap, disk usage, network interfaces
 - Process monitoring: top 10 by CPU and top 10 by memory
 - Manual page browser: search via `apropos(1)` and render with `mandoc(1)`
+- OpenBSD package manager UI: search packages, inspect metadata, map file paths to owning packages, list installed files
 - Security hardening with `pledge(2)` + `unveil(2)`
 - High-performance event loop with `kqueue(2)` + worker thread pool
 - RESTful JSON API for external integrations
@@ -217,14 +218,15 @@ Main thread handles accept + queueing only; workers never call `kevent()`. `EV_D
 
 ## Performance
 
-Measured on OpenBSD 7.8, amd64, 4-core CPU:
+Measured on OpenBSD 7.8, amd64, 4-core CPU with `wrk` (4 threads, 30 s run):
 
-| Endpoint | Throughput | Avg latency |
-|---|---|---|
-| `/static/test.html` | **34,771.76 req/s (peak)** | **0.220 ms (best avg)** |
-| `/api/metrics` | ~300 req/s | — |
+| Endpoint | Conns | Req/s | Avg latency | p50 | p99 |
+|---|---|---|---|---|---|
+| `/static/test.txt` | 100 | **15,842.60** | 6.25 ms | 6.42 ms | 9.30 ms |
+| `/static/test.html` | 150 | **16,357.15** | 15.91 ms | 7.06 ms | 143.26 ms |
+| `/apiroot` | 100 | **11,094.69** | 9.03 ms | 8.70 ms | 13.19 ms |
 
-Compared to an earlier static baseline around ~7,000 req/s, peak throughput gain is about **+396.74%** (~4.97×).
+The elevated p99 at 150 connections on `/static/test.html` reflects connection-limit backpressure (some requests receive 503); static throughput remains stable above **16,000 req/s**.
 
 ## Security
 
@@ -245,6 +247,14 @@ static/             r
 /usr/bin/netstat    x
 /bin/sh             x
 /etc/man.conf       r
+/dev/null           rw
+/usr/sbin/pkg_info  x     — packages API
+/var/db/pkg         r     — installed package database
+/usr/local          r     — pkg_info -E path resolution
+/usr/bin            r
+/usr/sbin           r
+/bin                r
+/sbin               r
 /etc/passwd         r
 /etc/group          r
 /etc/resolv.conf    r
@@ -353,6 +363,9 @@ key    value
 - `/etc/passwd`, `/etc/group`, `/etc/resolv.conf` — lookups/data for runtime views
 - `/etc/man.conf`, `/usr/share/man`, `/usr/local/man`, `/usr/X11R6/man` — manpage data
 - `/usr/bin/mandoc`, `/usr/bin/apropos`, `/bin/ps`, `/usr/bin/netstat`, `/bin/sh` — executed helpers
+- `/usr/sbin/pkg_info` — package information tool, executed by packages API
+- `/var/db/pkg` — installed package database, read by `pkg_info(1)`
+- `/usr/local`, `/usr/bin`, `/usr/sbin`, `/bin`, `/sbin` — unveiled read-only so `pkg_info -E` can stat arbitrary file paths
 
 ## Examples
 
@@ -368,11 +381,13 @@ curl -s http://127.0.0.1:9001/api/metrics | jq .
 Proxy smoke-check:
 
 ```sh
-for p in / /docs /apiroot /networking \
+for p in / /docs /apiroot /networking /packages \
       /api/metrics /api/networking \
+      '/api/packages/search?q=curl' \
+      '/api/man/search?q=pledge' \
       /static/css/custom.css /favicon.ico; do
-  printf '%-30s %s\n' "$p" \
-    "$(curl -sk -o /dev/null -w '%{http_code}' https://example.com$p)"
+  printf '%-44s %s\n' "$p" \
+    "$(curl -sk -o /dev/null -w '%{http_code}' "https://example.com$p")"
 done
 ```
 
@@ -400,14 +415,19 @@ rc_cmd $1
 ```sh
 make unit-tests
 
-for p in / /docs /apiroot /networking \
+for p in / /docs /apiroot /networking /packages \
           /api/metrics /api/networking \
+          '/api/packages/search?q=curl' \
+          '/api/packages/info?name=curl-8.16.0' \
+          '/api/packages/list' \
+          '/api/man/search?q=pledge' \
           /static/css/custom.css /favicon.ico; do
-    printf '%-30s %s\n' "$p" \
-      "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:9001$p)"
+    printf '%-44s %s\n' "$p" \
+      "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:9001$p")"
 done
 
 curl -s 'http://127.0.0.1:9001/api/man/search?q=pledge'
+curl -s 'http://127.0.0.1:9001/api/packages/search?q=vim' | jq .
 curl -s http://127.0.0.1:9001/api/metrics | jq .
 ```
 
@@ -471,7 +491,7 @@ internal per-connection cap of 64 requests.
 
 ## History
 
-MiniWeb originally used `libmicrohttpd`, then was rewritten in early 2026 around native `kqueue(2)` + `EV_DISPATCH` workers. This removed the external dependency and improved measured static throughput from ~7,000 req/s to 34,771.76 req/s (~+396.74%, ~4.97×).
+MiniWeb originally used `libmicrohttpd`, then was rewritten in early 2026 around native `kqueue(2)` + `EV_DISPATCH` workers. This removed the external dependency and improved measured static throughput from ~7,000 req/s to over 16,000 req/s (~+128%, measured with `wrk` at 100–150 concurrent connections).
 
 The configuration file system (`miniweb.conf`) was added afterward to replace hardcoded runtime values.
 
