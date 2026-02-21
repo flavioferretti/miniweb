@@ -357,6 +357,80 @@ key    value
 | `trusted_proxy` | `127.0.0.1` | Trusted proxy IP for forwarded headers |
 | `verbose` | `no` | `yes/no/true/false/1/0` |
 
+
+## kqueue Concurrency Analysis (main + http_handler)
+
+### Current strategy strengths for simultaneous requests
+
+- `EV_DISPATCH` on client sockets prevents duplicate worker handling of the same fd after readiness delivery, reducing race and lock contention under bursty parallel traffic.
+- `handle_accept()` drains the entire accept backlog in one pass, which is a good strategy for high connection fan-in.
+- Workers block on `pthread_cond_wait` (no spin), and the dispatcher is the single owner of `kevent()`, which keeps scheduling predictable.
+- Keep-alive rearm (`EV_ENABLE`) avoids full reconnect overhead for sequential requests.
+
+### Strategic improvements for spawn/parallel response throughput
+
+- **Batch kevent changes**: where possible, accumulate multiple `EV_ENABLE`/`EV_ADD` operations and flush with one `kevent()` call to reduce syscall pressure.
+- **Accept/load-shedding tuning**: expose and tune `LISTEN_BACKLOG`, `MAX_EVENTS`, and `QUEUE_CAPACITY` together for workload shape (short/static vs long/dynamic).
+- **Backpressure visibility**: export counters for queue-full drops and keep-alive rearm failures to drive tuning from real measurements.
+- **Hot response path**: for static files larger than cache threshold, consider `sendfile(2)`-style zero-copy path (platform permitting) to reduce userspace copy costs.
+
+### Ring buffer opportunities
+
+- **Already present**: the work queue in `main.c` is already a fixed-size circular buffer (`head/tail/count`, modulo arithmetic).
+- **Good candidate**: request receive path currently resets and re-parses a linear per-connection buffer. A per-connection circular RX buffer can reduce memmove/fragmentation pressure when headers arrive in many small chunks.
+- **Not a strong candidate**: `http_handler` response write path (`writev_all`) already streams with iovecs; a second ring buffer for TX would often add complexity without clear wins unless moving to async multi-response pipelining.
+
+### Memory allocation/deallocation analysis
+
+- **Connection lifecycle (`main.c`)**: one `calloc` per accepted connection and one `free` on close/timeout; predictable and bounded by `MAX_CONNECTIONS`.
+- **Static file cache (`http_handler.c`)**: cache stores heap copies and performs `malloc/free` on replacement. Under churn on many similarly-sized files this can increase allocator pressure.
+- **File-send path**: uncached file responses may allocate a temporary full-file copy (`cache_copy`) up to cache limit for insertion.
+- **Response objects**: `http_response_create/free` are per-response allocations; frequent but small and short-lived.
+
+Potential follow-ups:
+
+- use a small object pool/slab for `connection_t` and `http_response_t` to reduce allocator overhead;
+- cap cache insertion rate or add simple admission policy (e.g., only cache after 2nd hit);
+- periodically evict stale cache slots by age to avoid cold entries holding memory.
+
+## Hard-coded caps and effective ranges
+
+Some limits are compile-time constants (hard caps), while others are configurable but clamped by parser/runtime rules.
+
+### Compile-time hard caps (wired in code)
+
+| Cap | Value | Effective range | Notes |
+|---|---:|---|---|
+| `MAX_EVENTS` | 64 | `1..64` per `kevent` wait | Upper bound of events processed per loop iteration. |
+| `MAX_CONNECTIONS` | 1280 | `1..1280` runtime active conns | Absolute upper bound; `-c`/`max_conns` cannot exceed this. |
+| `THREAD_POOL_SIZE` | 4 | `1..4` workers | Runtime `threads` is clamped to this value. |
+| `REQUEST_BUFFER_SIZE` | 16384 | `1024..16384` bytes effective request size | Runtime `max_req_size` parsed up to 1 MiB but now clamped to buffer size. |
+| `LISTEN_BACKLOG` | 128 | fixed (`listen(2)` backlog hint) | Pending accept queue hint; tune with kernel limits in mind. |
+| `QUEUE_CAPACITY` | 512 | `1..512` queued dispatched conns | Circular queue depth before overload 503/drop path. |
+| `MAX_KEEPALIVE_REQUESTS` | 64 | fixed per connection | Forces close after 64 served requests on one keep-alive connection. |
+| `WRITE_RETRY_LIMIT` | 256 | fixed write retries | Max EAGAIN retry cycles before write failure. |
+| `WRITE_WAIT_MS` | 100 | fixed poll wait ms | Poll wait step used by write retry loop. |
+| `FILE_CACHE_SLOTS` | 32 | fixed entries | Number of in-memory static file cache slots. |
+| `FILE_CACHE_MAX_BYTES` | 262144 | `1..262144` bytes per cached file | Files above threshold bypass memory cache. |
+
+### Configurable caps and parser ranges
+
+| Key | Parser range | Runtime effective range | Reason |
+|---|---|---|---|
+| `threads` | `1..64` | `1..4` | hard-clamped by `THREAD_POOL_SIZE`. |
+| `max_conns` | `1..65535` | `1..1280` | hard-clamped by `MAX_CONNECTIONS`. |
+| `max_req_size` | `1024..1048576` | `1024..16384` | hard-clamped by `REQUEST_BUFFER_SIZE`. |
+| `conn_timeout` | `1..3600` | `1..3600` | used by idle sweep logic. |
+| `mandoc_timeout` | `1..120` | `1..120` | subprocess timeout bound. |
+| `port` | `1..65535` | `1..65535` | standard TCP port range. |
+
+Recommended tuning profile for high parallel request loads:
+
+- keep `threads` near CPU core count up to hard cap;
+- increase `max_conns` only with enough RAM and worker capacity;
+- keep `max_req_size` as low as practical for target APIs;
+- monitor 503/drop behavior to decide whether queue/backlog caps need recompilation.
+
 ## Files
 
 - `./miniweb.conf`, `$HOME/.miniweb.conf`, `/etc/miniweb.conf` — startup config search list

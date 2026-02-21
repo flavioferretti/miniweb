@@ -400,6 +400,51 @@ Minimal
 substitution-based rendering from files under
 .Pa templates/ .
 .El
+.Ss kqueue and memory-path analysis
+Current behavior is optimized for concurrent request handling using a
+single dispatcher thread and
+.Dv EV_DISPATCH
+for one-shot readiness delivery.
+The work queue is already implemented as a circular buffer
+.Pq head/tail/count over fixed capacity .
+.Pp
+Strategic performance points:
+.Bl -bullet -compact
+.It
+Batching multiple
+.Xr kevent 2
+change operations can reduce syscall overhead in high fan-in bursts.
+.It
+Queue saturation and keep-alive rearm failures should be exported as
+metrics to tune thread and queue caps from real traffic.
+.It
+A per-connection circular RX buffer may reduce allocator/cache pressure
+for highly fragmented header arrivals.
+.It
+The TX path already uses
+.Xr writev 2 ;
+a separate TX ring buffer is usually unnecessary unless protocol
+pipelining or async multi-response buffering is introduced.
+.El
+.Pp
+Memory allocation hotspots:
+.Bl -bullet -compact
+.It
+One
+.Xr calloc 3
+per accepted connection and one
+.Xr free 3
+on close/timeout.
+.It
+Static file cache replacement performs
+.Xr malloc 3 /
+.Xr free 3
+for cached payload copies.
+.It
+Per-response allocation/free for
+.Vt http_response_t
+objects.
+.El
 .Sh PERFORMANCE
 Measured on OpenBSD 7.8 (amd64, 4-core CPU) with
 .Xr wrk 1
@@ -424,6 +469,57 @@ The elevated p99 at 150 connections on
 reflects connection-limit backpressure
 .Pq a portion of requests receives 503 ,
 not handler overhead; static throughput remains stable above 16,000 requests/s.
+.Ss Hard-coded caps and effective ranges
+Some limits are compile-time hard caps and override broader config parser
+ranges.
+.Pp
+.Bl -tag -width "REQUEST_BUFFER_SIZE"
+.It Dv MAX_EVENTS
+64 events per
+.Xr kevent 2
+wait cycle.
+.It Dv MAX_CONNECTIONS
+1280 active connections maximum.
+.It Dv THREAD_POOL_SIZE
+4 worker threads maximum.
+.It Dv REQUEST_BUFFER_SIZE
+16384 bytes receive buffer hard cap for request headers.
+.It Dv LISTEN_BACKLOG
+128 pending connection backlog hint.
+.It Dv QUEUE_CAPACITY
+512 dispatched connections queued before overload drop.
+.It Dv MAX_KEEPALIVE_REQUESTS
+64 requests per keep-alive connection before forced close.
+.It Dv WRITE_RETRY_LIMIT
+256 write retry cycles on
+.Dv EAGAIN .
+.It Dv WRITE_WAIT_MS
+100 ms poll wait per write retry cycle.
+.It Dv FILE_CACHE_SLOTS
+32 in-memory static file cache entries.
+.It Dv FILE_CACHE_MAX_BYTES
+256 KiB maximum size per cached file.
+.El
+.Pp
+Effective runtime ranges for user-configurable caps:
+.Bl -tag -width "max_req_size"
+.It Cm threads
+Parser: 1\(en64; effective runtime: 1\(en4
+.Pq clamped by Dv THREAD_POOL_SIZE .
+.It Cm max_conns
+Parser: 1\(en65535; effective runtime: 1\(en1280
+.Pq clamped by Dv MAX_CONNECTIONS .
+.It Cm max_req_size
+Parser: 1024\(en1048576; effective runtime: 1024\(en16384
+.Pq clamped by Dv REQUEST_BUFFER_SIZE .
+.It Cm conn_timeout
+1\(en3600 seconds effective.
+.It Cm mandoc_timeout
+1\(en120 seconds effective.
+.It Cm port
+1\(en65535 effective.
+.El
+
 .Sh SECURITY
 .Ss Sandboxing
 .Nm
@@ -569,12 +665,14 @@ Default:
 .Cm 127.0.0.1 .
 .It Cm threads Ar n
 Number of worker threads.
-Range 1\(en64.
+Range 1\(en64 in parser; effective runtime range 1\(en4
+.Pq hard-capped by Dv THREAD_POOL_SIZE .
 Default:
 .Cm 4 .
 .It Cm max_conns Ar n
 Maximum concurrent connections.
-Range 1\(en65535.
+Range 1\(en65535 in parser; effective runtime range 1\(en1280
+.Pq hard-capped by Dv MAX_CONNECTIONS .
 Default:
 .Cm 1280 .
 .It Cm conn_timeout Ar seconds
@@ -584,7 +682,8 @@ Default:
 .Cm 30 .
 .It Cm max_req_size Ar bytes
 Maximum HTTP request size in bytes.
-Range 1024\(en1048576.
+Range 1024\(en1048576 in parser; effective runtime range 1024\(en16384
+.Pq hard-capped by Dv REQUEST_BUFFER_SIZE .
 Default:
 .Cm 16384 .
 .It Cm mandoc_timeout Ar seconds
