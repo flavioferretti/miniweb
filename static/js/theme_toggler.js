@@ -1,42 +1,35 @@
-  (() => {
-      const root = document.documentElement;
-      const toggle = document.getElementById('themeToggle');
-      const menuToggle = document.getElementById('navbarToggle');
-      const menu = document.getElementById('navbarMenu');
+(() => {
+    const root = document.documentElement;
+    const toggle = document.getElementById('themeToggle');
 
-      const applyTheme = (theme) => {
-          if (theme === 'auto') {
-              const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-              root.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
-          } else {
-              root.setAttribute('data-theme', theme);
-          }
-      };
+    // 1. Funzione per applicare il tema e aggiornare l'attributo HTML
+    const applyTheme = (theme) => {
+        let themeToApply = theme;
 
-      const savedTheme = localStorage.getItem('miniweb-theme') || 'auto';
-      applyTheme(savedTheme);
+        if (theme === 'auto') {
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            themeToApply = prefersDark ? 'dark' : 'light';
+        }
 
-      toggle?.addEventListener('click', () => {
-          const current = root.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
-          const next = current === 'dark' ? 'light' : 'dark';
-          localStorage.setItem('miniweb-theme', next);
-          applyTheme(next);
-      });
+        root.setAttribute('data-theme', themeToApply);
+        // Salviamo la scelta specifica (dark o light) nel localStorage
+        localStorage.setItem(themeKey, themeToApply);
+    };
 
-      menuToggle?.addEventListener('click', () => {
-          const expanded = menuToggle.getAttribute('aria-expanded') === 'true';
-          menuToggle.setAttribute('aria-expanded', String(!expanded));
-          menu.classList.toggle('show', !expanded);
-      });
+    // 2. Al caricamento: Recupera dal localStorage o usa il default
+    // Nota: se il localStorage è vuoto, usiamo 'auto' o 'light'
+    /* Key is per-host so each MiniWeb instance remembers its own theme */
+    const themeKey = 'miniweb-theme:' + location.hostname + (location.port ? ':' + location.port : '');
+    const savedTheme = localStorage.getItem(themeKey) || 'auto';
+    applyTheme(savedTheme);
 
-      const currentPath = window.location.pathname;
-      document.querySelectorAll('.nav-link').forEach((link) => {
-          if (link.dataset.page === currentPath) {
-              link.classList.add('active');
-          }
-          link.addEventListener('click', () => {
-              menu.classList.remove('show');
-              menuToggle?.setAttribute('aria-expanded', 'false');
-          });
-      });
-  })();
+    // 3. Gestione del Click sul pulsante
+    toggle?.addEventListener('click', () => {
+        // Leggiamo cosa c'è scritto attualmente sull'HTML
+        const currentTheme = root.getAttribute('data-theme');
+        const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+
+        applyTheme(nextTheme);
+    });
+
+})();
