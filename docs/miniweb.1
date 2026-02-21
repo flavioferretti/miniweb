@@ -457,27 +457,86 @@ objects now come from a fixed pool (256 entries) guarded by a mutex.
 .Sh PERFORMANCE
 Measured on OpenBSD 7.8 (amd64, 4-core CPU) with
 .Xr wrk 1
-.Pq 4 threads, 30 s run :
-.Bl -tag -width "/static/test.html (150 conns)"
-.It Pa /static/test.txt Pq 100 connections
-15,842.60 requests/s;
-avg latency 6.25 ms
-.Pq p50 6.42 ms, p99 9.30 ms .
-.It Pa /static/test.html Pq 150 connections
-16,357.15 requests/s;
-avg latency 15.91 ms
-.Pq p50 7.06 ms, p99 143.26 ms .
-.It Pa /apiroot Pq 100 connections
-11,094.69 requests/s;
-avg latency 9.03 ms
-.Pq p50 8.70 ms, p99 13.19 ms .
+.Pq 4 worker threads, 20 s per run .
+Connection counts in parentheses indicate the concurrency level at which
+each figure was recorded.
+.Ss Static file serving
+.Bl -tag -width "/static/assets/favicon.svg (32 conns)"
+.It Pa /static/test.html Pq 32 connections
+23,201 requests/s; avg latency 1.47 ms.
+.It Pa /static/css/custom.css Pq 32 connections
+18,335 requests/s; avg latency 1.62 ms.
+.It Pa /static/js/theme_toggler.js Pq 32 connections
+17,965 requests/s; avg latency 1.68 ms.
+.It Pa /static/assets/favicon.svg Pq 32 connections
+17,557 requests/s; avg latency 1.72 ms.
 .El
 .Pp
-The elevated p99 at 150 connections on
-.Pa /static/test.html
-reflects connection-limit backpressure
-.Pq a portion of requests receives 503 ,
-not handler overhead; static throughput remains stable above 16,000 requests/s.
+Static file throughput peaks above 23,000 requests/s at moderate concurrency.
+All four endpoints sustain over 17,000 requests/s at 32 concurrent connections
+with sub-2 ms average latency.
+.Ss Dynamic page rendering
+.Bl -tag -width "/networking (32 conns)"
+.It Pa /docs Pq 32 connections
+9,615 requests/s; avg latency 3.46 ms.
+.It Pa / Pq 64 connections
+7,851 requests/s; avg latency 8.89 ms.
+.It Pa /networking Pq 32 connections
+2,030 requests/s; avg latency 19.34 ms.
+.It Pa /packages Pq 32 connections
+6,109 requests/s; avg latency 5.36 ms.
+.It Pa /apiroot Pq 32 connections
+5,324 requests/s; avg latency 6.03 ms.
+.El
+.Pp
+Template-backed pages sustain 5,000\(en9,600 requests/s.
+The
+.Pa /networking
+endpoint is slower because it collects live interface, routing,
+and DNS data on every request.
+.Ss JSON API endpoints
+.Bl -tag -width "/api/networking (64 conns)"
+.It Pa /api/networking Pq 64 connections
+1,790 requests/s; avg latency 35.53 ms.
+.It Pa /api/metrics Pq 64 connections
+101 requests/s; avg latency 604.94 ms.
+.El
+.Pp
+.Pa /api/metrics
+throughput is bounded by the cost of a full system snapshot
+.Pq sysctl, process table, filesystem and network enumeration
+collected on every request, not by the HTTP layer.
+.Ss Package API endpoints
+.Bl -tag -width "/api/packages/search (8 conns)"
+.It Pa /api/packages/search Pq 8 connections
+11 requests/s; avg latency 686 ms.
+.It Pa /api/packages/info Pq 8 connections
+14 requests/s; avg latency 556 ms.
+.It Pa /api/packages/files Pq 8 connections
+9 requests/s; avg latency 823 ms.
+.El
+.Pp
+Package API throughput is bounded entirely by
+.Xr pkg_info 1
+subprocess execution time.
+These endpoints spawn an external process per request and are not
+intended for high-frequency automated polling.
+.Ss Manual page endpoints
+.Bl -tag -width "/api/man/search (32 conns)"
+.It Pa /api/man/search Pq 32 connections
+22 requests/s uncached; avg latency 1,370 ms.
+Cached responses are served directly from disk and drop to
+single-digit millisecond latency.
+.It Pa /man/1/1/ls Pq 32 connections
+4 requests/s uncached.
+After the first render the page is cached under
+.Pa static/man/
+and subsequent requests are served at static-file speeds.
+.El
+.Pp
+First-render latency for manual page endpoints is dominated by
+.Xr mandoc 1
+subprocess time.
 .Ss Hard-coded caps and effective ranges
 Some limits are compile-time hard caps and override broader config parser
 ranges.
@@ -1045,11 +1104,11 @@ In early 2026 it was rewritten to use a native
 dispatcher with a
 .Dv EV_DISPATCH Ns -based
 worker pool, removing the external library dependency and improving
-throughput from roughly 7,000 requests per second to over 16,000
+throughput from roughly 7,000 requests per second to over 23,000
 requests per second on static-file benchmarks on a four-core system
-(approximately +128%, measured with
+(approximately +228%, measured with
 .Xr wrk 1
-at 100\(en150 concurrent connections).
+at 32 concurrent connections).
 A configuration file facility was added shortly after,
 replacing all hardcoded values with a runtime-configurable
 .Pa miniweb.conf

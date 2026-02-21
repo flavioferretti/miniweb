@@ -224,17 +224,63 @@ Internal refactoring keeps connection teardown logic in one path (`free_connecti
 
 ## Performance
 
-Measured on OpenBSD 7.8, amd64, 4-core CPU with `wrk` (4 threads, 30 s run):
+Measured on OpenBSD 7.8, amd64, 4-core CPU with `wrk` (4 threads, 20 s per run).
+Connection counts in parentheses indicate the concurrency level at which each figure was recorded.
 
-| Endpoint | Conns | Req/s | Avg latency | p50 | p99 |
-|---|---|---|---|---|---|
-| `/static/test.txt` | 100 | **15,842.60** | 6.25 ms | 6.42 ms | 9.30 ms |
-| `/static/test.html` | 150 | **16,357.15** | 15.91 ms | 7.06 ms | 143.26 ms |
-| `/apiroot` | 100 | **11,094.69** | 9.03 ms | 8.70 ms | 13.19 ms |
+### Static file serving
 
-The elevated p99 at 150 connections on `/static/test.html` reflects connection-limit backpressure (some requests receive 503); static throughput remains stable above **16,000 req/s**.
+| Endpoint | Conns | Req/s | Avg latency |
+|---|---:|---:|---:|
+| `/static/test.html` | 32 | **23,201** | 1.47 ms |
+| `/static/css/custom.css` | 32 | **18,335** | 1.62 ms |
+| `/static/js/theme_toggler.js` | 32 | **17,965** | 1.68 ms |
+| `/static/assets/favicon.svg` | 32 | **17,557** | 1.72 ms |
 
-Latest merged performance work (PR-41) changed allocator/cache strategy more than wire protocol behavior, so raw throughput is intentionally very close to previous numbers (sometimes slightly lower), while CPU time drops under stress due to fewer hot-path allocations and less cache pollution.
+Static file throughput peaks above **23,000 req/s** at moderate concurrency. All four endpoints sustain over **17,000 req/s** at 32 concurrent connections with sub-2 ms average latency.
+
+### Dynamic page rendering
+
+| Endpoint | Conns | Req/s | Avg latency |
+|---|---:|---:|---:|
+| `/docs` | 32 | **9,615** | 3.46 ms |
+| `/` | 64 | **7,851** | 8.89 ms |
+| `/packages` | 32 | **6,109** | 5.36 ms |
+| `/apiroot` | 32 | **5,324** | 6.03 ms |
+| `/networking` | 32 | **2,030** | 19.34 ms |
+
+Template-backed pages sustain **5,000–9,600 req/s**. `/networking` is slower because it collects live interface, routing, and DNS data on every request.
+
+### JSON API endpoints
+
+| Endpoint | Conns | Req/s | Avg latency |
+|---|---:|---:|---:|
+| `/api/networking` | 64 | **1,790** | 35.53 ms |
+| `/api/metrics` | 64 | **101** | 604.94 ms |
+
+`/api/metrics` throughput is bounded by the cost of a full system snapshot (sysctl, process table, filesystem and network enumeration) collected on every request, not by HTTP overhead.
+
+### Package API endpoints
+
+| Endpoint | Conns | Req/s | Avg latency |
+|---|---:|---:|---:|
+| `/api/packages/info` | 8 | **14** | 556 ms |
+| `/api/packages/search` | 8 | **11** | 686 ms |
+| `/api/packages/files` | 8 | **9** | 823 ms |
+
+Package API throughput is bounded entirely by `pkg_info(1)` subprocess execution time. These endpoints spawn an external process per request and are not intended for high-frequency automated polling.
+
+### Manual page endpoints
+
+| Endpoint | Conns | Req/s (uncached) | Avg latency (uncached) |
+|---|---:|---:|---:|
+| `/api/man/search` | 32 | **22** | 1,370 ms |
+| `/man/1/1/ls` | 32 | **4** | — |
+
+First-render latency is dominated by `mandoc(1)` subprocess time. After the first render, pages are cached under `static/man/` and served at static-file speeds.
+
+### History note
+
+The rewrite from `libmicrohttpd` to native `kqueue(2)` + `EV_DISPATCH` workers improved measured static throughput from ~7,000 req/s to over **23,000 req/s** (~+228%, measured with `wrk` at 32 concurrent connections on a four-core system).
 
 ## Security
 
@@ -593,7 +639,7 @@ internal per-connection cap of 64 requests.
 
 ## History
 
-MiniWeb originally used `libmicrohttpd`, then was rewritten in early 2026 around native `kqueue(2)` + `EV_DISPATCH` workers. This removed the external dependency and improved measured static throughput from ~7,000 req/s to over 16,000 req/s (~+128%, measured with `wrk` at 100–150 concurrent connections).
+MiniWeb originally used `libmicrohttpd`, then was rewritten in early 2026 around native `kqueue(2)` + `EV_DISPATCH` workers. This removed the external dependency and improved measured static throughput from ~7,000 req/s to over **23,000 req/s** (~+228%, measured with `wrk` at 32 concurrent connections on a four-core system).
 
 The configuration file system (`miniweb.conf`) was added afterward to replace hardcoded runtime values.
 
