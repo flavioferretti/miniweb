@@ -322,6 +322,12 @@ PDF.
 .It Cm .ps
 PostScript.
 .El
+.Pp
+Rendered man pages are cached for reuse under
+.Pa static/man/ Ns Ar area Ns / Ns Ar section Ns / Ns Ar page Ns . Ns Ar ext
+\(em equivalently
+.Pa {static_dir}/man/...
+using the configured static directory.
 .El
 .Ss Static Files
 .Bl -tag -width Ds

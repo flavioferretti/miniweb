@@ -773,7 +773,20 @@ man_render_handler(http_request_t *req)
 	if (last_slash) {
 		*last_slash = '\0';
 		if (mkdir_p(cache_dir) == 0) {
-			(void)write_file_binary(cache_abs, output, out_len);
+			if (write_file_binary(cache_abs, output, out_len) != 0 &&
+				config_verbose) {
+				fprintf(stderr,
+					"[MAN] cache write failed: %s (errno=%d: %s)\n",
+					cache_abs, errno, strerror(errno));
+			} else if (config_verbose) {
+				fprintf(stderr,
+					"[MAN] cache write ok: %s (%zu bytes)\n",
+					cache_abs, out_len);
+			}
+		} else if (config_verbose) {
+			fprintf(stderr,
+				"[MAN] cache directory create failed: %s (errno=%d: %s)\n",
+				cache_dir, errno, strerror(errno));
 		}
 	}
 
