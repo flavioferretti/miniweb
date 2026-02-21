@@ -360,6 +360,6 @@ ${TABLE_ROWS}
 HTML
 
 printf '\nBenchmark complete.\n'
-printf '  HTML report : http://localhost:%s/static/benchmark.html\n' "$SERVER_PORT"
-printf '  CSV results : %s\n' "$CSV_FILE"
-printf '  Assets dir  : %s\n' "$ASSETS_DIR"
+printf '▶  HTML report : http://localhost:%s/static/benchmark.html\n' "$SERVER_PORT"
+printf '▶  CSV results : %s\n' "$CSV_FILE"
+printf '▶  Assets dir  : %s\n' "$ASSETS_DIR"

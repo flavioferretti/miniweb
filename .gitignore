@@ -82,6 +82,7 @@ config.local
 
 # Static files cache (if generated)
 static/.cache/
+static/man
 
 # Coverage reports
 *.gcov
