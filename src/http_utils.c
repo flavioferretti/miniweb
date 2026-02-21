@@ -17,6 +17,11 @@
 #include <unistd.h>
 
 /* JSON string escaping — caller must free() */
+/**
+ * @brief Json escape string.
+ * @param src Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 char *
 json_escape_string(const char *src)
 {
@@ -48,6 +53,10 @@ json_escape_string(const char *src)
 
 /* Replace characters unsafe for filesystem use with '_'.
  * Permits: alphanumeric, '.', '-', '_', '+' */
+/**
+ * @brief Sanitize string.
+ * @param s Input string to parse or sanitize.
+ */
 void
 sanitize_string(char *s)
 {
@@ -174,6 +183,12 @@ safe_popen_read_argv(const char *path, char *const argv[],
 }
 
 /* Convenience wrapper: run cmd through /bin/sh -c */
+/**
+ * @brief Safe popen read.
+ * @param cmd Parameter used by this function.
+ * @param max_size Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 char *
 safe_popen_read(const char *cmd, size_t max_size)
 {

@@ -11,6 +11,11 @@
 #define PKG_CMD_MAX_OUTPUT  (8 * 1024 * 1024)
 #define PKG_WHICH_TIMEOUT   60   /* pkg_info -E scans all packages: can take ~30s */
 
+/**
+ * @brief Is safe pkg name.
+ * @param name Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 static int
 is_safe_pkg_name(const char *name)
 {
@@ -24,6 +29,13 @@ is_safe_pkg_name(const char *name)
 	return 1;
 }
 
+/**
+ * @brief Url decode into.
+ * @param src Parameter used by this function.
+ * @param dst Parameter used by this function.
+ * @param dst_size Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 static int
 url_decode_into(const char *src, char *dst, size_t dst_size)
 {
@@ -56,6 +68,14 @@ url_decode_into(const char *src, char *dst, size_t dst_size)
 	return 0;
 }
 
+/**
+ * @brief Get query value.
+ * @param url Request URL path.
+ * @param key Parameter used by this function.
+ * @param out Output pointer for parsed or generated value.
+ * @param out_size Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 static int
 get_query_value(const char *url, const char *key, char *out, size_t out_size)
 {
@@ -105,6 +125,11 @@ get_query_value(const char *url, const char *key, char *out, size_t out_size)
 	return 0;
 }
 
+/**
+ * @brief Pkg search json.
+ * @param query Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 char *
 pkg_search_json(const char *query)
 {
@@ -166,6 +191,11 @@ pkg_search_json(const char *query)
 
 
 /* Validate filesystem path for pkg_info -E: must be absolute, no shell chars */
+/**
+ * @brief Is safe path.
+ * @param path Request or filesystem path to evaluate.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 static int
 is_safe_path(const char *path)
 {
@@ -182,6 +212,11 @@ is_safe_path(const char *path)
 
 /* Build {"raw":"<escaped output>"} — same idea as Node's
  * res.end(JSON.stringify({ info: stdout.trim() })) */
+/**
+ * @brief Make raw json.
+ * @param output Rendered output buffer pointer.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 static char *
 make_raw_json(const char *output)
 {
@@ -209,6 +244,11 @@ make_raw_json(const char *output)
 }
 
 
+/**
+ * @brief Pkg info json.
+ * @param package_name Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 char *
 pkg_info_json(const char *package_name)
 {
@@ -223,6 +263,11 @@ pkg_info_json(const char *package_name)
 	return json ? json : strdup("{\"found\":false,\"raw\":\"\"}");
 }
 
+/**
+ * @brief Pkg files json.
+ * @param package_name Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 char *
 pkg_files_json(const char *package_name)
 {
@@ -283,6 +328,10 @@ pkg_files_json(const char *package_name)
 }
 
 
+/**
+ * @brief Pkg list json.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 char *
 pkg_list_json(void)
 {
@@ -323,6 +372,11 @@ pkg_list_json(void)
 	return json;
 }
 
+/**
+ * @brief Pkg which json.
+ * @param file_path Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 char *
 pkg_which_json(const char *file_path)
 {
@@ -337,6 +391,11 @@ pkg_which_json(const char *file_path)
 	return json ? json : strdup("{\"found\":false,\"raw\":\"\"}");
 }
 
+/**
+ * @brief Pkg api handler.
+ * @param req Request context for response generation.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 int
 pkg_api_handler(http_request_t *req)
 {

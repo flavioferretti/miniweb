@@ -45,6 +45,12 @@ do {                                                        \
 static struct kinfo_proc *get_procs_snapshot(size_t *nprocs);
 
 /* qsort comparator: sort by descending RSS. */
+/**
+ * @brief Compare memory.
+ * @param a Parameter used by this function.
+ * @param b Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 static int
 compare_memory(const void *a, const void *b)
 {
@@ -60,6 +66,11 @@ compare_memory(const void *a, const void *b)
 }
 
 /* Helper to snapshot all running processes. */
+/**
+ * @brief Get procs snapshot.
+ * @param nprocs Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 static struct kinfo_proc *
 get_procs_snapshot(size_t *nprocs)
 {
@@ -123,6 +134,11 @@ get_procs_snapshot(size_t *nprocs)
 	return NULL;
 }
 
+/**
+ * @brief Metrics get cpu stats.
+ * @param stats Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 int
 metrics_get_cpu_stats(CpuStats *stats)
 {
@@ -159,6 +175,11 @@ metrics_get_cpu_stats(CpuStats *stats)
 	#endif
 }
 
+/**
+ * @brief Metrics get memory stats.
+ * @param stats Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 int
 metrics_get_memory_stats(MemoryStats *stats)
 {
@@ -213,6 +234,11 @@ metrics_get_memory_stats(MemoryStats *stats)
 	#endif
 }
 
+/**
+ * @brief Metrics get load average.
+ * @param load Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 int
 metrics_get_load_average(LoadAverage *load)
 {
@@ -229,6 +255,14 @@ metrics_get_load_average(LoadAverage *load)
 	return 0;
 }
 
+/**
+ * @brief Metrics get os info.
+ * @param type Parameter used by this function.
+ * @param release Parameter used by this function.
+ * @param machine Parameter used by this function.
+ * @param size Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 int
 metrics_get_os_info(char *type, char *release, char *machine, size_t size)
 {
@@ -245,6 +279,12 @@ metrics_get_os_info(char *type, char *release, char *machine, size_t size)
 	return 0;
 }
 
+/**
+ * @brief Metrics get uptime.
+ * @param uptime_str Parameter used by this function.
+ * @param size Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 int
 metrics_get_uptime(char *uptime_str, size_t size)
 {
@@ -277,12 +317,24 @@ metrics_get_uptime(char *uptime_str, size_t size)
 	#endif
 }
 
+/**
+ * @brief Metrics get hostname.
+ * @param hostname Parameter used by this function.
+ * @param size Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 int
 metrics_get_hostname(char *hostname, size_t size)
 {
 	return gethostname(hostname, size);
 }
 
+/**
+ * @brief Metrics get disk usage.
+ * @param disks Parameter used by this function.
+ * @param max_disks Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 int
 metrics_get_disk_usage(DiskInfo *disks, int max_disks)
 {
@@ -321,6 +373,12 @@ metrics_get_disk_usage(DiskInfo *disks, int max_disks)
 	#endif
 }
 
+/**
+ * @brief Metrics get top ports.
+ * @param ports Parameter used by this function.
+ * @param max_ports Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 int
 metrics_get_top_ports(PortInfo *ports, int max_ports)
 {
@@ -329,6 +387,12 @@ metrics_get_top_ports(PortInfo *ports, int max_ports)
 	return 0;
 }
 
+/**
+ * @brief Metrics get network interfaces.
+ * @param interfaces Parameter used by this function.
+ * @param max_interfaces Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 int
 metrics_get_network_interfaces(NetworkInterface *interfaces, int max_interfaces)
 {
@@ -380,6 +444,12 @@ metrics_get_network_interfaces(NetworkInterface *interfaces, int max_interfaces)
 		 return count;
 }
 
+/**
+ * @brief Metrics get top cpu processes.
+ * @param processes Parameter used by this function.
+ * @param max_processes Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 int
 metrics_get_top_cpu_processes(ProcessInfo *processes, int max_processes)
 {
@@ -452,6 +522,12 @@ metrics_get_top_cpu_processes(ProcessInfo *processes, int max_processes)
 	return count;
 }
 
+/**
+ * @brief Metrics get top memory processes.
+ * @param processes Parameter used by this function.
+ * @param max_processes Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 int
 metrics_get_top_memory_processes(ProcessInfo *processes, int max_processes)
 {
@@ -520,6 +596,14 @@ metrics_get_top_memory_processes(ProcessInfo *processes, int max_processes)
 }
 
 /* 1. Aggregate process counters. */
+/**
+ * @brief Metrics get process stats.
+ * @param total Parameter used by this function.
+ * @param running Parameter used by this function.
+ * @param sleeping Parameter used by this function.
+ * @param zombie Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 int
 metrics_get_process_stats(int *total, int *running, int *sleeping, int *zombie)
 {
@@ -542,6 +626,11 @@ metrics_get_process_stats(int *total, int *running, int *sleeping, int *zombie)
 	return 0;
 }
 
+/**
+ * @brief Append cpu stats json.
+ * @param buffer Parameter used by this function.
+ * @param size Parameter used by this function.
+ */
 static void
 append_cpu_stats_json(char *buffer, size_t size)
 {
@@ -566,6 +655,11 @@ append_cpu_stats_json(char *buffer, size_t size)
 	}
 }
 
+/**
+ * @brief Append memory stats json.
+ * @param buffer Parameter used by this function.
+ * @param size Parameter used by this function.
+ */
 static void
 append_memory_stats_json(char *buffer, size_t size)
 {
@@ -590,6 +684,11 @@ append_memory_stats_json(char *buffer, size_t size)
 	}
 }
 
+/**
+ * @brief Append load average json.
+ * @param buffer Parameter used by this function.
+ * @param size Parameter used by this function.
+ */
 static void
 append_load_average_json(char *buffer, size_t size)
 {
@@ -606,6 +705,11 @@ append_load_average_json(char *buffer, size_t size)
 	}
 }
 
+/**
+ * @brief Append os info json.
+ * @param buffer Parameter used by this function.
+ * @param size Parameter used by this function.
+ */
 static void
 append_os_info_json(char *buffer, size_t size)
 {
@@ -623,6 +727,11 @@ append_os_info_json(char *buffer, size_t size)
 		}
 }
 
+/**
+ * @brief Append uptime json.
+ * @param buffer Parameter used by this function.
+ * @param size Parameter used by this function.
+ */
 static void
 append_uptime_json(char *buffer, size_t size)
 {
@@ -633,6 +742,11 @@ append_uptime_json(char *buffer, size_t size)
 		snprintf(buffer, size, "\"uptime\": \"unknown\"");
 }
 
+/**
+ * @brief Append disk info json.
+ * @param buffer Parameter used by this function.
+ * @param size Parameter used by this function.
+ */
 static void
 append_disk_info_json(char *buffer, size_t size)
 {
@@ -666,6 +780,11 @@ append_disk_info_json(char *buffer, size_t size)
 	snprintf(ptr, size, "]");
 }
 
+/**
+ * @brief Append top ports json.
+ * @param buffer Parameter used by this function.
+ * @param size Parameter used by this function.
+ */
 static void
 append_top_ports_json(char *buffer, size_t size)
 {
@@ -698,6 +817,11 @@ append_top_ports_json(char *buffer, size_t size)
 	snprintf(ptr, size, "]");
 }
 
+/**
+ * @brief Append network interfaces json.
+ * @param buffer Parameter used by this function.
+ * @param size Parameter used by this function.
+ */
 static void
 append_network_interfaces_json(char *buffer, size_t size)
 {
@@ -730,6 +854,11 @@ append_network_interfaces_json(char *buffer, size_t size)
 	snprintf(ptr, size, "]");
 }
 
+/**
+ * @brief Append top cpu processes json.
+ * @param buffer Parameter used by this function.
+ * @param size Parameter used by this function.
+ */
 static void
 append_top_cpu_processes_json(char *buffer, size_t size)
 {
@@ -763,6 +892,11 @@ append_top_cpu_processes_json(char *buffer, size_t size)
 	snprintf(ptr, size, "]");
 }
 
+/**
+ * @brief Append top memory processes json.
+ * @param buffer Parameter used by this function.
+ * @param size Parameter used by this function.
+ */
 static void
 append_top_memory_processes_json(char *buffer, size_t size)
 {
@@ -798,6 +932,11 @@ append_top_memory_processes_json(char *buffer, size_t size)
 }
 
 /* This helper is intended for get_system_metrics_json(). */
+/**
+ * @brief Append process stats json.
+ * @param json Parameter used by this function.
+ * @param size Parameter used by this function.
+ */
 static void
 append_process_stats_json(char *json, size_t size)
 {
@@ -812,6 +951,10 @@ append_process_stats_json(char *json, size_t size)
 	}
 }
 
+/**
+ * @brief Get system metrics json.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 char *
 get_system_metrics_json(void)
 {

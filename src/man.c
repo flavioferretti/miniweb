@@ -20,6 +20,11 @@
 
 /* Remove nroff overstrike sequences (for example "N\bN", "_\bX")
  * from mandoc ASCII output so markdown fallback remains readable. */
+/**
+ * @brief Strip overstrike ascii.
+ * @param text Parameter used by this function.
+ * @param len Destination buffer length.
+ */
 static void
 strip_overstrike_ascii(char *text, size_t *len)
 {
@@ -43,6 +48,11 @@ strip_overstrike_ascii(char *text, size_t *len)
 	*len = out;
 }
 
+/**
+ * @brief Is valid token.
+ * @param s Input string to parse or sanitize.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 static int
 is_valid_token(const char *s)
 {
@@ -56,6 +66,11 @@ is_valid_token(const char *s)
 	return 1;
 }
 
+/**
+ * @brief Is valid section.
+ * @param section Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 static int
 is_valid_section(const char *section)
 {
@@ -69,6 +84,12 @@ is_valid_section(const char *section)
 }
 
 /* Resolve the man page path using 'man -w'. */
+/**
+ * @brief Resolve man path.
+ * @param name Parameter used by this function.
+ * @param section Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 static char *
 resolve_man_path(const char *name, const char *section)
 {
@@ -94,6 +115,10 @@ resolve_man_path(const char *name, const char *section)
 }
 
 /* --- API JSON --- */
+/**
+ * @brief Man get sections json.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 char *
 man_get_sections_json(void)
 {
@@ -144,6 +169,12 @@ man_get_sections_json(void)
 	"}");
 }
 
+/**
+ * @brief Man get section pages json.
+ * @param area Parameter used by this function.
+ * @param section Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 char *
 man_get_section_pages_json(const char *area, const char *section)
 {
@@ -236,6 +267,11 @@ man_get_page_metadata_json(const char *area, const char *section,
 	return json;
 }
 
+/**
+ * @brief Man api search.
+ * @param query Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 char *
 man_api_search(const char *query)
 {
@@ -254,6 +290,11 @@ man_api_search(const char *query)
 }
 
 /* util for search */
+/**
+ * @brief Area from path.
+ * @param filepath Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 static const char *
 area_from_path(const char *filepath)
 {
@@ -262,6 +303,12 @@ area_from_path(const char *filepath)
 	return "system";
 }
 
+/**
+ * @brief Mkdir p.
+ * @param dir Parameter used by this function.
+ * @param base_dir Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 static int
 mkdir_p(const char *dir, const char *base_dir)
 {
@@ -299,6 +346,13 @@ mkdir_p(const char *dir, const char *base_dir)
 	return 0;
 }
 
+/**
+ * @brief Write file binary.
+ * @param path Request or filesystem path to evaluate.
+ * @param buf Input buffer containing textual data.
+ * @param len Destination buffer length.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 static int
 write_file_binary(const char *path, const char *buf, size_t len)
 {
@@ -323,6 +377,11 @@ write_file_binary(const char *path, const char *buf, size_t len)
 	return 0;
 }
 
+/**
+ * @brief Mime for format.
+ * @param format Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 static const char *
 mime_for_format(const char *format)
 {
@@ -429,6 +488,11 @@ build_cache_paths(const char *area, const char *section, const char *page,
 	return 0;
 }
 
+/**
+ * @brief Man api search raw.
+ * @param query Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 char *
 man_api_search_raw(const char *query)
 {

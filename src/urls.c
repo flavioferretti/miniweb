@@ -23,6 +23,9 @@ static const struct view_route view_routes[] = {
 	 "packages_extra_head.html", "packages_extra_js.html"},
 };
 
+/**
+ * @brief Register view routes.
+ */
 static void
 register_view_routes(void)
 {
@@ -32,6 +35,9 @@ register_view_routes(void)
 	}
 }
 
+/**
+ * @brief Register pkg api routes.
+ */
 static void
 register_pkg_api_routes(void)
 {
@@ -47,6 +53,12 @@ register_pkg_api_routes(void)
 		register_route("GET", pkg_paths[i], pkg_api_handler);
 }
 
+/**
+ * @brief Register route.
+ * @param method HTTP method string.
+ * @param path Request or filesystem path to evaluate.
+ * @param handler Route handler callback.
+ */
 void
 register_route(const char *method, const char *path, route_handler_t handler)
 {
@@ -58,6 +70,12 @@ register_route(const char *method, const char *path, route_handler_t handler)
 	}
 }
 
+/**
+ * @brief Find view route.
+ * @param method HTTP method string.
+ * @param path Request or filesystem path to evaluate.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 const struct view_route *
 find_view_route(const char *method, const char *path)
 {
@@ -70,6 +88,9 @@ find_view_route(const char *method, const char *path)
 	return NULL;
 }
 
+/**
+ * @brief Init routes.
+ */
 void
 init_routes(void)
 {
@@ -81,6 +102,12 @@ init_routes(void)
 	register_pkg_api_routes();
 }
 
+/**
+ * @brief Route match.
+ * @param method HTTP method string.
+ * @param path Request or filesystem path to evaluate.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 route_handler_t
 route_match(const char *method, const char *path)
 {

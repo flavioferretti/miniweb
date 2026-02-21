@@ -36,6 +36,11 @@ static response_pool_t response_pool = {
 	.lock = PTHREAD_MUTEX_INITIALIZER,
 };
 
+/**
+ * @brief Wait fd writable.
+ * @param fd File descriptor to operate on.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 static int
 wait_fd_writable(int fd)
 {
@@ -77,6 +82,9 @@ static pthread_mutex_t file_cache_lock = PTHREAD_MUTEX_INITIALIZER;
 static int cache_insert_tokens = FILE_CACHE_INSERTS_PER_SEC;
 static time_t cache_insert_window = 0;
 
+/**
+ * @brief Response pool init locked.
+ */
 static void
 response_pool_init_locked(void)
 {
@@ -89,6 +97,10 @@ response_pool_init_locked(void)
 	response_pool.initialized = 1;
 }
 
+/**
+ * @brief File cache refill budget locked.
+ * @param now Parameter used by this function.
+ */
 static void
 file_cache_refill_budget_locked(time_t now)
 {
@@ -98,6 +110,10 @@ file_cache_refill_budget_locked(time_t now)
 	}
 }
 
+/**
+ * @brief File cache evict stale locked.
+ * @param now Parameter used by this function.
+ */
 static void
 file_cache_evict_stale_locked(time_t now)
 {
@@ -119,6 +135,12 @@ file_cache_evict_stale_locked(time_t now)
 	}
 }
 
+/**
+ * @brief File cache admit locked.
+ * @param path Request or filesystem path to evaluate.
+ * @param now Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 static int
 file_cache_admit_locked(const char *path, time_t now)
 {
@@ -242,6 +264,10 @@ file_cache_lookup(const char *path, const struct stat *st, char **out,
 }
 
 /* Create response */
+/**
+ * @brief Http response create.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 http_response_t *
 http_response_create(void)
 {
@@ -265,6 +291,11 @@ http_response_create(void)
 }
 
 /* Set status code */
+/**
+ * @brief Http response set status.
+ * @param resp Response object to emit or mutate.
+ * @param code HTTP status code to send.
+ */
 void
 http_response_set_status(http_response_t *resp, int code)
 {
@@ -298,6 +329,13 @@ http_response_add_header(http_response_t *resp, const char *name,
  * Returns 0 on success, -1 on error or closed connection. */
 /* Write exactly n bytes, retrying on partial writes and EAGAIN.
  * Returns 0 on success, -1 on error or closed connection. */
+/**
+ * @brief Write all.
+ * @param fd File descriptor to operate on.
+ * @param buf Input buffer containing textual data.
+ * @param n Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 static int
 write_all(int fd, const void *buf, size_t n)
 {
@@ -331,6 +369,13 @@ write_all(int fd, const void *buf, size_t n)
 	return 0;
 }
 
+/**
+ * @brief Writev all.
+ * @param fd File descriptor to operate on.
+ * @param iov Parameter used by this function.
+ * @param iovcnt Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 static int
 writev_all(int fd, struct iovec *iov, int iovcnt)
 {
@@ -435,6 +480,10 @@ int http_response_send(http_request_t *req, http_response_t *resp)
 }
 
 /* Free response */
+/**
+ * @brief Http response free.
+ * @param resp Response object to emit or mutate.
+ */
 void
 http_response_free(http_response_t *resp)
 {
@@ -461,6 +510,12 @@ http_response_free(http_response_t *resp)
 }
 
 /* Get request header - writes into caller-supplied buffer, thread-safe */
+/**
+ * @brief Http request get header.
+ * @param req Request context for response generation.
+ * @param name Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 const char *
 http_request_get_header(http_request_t *req, const char *name)
 {
@@ -502,6 +557,11 @@ http_request_get_header(http_request_t *req, const char *name)
 }
 
 /* Get real client IP - writes into req->ip_scratch, thread-safe */
+/**
+ * @brief Http request get client ip.
+ * @param req Request context for response generation.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 const char *
 http_request_get_client_ip(http_request_t *req)
 {
@@ -534,6 +594,11 @@ http_request_get_client_ip(http_request_t *req)
 }
 
 /* Check if the request arrived over HTTPS (via reverse-proxy header) */
+/**
+ * @brief Http request is https.
+ * @param req Request context for response generation.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 int
 http_request_is_https(http_request_t *req)
 {
@@ -542,6 +607,13 @@ http_request_is_https(http_request_t *req)
 }
 
 /* Send error response */
+/**
+ * @brief Http send error.
+ * @param req Request context for response generation.
+ * @param status_code Parameter used by this function.
+ * @param message Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 int
 http_send_error(http_request_t *req, int status_code, const char *message)
 {
@@ -572,6 +644,12 @@ http_send_error(http_request_t *req, int status_code, const char *message)
 }
 
 /* Send JSON response */
+/**
+ * @brief Http send json.
+ * @param req Request context for response generation.
+ * @param json Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 int
 http_send_json(http_request_t *req, const char *json)
 {
@@ -588,6 +666,12 @@ http_send_json(http_request_t *req, const char *json)
 }
 
 /* Send HTML response */
+/**
+ * @brief Http send html.
+ * @param req Request context for response generation.
+ * @param html Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 int
 http_send_html(http_request_t *req, const char *html)
 {
@@ -603,6 +687,13 @@ http_send_html(http_request_t *req, const char *html)
 }
 
 /* Versione corretta di http_send_file */
+/**
+ * @brief Http send file.
+ * @param req Request context for response generation.
+ * @param path Request or filesystem path to evaluate.
+ * @param mime Parameter used by this function.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 int
 http_send_file(http_request_t *req, const char *path, const char *mime)
 {
