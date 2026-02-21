@@ -374,6 +374,7 @@ Use of
 .Dv EV_DISPATCH
 ensures one delivery per readiness event, preventing two workers from
 processing the same connection concurrently.
+Internal refactoring consolidates connection teardown through a single helper and centralises view-template response rendering through a shared HTTP helper, reducing duplicated handler logic.
 .Ss Key components
 .Bl -tag -width Ds
 .It Pa src/main.c
@@ -382,6 +383,14 @@ Single
 owned by the dispatcher thread, connection pool indexed by file
 descriptor, generation counters for stale descriptor detection, and
 periodic idle timeout sweeps.
+.It Pa src/urls.c
+Declarative routing tables for template-backed views and grouped API
+route registration helpers.
+.It Pa src/http_handler.c
+Thread-safe per-request scratch buffers for header extraction and
+effective client IP computation with precedence:
+X-Real-IP, then X-Forwarded-For (first value), then peer socket address;
+includes a shared template render/send helper used by view handlers.
 .It Pa src/metrics.c
 System metrics through native interfaces only:
 .Xr sysctl 2 ,
@@ -391,10 +400,6 @@ System metrics through native interfaces only:
 includes a retry loop around
 .Dv KERN_PROC_ALL
 snapshot sizing.
-.It Pa src/http_handler.c
-Thread-safe per-request scratch buffers for header extraction and
-effective client IP computation with precedence:
-X-Real-IP, then X-Forwarded-For (first value), then peer socket address.
 .It Pa src/template_engine.c
 Minimal
 .Cm {{TOKEN}}

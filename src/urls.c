@@ -23,6 +23,30 @@ static const struct view_route view_routes[] = {
 	 "packages_extra_head.html", "packages_extra_js.html"},
 };
 
+static void
+register_view_routes(void)
+{
+	for (size_t i = 0; i < sizeof(view_routes) / sizeof(view_routes[0]); i++) {
+		register_route(view_routes[i].method, view_routes[i].path,
+				       view_template_handler);
+	}
+}
+
+static void
+register_pkg_api_routes(void)
+{
+	static const char *const pkg_paths[] = {
+		"/api/packages/search",
+		"/api/packages/info",
+		"/api/packages/which",
+		"/api/packages/files",
+		"/api/packages/list",
+	};
+
+	for (size_t i = 0; i < sizeof(pkg_paths) / sizeof(pkg_paths[0]); i++)
+		register_route("GET", pkg_paths[i], pkg_api_handler);
+}
+
 void
 register_route(const char *method, const char *path, route_handler_t handler)
 {
@@ -49,19 +73,12 @@ find_view_route(const char *method, const char *path)
 void
 init_routes(void)
 {
-	for (size_t i = 0; i < sizeof(view_routes) / sizeof(view_routes[0]); i++) {
-		register_route(view_routes[i].method, view_routes[i].path,
-				       view_template_handler);
-	}
+	register_view_routes();
 
 	register_route("GET", "/favicon.ico", favicon_handler);
 	register_route("GET", "/api/metrics", metrics_handler);
 	register_route("GET", "/api/networking", networking_api_handler);
-	register_route("GET", "/api/packages/search", pkg_api_handler);
-	register_route("GET", "/api/packages/info", pkg_api_handler);
-	register_route("GET", "/api/packages/which", pkg_api_handler);
-	register_route("GET", "/api/packages/files", pkg_api_handler);
-	register_route("GET", "/api/packages/list", pkg_api_handler);
+	register_pkg_api_routes();
 }
 
 route_handler_t

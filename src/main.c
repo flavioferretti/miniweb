@@ -95,7 +95,6 @@ typedef struct {
 	int           count;
 	pthread_mutex_t lock;
 	pthread_cond_t  not_empty;
-	pthread_cond_t  not_full;
 } work_queue_t;
 
 static work_queue_t wq;
@@ -106,7 +105,6 @@ queue_init(work_queue_t *q)
 	memset(q, 0, sizeof(*q));
 	pthread_mutex_init(&q->lock, NULL);
 	pthread_cond_init(&q->not_empty, NULL);
-	pthread_cond_init(&q->not_full, NULL);
 }
 
 /* Enqueue from the main thread. Non-blocking: returns 0 on success, -1 if
@@ -496,24 +494,23 @@ static void
 sweep_idle_connections(void)
 {
 	time_t now = time(NULL);
+	int timed_out_fds[MAX_CONNECTIONS];
+	int timed_out_count = 0;
+
 	pthread_mutex_lock(&conn_mutex);
 	for (int i = 0; i < MAX_CONNECTIONS; i++) {
 		connection_t *c = connections[i];
-		if (c && (now - c->last_activity) > config.conn_timeout) {
-			close(c->fd);
-			int pool_idx = (int)(c - connection_pool);
-			if (pool_idx >= 0 && pool_idx < MAX_CONNECTIONS) {
-				memset(c, 0, sizeof(*c));
-				if (connection_free_top < MAX_CONNECTIONS)
-					connection_free_stack[connection_free_top++] = pool_idx;
-			}
-			connections[i] = NULL;
-			conn_gen[i]++;
-			if (active_connections > 0)
-				active_connections--;
+		if (c && (now - c->last_activity) > config.conn_timeout &&
+			timed_out_count < MAX_CONNECTIONS) {
+			timed_out_fds[timed_out_count++] = c->fd;
 		}
 	}
 	pthread_mutex_unlock(&conn_mutex);
+
+	for (int i = 0; i < timed_out_count; i++) {
+		close(timed_out_fds[i]);
+		free_connection(timed_out_fds[i]);
+	}
 }
 
 /* -- Signal handler --------------------------------------------------------- */
@@ -793,15 +790,12 @@ main(int argc, char *argv[])
 	for (int i = 0; i < config.threads; i++)
 		pthread_join(threads[i], NULL);
 
-	pthread_mutex_lock(&conn_mutex);
 	for (int i = 0; i < MAX_CONNECTIONS; i++) {
 		if (connections[i]) {
 			close(connections[i]->fd);
-			free(connections[i]);
-			connections[i] = NULL;
+			free_connection(connections[i]->fd);
 		}
 	}
-	pthread_mutex_unlock(&conn_mutex);
 
 	close(listen_fd);
 	close(kq_fd);
