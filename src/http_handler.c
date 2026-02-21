@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stddef.h>
 #include <string.h>
 #include <strings.h>
 #include <poll.h>
@@ -20,6 +21,20 @@
 #define WRITE_WAIT_MS 100
 #define FILE_CACHE_SLOTS 32
 #define FILE_CACHE_MAX_BYTES (256 * 1024)
+#define FILE_CACHE_INSERTS_PER_SEC 8
+#define FILE_CACHE_MAX_AGE_SEC 120
+
+typedef struct {
+	http_response_t items[256];
+	int free_stack[256];
+	int free_top;
+	pthread_mutex_t lock;
+	int initialized;
+} response_pool_t;
+
+static response_pool_t response_pool = {
+	.lock = PTHREAD_MUTEX_INITIALIZER,
+};
 
 static int
 wait_fd_writable(int fd)
@@ -49,8 +64,92 @@ typedef struct file_cache_entry {
 	time_t atime;
 } file_cache_entry_t;
 
+typedef struct file_cache_candidate {
+	char path[512];
+	unsigned int hits;
+	time_t atime;
+} file_cache_candidate_t;
+
 static file_cache_entry_t file_cache[FILE_CACHE_SLOTS];
+static file_cache_candidate_t file_cache_candidates[FILE_CACHE_SLOTS * 2];
 static pthread_mutex_t file_cache_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static int cache_insert_tokens = FILE_CACHE_INSERTS_PER_SEC;
+static time_t cache_insert_window = 0;
+
+static void
+response_pool_init_locked(void)
+{
+	if (response_pool.initialized)
+		return;
+
+	response_pool.free_top = 256;
+	for (int i = 0; i < 256; i++)
+		response_pool.free_stack[i] = 255 - i;
+	response_pool.initialized = 1;
+}
+
+static void
+file_cache_refill_budget_locked(time_t now)
+{
+	if (cache_insert_window == 0 || now != cache_insert_window) {
+		cache_insert_window = now;
+		cache_insert_tokens = FILE_CACHE_INSERTS_PER_SEC;
+	}
+}
+
+static void
+file_cache_evict_stale_locked(time_t now)
+{
+	for (int i = 0; i < FILE_CACHE_SLOTS; i++) {
+		if (file_cache[i].path[0] == '\0')
+			continue;
+		if ((now - file_cache[i].atime) > FILE_CACHE_MAX_AGE_SEC) {
+			free(file_cache[i].data);
+			memset(&file_cache[i], 0, sizeof(file_cache[i]));
+		}
+	}
+
+	for (int i = 0; i < FILE_CACHE_SLOTS * 2; i++) {
+		if (file_cache_candidates[i].path[0] == '\0')
+			continue;
+		if ((now - file_cache_candidates[i].atime) > FILE_CACHE_MAX_AGE_SEC)
+			memset(&file_cache_candidates[i], 0,
+			       sizeof(file_cache_candidates[i]));
+	}
+}
+
+static int
+file_cache_admit_locked(const char *path, time_t now)
+{
+	int slot = -1;
+	time_t oldest = 0;
+
+	for (int i = 0; i < FILE_CACHE_SLOTS * 2; i++) {
+		if (file_cache_candidates[i].path[0] == '\0') {
+			slot = i;
+			break;
+		}
+		if (strcmp(file_cache_candidates[i].path, path) == 0) {
+			file_cache_candidates[i].hits++;
+			file_cache_candidates[i].atime = now;
+			return file_cache_candidates[i].hits >= 2;
+		}
+		if (slot == -1 || file_cache_candidates[i].atime < oldest) {
+			oldest = file_cache_candidates[i].atime;
+			slot = i;
+		}
+	}
+
+	if (slot < 0)
+		return 0;
+
+	strlcpy(file_cache_candidates[slot].path, path,
+		sizeof(file_cache_candidates[slot].path));
+	file_cache_candidates[slot].hits = 1;
+	file_cache_candidates[slot].atime = now;
+	return 0;
+}
 
 static void
 file_cache_store(const char *path, const struct stat *st, const char *data,
@@ -60,6 +159,20 @@ file_cache_store(const char *path, const struct stat *st, const char *data,
 		return;
 
 	pthread_mutex_lock(&file_cache_lock);
+	time_t now = time(NULL);
+	file_cache_refill_budget_locked(now);
+	file_cache_evict_stale_locked(now);
+
+	if (cache_insert_tokens <= 0) {
+		pthread_mutex_unlock(&file_cache_lock);
+		return;
+	}
+
+	if (!file_cache_admit_locked(path, now)) {
+		pthread_mutex_unlock(&file_cache_lock);
+		return;
+	}
+
 	int slot = -1;
 	time_t oldest = 0;
 
@@ -75,6 +188,7 @@ file_cache_store(const char *path, const struct stat *st, const char *data,
 	}
 
 	if (slot >= 0) {
+		cache_insert_tokens--;
 		free(file_cache[slot].data);
 		file_cache[slot].data = malloc(len);
 		if (file_cache[slot].data) {
@@ -83,12 +197,9 @@ file_cache_store(const char *path, const struct stat *st, const char *data,
 				sizeof(file_cache[slot].path));
 			file_cache[slot].len = len;
 			file_cache[slot].mtime = st->st_mtime;
-			file_cache[slot].atime = time(NULL);
+			file_cache[slot].atime = now;
 		} else {
-			file_cache[slot].path[0] = '\0';
-			file_cache[slot].len = 0;
-			file_cache[slot].mtime = 0;
-			file_cache[slot].atime = 0;
+			memset(&file_cache[slot], 0, sizeof(file_cache[slot]));
 		}
 	}
 
@@ -106,6 +217,10 @@ file_cache_lookup(const char *path, const struct stat *st, char **out,
 		return 0;
 
 	pthread_mutex_lock(&file_cache_lock);
+	time_t now = time(NULL);
+	file_cache_refill_budget_locked(now);
+	file_cache_evict_stale_locked(now);
+
 	for (int i = 0; i < FILE_CACHE_SLOTS; i++) {
 		if (file_cache[i].path[0] == '\0')
 			continue;
@@ -115,7 +230,7 @@ file_cache_lookup(const char *path, const struct stat *st, char **out,
 			if (*out) {
 				memcpy(*out, file_cache[i].data, file_cache[i].len);
 				*out_len = file_cache[i].len;
-				file_cache[i].atime = time(NULL);
+				file_cache[i].atime = now;
 				found = 1;
 			}
 			break;
@@ -130,11 +245,22 @@ file_cache_lookup(const char *path, const struct stat *st, char **out,
 http_response_t *
 http_response_create(void)
 {
-	http_response_t *resp = calloc(1, sizeof(http_response_t));
-	if (resp) {
-		resp->status_code = 200;
-		resp->content_type = "text/html; charset=utf-8";
+	pthread_mutex_lock(&response_pool.lock);
+	response_pool_init_locked();
+
+	http_response_t *resp = NULL;
+	if (response_pool.free_top > 0) {
+		int idx = response_pool.free_stack[--response_pool.free_top];
+		resp = &response_pool.items[idx];
+		memset(resp, 0, sizeof(*resp));
 	}
+	pthread_mutex_unlock(&response_pool.lock);
+
+	if (!resp)
+		return NULL;
+
+	resp->status_code = 200;
+	resp->content_type = "text/html; charset=utf-8";
 	return resp;
 }
 
@@ -319,6 +445,16 @@ http_response_free(http_response_t *resp)
 	  * from fread). */
 	if (resp->free_body && resp->body) {
 		free(resp->body);
+	}
+
+	ptrdiff_t idx = resp - response_pool.items;
+	if (idx >= 0 && idx < 256) {
+		pthread_mutex_lock(&response_pool.lock);
+		memset(resp, 0, sizeof(*resp));
+		if (response_pool.free_top < 256)
+			response_pool.free_stack[response_pool.free_top++] = (int)idx;
+		pthread_mutex_unlock(&response_pool.lock);
+		return;
 	}
 
 	free(resp);

@@ -74,6 +74,18 @@ static connection_t  *connections[MAX_CONNECTIONS];
 static unsigned int   conn_gen[MAX_CONNECTIONS];
 static pthread_mutex_t conn_mutex = PTHREAD_MUTEX_INITIALIZER;
 static int            active_connections = 0;
+static connection_t   connection_pool[MAX_CONNECTIONS];
+static int            connection_free_stack[MAX_CONNECTIONS];
+static int            connection_free_top = 0;
+
+static void
+init_connection_pool(void)
+{
+	connection_free_top = MAX_CONNECTIONS;
+	for (int i = 0; i < MAX_CONNECTIONS; i++) {
+		connection_free_stack[i] = MAX_CONNECTIONS - 1 - i;
+	}
+}
 
 /* -- Work queue ------------------------------------------------------------- */
 typedef struct {
@@ -156,21 +168,24 @@ alloc_connection(int fd, struct sockaddr_in *addr)
 	if (active_connections >= config.max_conns ||
 		connections[fd] != NULL) {
 		pthread_mutex_unlock(&conn_mutex);
-	return NULL;
-		}
+		return NULL;
+	}
 
-		connection_t *conn = calloc(1, sizeof(connection_t));
-		if (!conn) {
-			pthread_mutex_unlock(&conn_mutex);
-			return NULL;
-		}
+	if (connection_free_top <= 0) {
+		pthread_mutex_unlock(&conn_mutex);
+		return NULL;
+	}
 
-		conn->fd      = fd;
-		conn->created = time(NULL);
-		conn->last_activity = conn->created;
-		conn->gen     = conn_gen[fd];
-		if (addr)
-			memcpy(&conn->addr, addr, sizeof(struct sockaddr_in));
+	int slot_idx = connection_free_stack[--connection_free_top];
+	connection_t *conn = &connection_pool[slot_idx];
+	memset(conn, 0, sizeof(*conn));
+
+	conn->fd      = fd;
+	conn->created = time(NULL);
+	conn->last_activity = conn->created;
+	conn->gen     = conn_gen[fd];
+	if (addr)
+		memcpy(&conn->addr, addr, sizeof(struct sockaddr_in));
 
 	connections[fd] = conn;
 	active_connections++;
@@ -187,7 +202,13 @@ free_connection(int fd)
 
 	pthread_mutex_lock(&conn_mutex);
 	if (connections[fd]) {
-		free(connections[fd]);
+		connection_t *conn = connections[fd];
+		int pool_idx = (int)(conn - connection_pool);
+		if (pool_idx >= 0 && pool_idx < MAX_CONNECTIONS) {
+			memset(conn, 0, sizeof(*conn));
+			if (connection_free_top < MAX_CONNECTIONS)
+				connection_free_stack[connection_free_top++] = pool_idx;
+		}
 		connections[fd] = NULL;
 		conn_gen[fd]++;
 		if (active_connections > 0)
@@ -480,7 +501,12 @@ sweep_idle_connections(void)
 		connection_t *c = connections[i];
 		if (c && (now - c->last_activity) > config.conn_timeout) {
 			close(c->fd);
-			free(c);
+			int pool_idx = (int)(c - connection_pool);
+			if (pool_idx >= 0 && pool_idx < MAX_CONNECTIONS) {
+				memset(c, 0, sizeof(*c));
+				if (connection_free_top < MAX_CONNECTIONS)
+					connection_free_stack[connection_free_top++] = pool_idx;
+			}
 			connections[i] = NULL;
 			conn_gen[i]++;
 			if (active_connections > 0)
@@ -673,6 +699,7 @@ main(int argc, char *argv[])
 
 	/* -- Work queue + worker threads -- */
 	queue_init(&wq);
+	init_connection_pool();
 
 	pthread_t threads[THREAD_POOL_SIZE];
 	for (int i = 0; i < config.threads; i++) {
