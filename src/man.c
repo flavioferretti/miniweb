@@ -337,6 +337,79 @@ mime_for_format(const char *format)
 	return "text/html; charset=utf-8";
 }
 
+static void
+add_content_disposition_for_format(http_response_t *resp,
+				   const char *format,
+				   const char *page)
+{
+	char content_disp[256];
+
+	if (strcmp(format, "pdf") == 0) {
+		snprintf(content_disp, sizeof(content_disp), "inline; filename=\"%s.pdf\"", page);
+		http_response_add_header(resp, "Content-Disposition", content_disp);
+	} else if (strcmp(format, "md") == 0) {
+		snprintf(content_disp, sizeof(content_disp), "inline; filename=\"%s.md\"", page);
+		http_response_add_header(resp, "Content-Disposition", content_disp);
+	} else if (strcmp(format, "txt") == 0) {
+		snprintf(content_disp, sizeof(content_disp), "inline; filename=\"%s.txt\"", page);
+		http_response_add_header(resp, "Content-Disposition", content_disp);
+	} else if (strcmp(format, "ps") == 0) {
+		snprintf(content_disp, sizeof(content_disp), "attachment; filename=\"%s.ps\"", page);
+		http_response_add_header(resp, "Content-Disposition", content_disp);
+	}
+}
+
+static int
+send_cached_man_response(http_request_t *req, const char *cache_abs,
+			 const char *format, const char *page)
+{
+	struct stat st;
+	if (stat(cache_abs, &st) != 0 || st.st_size < 0)
+		return -1;
+
+	size_t len = (size_t)st.st_size;
+	char *buf = NULL;
+	if (len > 0) {
+		buf = malloc(len);
+		if (!buf)
+			return -1;
+
+		int fd = open(cache_abs, O_RDONLY);
+		if (fd < 0) {
+			free(buf);
+			return -1;
+		}
+
+		size_t off = 0;
+		while (off < len) {
+			ssize_t n = read(fd, buf + off, len - off);
+			if (n <= 0) {
+				close(fd);
+				free(buf);
+				return -1;
+			}
+			off += (size_t)n;
+		}
+		close(fd);
+	}
+
+	http_response_t *resp = http_response_create();
+	resp->content_type = mime_for_format(format);
+
+	char clen[32];
+	snprintf(clen, sizeof(clen), "%zu", len);
+	http_response_add_header(resp, "Content-Length", clen);
+	http_response_add_header(resp, "Cache-Control", "no-cache, no-store, must-revalidate");
+	http_response_add_header(resp, "Pragma", "no-cache");
+	http_response_add_header(resp, "Expires", "0");
+	add_content_disposition_for_format(resp, format, page);
+
+	http_response_set_body(resp, buf, len, 1);
+	int ret = http_response_send(req, resp);
+	http_response_free(resp);
+	return ret;
+}
+
 static int
 build_cache_paths(const char *area, const char *section, const char *page,
 				  const char *format, char *rel, size_t rel_len,
@@ -737,14 +810,10 @@ man_render_handler(http_request_t *req)
 	char cache_rel[512];
 	char cache_abs[512];
 	if (build_cache_paths(area, section, page, format, cache_rel,
-					  sizeof(cache_rel), cache_abs,
-					  sizeof(cache_abs)) == 0 &&
+				  sizeof(cache_rel), cache_abs,
+				  sizeof(cache_abs)) == 0 &&
 		access(cache_abs, R_OK) == 0) {
-		const char *original_url = req->url;
-		req->url = cache_rel;
-		int cached = static_handler(req);
-		req->url = original_url;
-		if (cached == 0)
+		if (send_cached_man_response(req, cache_abs, format, page) == 0)
 			return 0;
 	}
 
