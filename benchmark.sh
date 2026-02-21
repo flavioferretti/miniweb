@@ -326,8 +326,12 @@ while [ "$i" -lt "$total_endpoints" ]; do
     graph_block=""
     if [ -f "$tput_svg" ] && [ -f "$lat_svg" ]; then
         graph_block="<div class=\"ep-graphs\">
-              <div class=\"graph\"><img src=\"/static/benchmark_assets/${safe_name}_throughput.svg\" alt=\"Throughput ${name}\"></div>
-              <div class=\"graph\"><img src=\"/static/benchmark_assets/${safe_name}_latency.svg\" alt=\"Latency ${name}\"></div>
+              <div class=\"graph\" data-src=\"/static/benchmark_assets/${safe_name}_throughput.svg\" data-title=\"${name} — Throughput\" title=\"Click to expand\">
+                <img src=\"/static/benchmark_assets/${safe_name}_throughput.svg\" alt=\"Throughput ${name}\">
+              </div>
+              <div class=\"graph\" data-src=\"/static/benchmark_assets/${safe_name}_latency.svg\" data-title=\"${name} — Latency\" title=\"Click to expand\">
+                <img src=\"/static/benchmark_assets/${safe_name}_latency.svg\" alt=\"Latency ${name}\">
+              </div>
             </div>"
     fi
 
@@ -423,6 +427,61 @@ cat <<HTMLHEAD
     .ep-nav-link:hover { background: var(--surface-3, #e2e8f0); }
     .ep-section   { margin-top: 1.5rem; scroll-margin-top: 4rem; }
     .overall-section { margin-top: .5rem; }
+    /* ---- Graph card click-to-expand ---- */
+    .graph        { cursor: pointer; position: relative; }
+    .graph::after {
+      content: '⤢';
+      position: absolute; top: .45rem; right: .55rem;
+      font-size: .8rem; opacity: .45;
+      pointer-events: none;
+    }
+    .graph:hover::after { opacity: .85; }
+    .graph:hover img { opacity: .92; }
+    /* ---- Fullscreen modal ---- */
+    #img-modal {
+      display: none;
+      position: fixed; inset: 0; z-index: 9999;
+      background: rgba(0,0,0,.78);
+      backdrop-filter: blur(4px);
+      align-items: center; justify-content: center;
+      padding: 1.5rem;
+    }
+    #img-modal.open { display: flex; }
+    #img-modal .modal-inner {
+      position: relative;
+      max-width: min(92vw, 1300px);
+      max-height: 90vh;
+      background: var(--surface, #fff);
+      border-radius: 1rem;
+      box-shadow: 0 24px 80px rgba(0,0,0,.45);
+      overflow: hidden;
+      display: flex; flex-direction: column;
+    }
+    #img-modal .modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: .7rem 1rem .55rem;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    #img-modal .modal-title {
+      font-size: .95rem; font-weight: 600;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    #img-modal .modal-close {
+      background: none; border: none; cursor: pointer;
+      font-size: 1.3rem; line-height: 1;
+      color: var(--text-muted); padding: .1rem .3rem;
+      border-radius: .35rem; flex-shrink: 0; margin-left: .75rem;
+    }
+    #img-modal .modal-close:hover { background: var(--surface-2); color: var(--text); }
+    #img-modal .modal-body {
+      overflow: auto; padding: 1rem;
+      display: flex; align-items: center; justify-content: center;
+    }
+    #img-modal .modal-body img {
+      max-width: 100%; max-height: calc(90vh - 60px);
+      border-radius: .5rem; display: block;
+    }
   </style>
 </head>
 <body>
@@ -450,13 +509,6 @@ cat <<HTMLHEAD
           <article class="panel stat-card"><h3>Grand avg latency</h3><p>${avg_lat:-0} ms</p></article>
         </div>
 
-        <div class="graphs">
-          <article class="graph"><h3>Throughput (all)</h3><img src="/static/benchmark_assets/throughput.svg" alt="Throughput"></article>
-          <article class="graph"><h3>Latency avg vs max (all)</h3><img src="/static/benchmark_assets/latency.svg" alt="Latency"></article>
-          <article class="graph"><h3>Latency std dev (all)</h3><img src="/static/benchmark_assets/latency_stdev.svg" alt="Latency stdev"></article>
-          <article class="graph"><h3>Transfer rate (all)</h3><img src="/static/benchmark_assets/transfer.svg" alt="Transfer"></article>
-          <article class="graph"><h3>Efficiency (all)</h3><img src="/static/benchmark_assets/efficiency.svg" alt="Efficiency"></article>
-        </div>
       </section>
 
       <!-- ===== ENDPOINT NAV ===== -->
@@ -480,6 +532,61 @@ cat <<HTMLFOOT
     </div>
   </main>
   <script src="/static/js/theme_toggler.js"></script>
+
+  <!-- ===== IMAGE MODAL ===== -->
+  <div id="img-modal" role="dialog" aria-modal="true" aria-label="Graph fullscreen view">
+    <div class="modal-inner" id="modal-inner">
+      <div class="modal-header">
+        <span class="modal-title" id="modal-title"></span>
+        <button class="modal-close" id="modal-close" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <img id="modal-img" src="" alt="" />
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var modal    = document.getElementById('img-modal');
+      var modalImg = document.getElementById('modal-img');
+      var modalTtl = document.getElementById('modal-title');
+
+      function openModal(src, title) {
+        modalImg.src = src;
+        modalImg.alt = title;
+        modalTtl.textContent = title;
+        modal.classList.add('open');
+        document.body.style.overflow = 'hidden';
+      }
+
+      function closeModal() {
+        modal.classList.remove('open');
+        document.body.style.overflow = '';
+        modalImg.src = '';
+      }
+
+      // Click on graph cards
+      document.querySelectorAll('.graph[data-src]').forEach(function (card) {
+        card.addEventListener('click', function () {
+          openModal(card.dataset.src, card.dataset.title || '');
+        });
+      });
+
+      // Close button
+      document.getElementById('modal-close').addEventListener('click', closeModal);
+
+      // Click outside modal inner
+      modal.addEventListener('click', function (e) {
+        if (e.target === modal) closeModal();
+      });
+
+      // Escape key
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && modal.classList.contains('open')) closeModal();
+      });
+    })();
+  </script>
 </body>
 </html>
 HTMLFOOT
