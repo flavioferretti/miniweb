@@ -160,6 +160,8 @@ To remove a page, remove the corresponding `view_routes[]` entry and rebuild.
 | `GET /man/{area}/{section}/{page}.pdf` | PDF |
 | `GET /man/{area}/{section}/{page}.ps` | PostScript |
 
+Rendered manual pages are cached for reuse under `static/man/{area}/{section}/{page}.{format}` (absolute path: `{static_dir}/man/{area}/{section}/{page}.{format}` where `static_dir` comes from config).
+
 ### Static Files
 
 | Endpoint | Description |
@@ -263,7 +265,7 @@ static/             r
 `pledge(2)` promises:
 
 ```text
-stdio rpath inet route proc exec vminfo ps getpw
+stdio rpath wpath cpath inet route proc exec vminfo ps getpw
 ```
 
 ### Additional mitigations
@@ -474,7 +476,7 @@ Built on OpenBSD interfaces and security model: `kqueue(2)`, `pledge(2)`, `unvei
 MiniWeb may emit the following diagnostics to stderr:
 
 - `bind: Address already in use` — another process is already listening on the selected port
-- `pledge: Operation not permitted` — a syscall fell outside the current promise set (`stdio rpath inet route proc exec vminfo ps getpw`)
+- `pledge: Operation not permitted` — a syscall fell outside the current promise set (`stdio rpath wpath cpath inet route proc exec vminfo ps getpw`)
 - `sysctl data query failed: Cannot allocate memory` — process table changed during snapshot sizing; MiniWeb retries automatically
 - `[write_all] Too many EAGAIN retries` — client remained back-pressured and connection was dropped
 - `Connection limit reached, rejected fd=n` — active connection count reached `-c` limit
