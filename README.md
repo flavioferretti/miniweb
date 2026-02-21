@@ -159,6 +159,7 @@ To remove a page, remove the corresponding `view_routes[]` entry and rebuild.
 | `GET /man/{area}/{section}/{page}.md` | Markdown |
 | `GET /man/{area}/{section}/{page}.pdf` | PDF |
 | `GET /man/{area}/{section}/{page}.ps` | PostScript |
+| `GET /man/{area}/{section}/{page}.txt` | ASCII text |
 
 Rendered manual pages are cached for reuse under `static/man/{area}/{section}/{page}.{format}` (absolute path: `{static_dir}/man/{area}/{section}/{page}.{format}` where `static_dir` comes from config).
 
