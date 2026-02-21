@@ -47,6 +47,61 @@
     .ep-nav-link:hover { background: var(--surface-3, #e2e8f0); }
     .ep-section   { margin-top: 1.5rem; scroll-margin-top: 4rem; }
     .overall-section { margin-top: .5rem; }
+    /* ---- Graph card click-to-expand ---- */
+    .graph        { cursor: pointer; position: relative; }
+    .graph::after {
+      content: '⤢';
+      position: absolute; top: .45rem; right: .55rem;
+      font-size: .8rem; opacity: .45;
+      pointer-events: none;
+    }
+    .graph:hover::after { opacity: .85; }
+    .graph:hover img { opacity: .92; }
+    /* ---- Fullscreen modal ---- */
+    #img-modal {
+      display: none;
+      position: fixed; inset: 0; z-index: 9999;
+      background: rgba(0,0,0,.78);
+      backdrop-filter: blur(4px);
+      align-items: center; justify-content: center;
+      padding: 1.5rem;
+    }
+    #img-modal.open { display: flex; }
+    #img-modal .modal-inner {
+      position: relative;
+      max-width: min(92vw, 1300px);
+      max-height: 90vh;
+      background: var(--surface, #fff);
+      border-radius: 1rem;
+      box-shadow: 0 24px 80px rgba(0,0,0,.45);
+      overflow: hidden;
+      display: flex; flex-direction: column;
+    }
+    #img-modal .modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: .7rem 1rem .55rem;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    #img-modal .modal-title {
+      font-size: .95rem; font-weight: 600;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    #img-modal .modal-close {
+      background: none; border: none; cursor: pointer;
+      font-size: 1.3rem; line-height: 1;
+      color: var(--text-muted); padding: .1rem .3rem;
+      border-radius: .35rem; flex-shrink: 0; margin-left: .75rem;
+    }
+    #img-modal .modal-close:hover { background: var(--surface-2); color: var(--text); }
+    #img-modal .modal-body {
+      overflow: auto; padding: 1rem;
+      display: flex; align-items: center; justify-content: center;
+    }
+    #img-modal .modal-body img {
+      max-width: 100%; max-height: calc(90vh - 60px);
+      border-radius: .5rem; display: block;
+    }
   </style>
 </head>
 <body>
@@ -64,23 +119,16 @@
       <!-- ===== SUMMARY ===== -->
       <section class="panel overall-section">
         <h1>Benchmark Report</h1>
-        <p class="meta">Generated: 2026-02-21 19:23:33 &nbsp;·&nbsp; Base URL: <code>http://localhost:3000</code> &nbsp;·&nbsp; Duration: 20s &nbsp;·&nbsp; Threads: 4</p>
+        <p class="meta">Generated: 2026-02-21 20:09:58 &nbsp;·&nbsp; Base URL: <code>http://localhost:3000</code> &nbsp;·&nbsp; Duration: 20s &nbsp;·&nbsp; Threads: 4</p>
 
         <div class="benchmark-grid">
-          <article class="panel stat-card"><h3>Peak throughput</h3><p>28539.13 req/s</p></article>
-          <article class="panel stat-card"><h3>Avg throughput</h3><p>7427.9 req/s</p></article>
-          <article class="panel stat-card"><h3>Best avg latency</h3><p>0.180 ms</p></article>
+          <article class="panel stat-card"><h3>Peak throughput</h3><p>27803.34 req/s</p></article>
+          <article class="panel stat-card"><h3>Avg throughput</h3><p>6680.5 req/s</p></article>
+          <article class="panel stat-card"><h3>Best avg latency</h3><p>0.205 ms</p></article>
           <article class="panel stat-card"><h3>Worst max latency</h3><p>2000.000 ms</p></article>
-          <article class="panel stat-card"><h3>Grand avg latency</h3><p>211.46 ms</p></article>
+          <article class="panel stat-card"><h3>Grand avg latency</h3><p>227.51 ms</p></article>
         </div>
 
-        <div class="graphs">
-          <article class="graph"><h3>Throughput (all)</h3><img src="/static/benchmark_assets/throughput.svg" alt="Throughput"></article>
-          <article class="graph"><h3>Latency avg vs max (all)</h3><img src="/static/benchmark_assets/latency.svg" alt="Latency"></article>
-          <article class="graph"><h3>Latency std dev (all)</h3><img src="/static/benchmark_assets/latency_stdev.svg" alt="Latency stdev"></article>
-          <article class="graph"><h3>Transfer rate (all)</h3><img src="/static/benchmark_assets/transfer.svg" alt="Transfer"></article>
-          <article class="graph"><h3>Efficiency (all)</h3><img src="/static/benchmark_assets/efficiency.svg" alt="Efficiency"></article>
-        </div>
       </section>
 
       <!-- ===== ENDPOINT NAV ===== -->
@@ -97,8 +145,12 @@
         <h2>Static HTML</h2>
         <p class="meta ep-url"><code>/static/test.html</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="/static/benchmark_assets/static_html_throughput.svg" alt="Throughput Static HTML"></div>
-              <div class="graph"><img src="/static/benchmark_assets/static_html_latency.svg" alt="Latency Static HTML"></div>
+              <div class="graph" data-src="/static/benchmark_assets/static_html_throughput.svg" data-title="Static HTML — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/static_html_throughput.svg" alt="Throughput Static HTML">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/static_html_latency.svg" data-title="Static HTML — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/static_html_latency.svg" alt="Latency Static HTML">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -110,12 +162,12 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>22189.6</td><td>0.18</td><td>12.31</td><td>219.260</td><td>446002</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>11248.6</td><td>0.74</td><td>46.08</td><td>111.150</td><td>225229</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>14673.4</td><td>0.98</td><td>29.12</td><td>144.990</td><td>294106</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>11496.6</td><td>2.34</td><td>36.54</td><td>113.600</td><td>230723</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>64</td><td>16297.1</td><td>3.21</td><td>41.68</td><td>161.040</td><td>327533</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>128</td><td>18016.0</td><td>7.45</td><td>340.87</td><td>92.800</td><td>361495</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>4</td><td>21107.8</td><td>0.20</td><td>19.30</td><td>208.570</td><td>424278</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>8</td><td>10888.8</td><td>0.74</td><td>37.50</td><td>107.590</td><td>218061</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>20146.8</td><td>1.17</td><td>100.82</td><td>199.070</td><td>404315</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>8775.9</td><td>3.62</td><td>113.85</td><td>86.710</td><td>176294</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>64</td><td>10880.4</td><td>5.04</td><td>81.62</td><td>107.510</td><td>218743</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>128</td><td>16423.3</td><td>7.84</td><td>227.03</td><td>86.490</td><td>329618</td><td class="http-ok">200</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
@@ -124,8 +176,12 @@
         <h2>Static CSS</h2>
         <p class="meta ep-url"><code>/static/css/custom.css</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="/static/benchmark_assets/static_css_throughput.svg" alt="Throughput Static CSS"></div>
-              <div class="graph"><img src="/static/benchmark_assets/static_css_latency.svg" alt="Latency Static CSS"></div>
+              <div class="graph" data-src="/static/benchmark_assets/static_css_throughput.svg" data-title="Static CSS — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/static_css_throughput.svg" alt="Throughput Static CSS">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/static_css_latency.svg" data-title="Static CSS — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/static_css_latency.svg" alt="Latency Static CSS">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -137,12 +193,12 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>11661.5</td><td>0.34</td><td>12.67</td><td>65.220</td><td>234395</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>25403.3</td><td>0.30</td><td>16.67</td><td>142.080</td><td>510612</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>12114.3</td><td>1.25</td><td>29.98</td><td>67.750</td><td>243521</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>15316.1</td><td>1.94</td><td>42.01</td><td>85.660</td><td>307057</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>64</td><td>16151.1</td><td>3.92</td><td>135.99</td><td>90.330</td><td>324705</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>128</td><td>20173.0</td><td>6.06</td><td>349.84</td><td>64.020</td><td>405561</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>4</td><td>9297.9</td><td>0.53</td><td>62.48</td><td>52.000</td><td>186558</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>8</td><td>11595.8</td><td>3.44</td><td>317.03</td><td>64.850</td><td>233144</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>13777.7</td><td>1.14</td><td>39.96</td><td>77.050</td><td>275857</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>14733.7</td><td>2.77</td><td>169.59</td><td>82.400</td><td>296097</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>64</td><td>11789.5</td><td>5.08</td><td>60.27</td><td>65.940</td><td>237024</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>128</td><td>16871.0</td><td>7.82</td><td>192.00</td><td>52.800</td><td>339116</td><td class="http-ok">200</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
@@ -151,8 +207,12 @@
         <h2>Static JS</h2>
         <p class="meta ep-url"><code>/static/js/theme_toggler.js</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="/static/benchmark_assets/static_js_throughput.svg" alt="Throughput Static JS"></div>
-              <div class="graph"><img src="/static/benchmark_assets/static_js_latency.svg" alt="Latency Static JS"></div>
+              <div class="graph" data-src="/static/benchmark_assets/static_js_throughput.svg" data-title="Static JS — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/static_js_throughput.svg" alt="Throughput Static JS">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/static_js_latency.svg" data-title="Static JS — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/static_js_latency.svg" alt="Latency Static JS">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -164,12 +224,12 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>22716.5</td><td>0.18</td><td>16.49</td><td>32.450</td><td>454582</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>10844.9</td><td>0.71</td><td>30.38</td><td>15.490</td><td>217995</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>14057.6</td><td>1.09</td><td>36.67</td><td>20.080</td><td>281778</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>15339.3</td><td>1.93</td><td>31.35</td><td>21.910</td><td>307650</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>64</td><td>12293.9</td><td>4.83</td><td>53.69</td><td>17.560</td><td>246872</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>128</td><td>19413.2</td><td>6.48</td><td>169.77</td><td>18.310</td><td>389912</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>4</td><td>21271.4</td><td>0.46</td><td>94.81</td><td>30.390</td><td>426500</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>8</td><td>9627.9</td><td>0.87</td><td>30.11</td><td>13.750</td><td>192687</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>8128.8</td><td>2.11</td><td>54.14</td><td>11.610</td><td>163430</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>8511.0</td><td>3.75</td><td>109.00</td><td>12.160</td><td>171116</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>64</td><td>9503.2</td><td>7.15</td><td>351.72</td><td>13.570</td><td>191045</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>128</td><td>12360.6</td><td>11.57</td><td>393.96</td><td>12.010</td><td>248413</td><td class="http-ok">200</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
@@ -178,8 +238,12 @@
         <h2>Static Image</h2>
         <p class="meta ep-url"><code>/static/assets/favicon.svg</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="/static/benchmark_assets/static_img_throughput.svg" alt="Throughput Static Image"></div>
-              <div class="graph"><img src="/static/benchmark_assets/static_img_latency.svg" alt="Latency Static Image"></div>
+              <div class="graph" data-src="/static/benchmark_assets/static_img_throughput.svg" data-title="Static Image — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/static_img_throughput.svg" alt="Throughput Static Image">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/static_img_latency.svg" data-title="Static Image — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/static_img_latency.svg" alt="Latency Static Image">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -191,12 +255,12 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>12892.5</td><td>0.30</td><td>14.57</td><td>5.430</td><td>257951</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>15217.5</td><td>0.49</td><td>17.26</td><td>6.410</td><td>305913</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>27924.7</td><td>0.54</td><td>17.07</td><td>11.770</td><td>561389</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>12984.5</td><td>2.24</td><td>34.84</td><td>5.470</td><td>260218</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>64</td><td>28539.1</td><td>2.06</td><td>33.71</td><td>12.030</td><td>572201</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>128</td><td>14703.3</td><td>8.51</td><td>349.78</td><td>5.920</td><td>295262</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>4</td><td>11962.4</td><td>0.55</td><td>82.82</td><td>5.040</td><td>240155</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>8</td><td>12189.4</td><td>0.92</td><td>89.13</td><td>5.140</td><td>244552</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>27803.3</td><td>0.53</td><td>16.85</td><td>11.720</td><td>558985</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>11318.1</td><td>2.83</td><td>151.77</td><td>4.770</td><td>227179</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>64</td><td>12401.4</td><td>4.81</td><td>46.26</td><td>5.230</td><td>249126</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>128</td><td>16879.4</td><td>7.74</td><td>292.48</td><td>6.800</td><td>339267</td><td class="http-ok">200</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
@@ -205,8 +269,12 @@
         <h2>Home Dashboard</h2>
         <p class="meta ep-url"><code>/</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="/static/benchmark_assets/page_home_throughput.svg" alt="Throughput Home Dashboard"></div>
-              <div class="graph"><img src="/static/benchmark_assets/page_home_latency.svg" alt="Latency Home Dashboard"></div>
+              <div class="graph" data-src="/static/benchmark_assets/page_home_throughput.svg" data-title="Home Dashboard — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/page_home_throughput.svg" alt="Throughput Home Dashboard">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/page_home_latency.svg" data-title="Home Dashboard — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/page_home_latency.svg" alt="Latency Home Dashboard">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -218,12 +286,12 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>4227.4</td><td>0.96</td><td>26.26</td><td>72.890</td><td>84979</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>5621.7</td><td>1.47</td><td>75.00</td><td>96.930</td><td>112577</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>9012.8</td><td>1.77</td><td>27.45</td><td>155.400</td><td>180434</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>4068.0</td><td>7.71</td><td>37.65</td><td>70.150</td><td>81645</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>64</td><td>4870.5</td><td>12.92</td><td>42.32</td><td>83.980</td><td>97856</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>128</td><td>7199.3</td><td>26.00</td><td>856.62</td><td>38.370</td><td>144306</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>4</td><td>5356.3</td><td>0.74</td><td>17.21</td><td>92.360</td><td>107682</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>8</td><td>8885.4</td><td>1.68</td><td>209.57</td><td>153.140</td><td>178578</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>3878.9</td><td>5.30</td><td>414.76</td><td>66.800</td><td>77940</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>9069.3</td><td>3.46</td><td>28.73</td><td>156.370</td><td>181887</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>64</td><td>3902.2</td><td>15.90</td><td>51.52</td><td>67.290</td><td>78423</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>128</td><td>19625.5</td><td>6.98</td><td>256.93</td><td>97.920</td><td>393867</td><td class="http-ok">200</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
@@ -232,8 +300,12 @@
         <h2>Documentation</h2>
         <p class="meta ep-url"><code>/docs</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="/static/benchmark_assets/page_docs_throughput.svg" alt="Throughput Documentation"></div>
-              <div class="graph"><img src="/static/benchmark_assets/page_docs_latency.svg" alt="Latency Documentation"></div>
+              <div class="graph" data-src="/static/benchmark_assets/page_docs_throughput.svg" data-title="Documentation — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/page_docs_throughput.svg" alt="Throughput Documentation">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/page_docs_latency.svg" data-title="Documentation — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/page_docs_latency.svg" alt="Latency Documentation">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -245,12 +317,12 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>3284.0</td><td>3.48</td><td>350.06</td><td>48.170</td><td>65978</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>3739.4</td><td>2.67</td><td>161.37</td><td>54.880</td><td>75018</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>4609.4</td><td>3.52</td><td>41.24</td><td>67.660</td><td>92350</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>9733.6</td><td>3.73</td><td>147.50</td><td>142.880</td><td>195338</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>64</td><td>4400.6</td><td>14.43</td><td>49.48</td><td>64.590</td><td>88458</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>128</td><td>9849.5</td><td>16.43</td><td>486.47</td><td>42.250</td><td>197950</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>4</td><td>3840.8</td><td>1.92</td><td>210.58</td><td>56.380</td><td>77041</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>8</td><td>4464.9</td><td>3.62</td><td>416.01</td><td>65.300</td><td>89717</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>9842.6</td><td>1.64</td><td>34.50</td><td>144.480</td><td>197842</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>3860.1</td><td>9.84</td><td>386.29</td><td>56.660</td><td>77516</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>64</td><td>4516.4</td><td>14.07</td><td>64.24</td><td>66.290</td><td>90728</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>128</td><td>11061.2</td><td>12.83</td><td>364.14</td><td>44.690</td><td>222355</td><td class="http-ok">200</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
@@ -259,8 +331,12 @@
         <h2>Networking</h2>
         <p class="meta ep-url"><code>/networking</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="/static/benchmark_assets/page_networking_throughput.svg" alt="Throughput Networking"></div>
-              <div class="graph"><img src="/static/benchmark_assets/page_networking_latency.svg" alt="Latency Networking"></div>
+              <div class="graph" data-src="/static/benchmark_assets/page_networking_throughput.svg" data-title="Networking — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/page_networking_throughput.svg" alt="Throughput Networking">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/page_networking_latency.svg" data-title="Networking — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/page_networking_latency.svg" alt="Latency Networking">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -272,12 +348,12 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>4869.7</td><td>0.83</td><td>17.18</td><td>62.320</td><td>97508</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>9926.1</td><td>0.81</td><td>17.36</td><td>127.010</td><td>199521</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>4212.9</td><td>3.84</td><td>87.90</td><td>53.900</td><td>84561</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>5232.6</td><td>6.09</td><td>32.82</td><td>66.960</td><td>105089</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>64</td><td>5081.8</td><td>12.55</td><td>46.29</td><td>65.020</td><td>101896</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>128</td><td>9646.6</td><td>15.62</td><td>509.30</td><td>37.530</td><td>193402</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>4</td><td>9437.2</td><td>0.83</td><td>138.34</td><td>120.710</td><td>189095</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>8</td><td>4352.0</td><td>1.84</td><td>19.17</td><td>55.690</td><td>87211</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>5207.9</td><td>3.07</td><td>20.35</td><td>66.640</td><td>104446</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>4672.5</td><td>6.81</td><td>47.31</td><td>59.790</td><td>93917</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>64</td><td>10103.3</td><td>6.32</td><td>39.53</td><td>129.280</td><td>202482</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>128</td><td>9231.4</td><td>15.51</td><td>426.65</td><td>33.990</td><td>185489</td><td class="http-ok">200</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
@@ -286,8 +362,12 @@
         <h2>Packages UI</h2>
         <p class="meta ep-url"><code>/packages</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="/static/benchmark_assets/packages_ui_throughput.svg" alt="Throughput Packages UI"></div>
-              <div class="graph"><img src="/static/benchmark_assets/packages_ui_latency.svg" alt="Latency Packages UI"></div>
+              <div class="graph" data-src="/static/benchmark_assets/packages_ui_throughput.svg" data-title="Packages UI — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/packages_ui_throughput.svg" alt="Throughput Packages UI">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/packages_ui_latency.svg" data-title="Packages UI — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/packages_ui_latency.svg" alt="Latency Packages UI">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -299,12 +379,12 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>8949.3</td><td>0.50</td><td>30.47</td><td>123.270</td><td>179931</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>3940.0</td><td>2.10</td><td>36.45</td><td>54.260</td><td>79013</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>4350.4</td><td>3.89</td><td>98.76</td><td>59.920</td><td>87442</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>4952.4</td><td>6.46</td><td>52.65</td><td>68.210</td><td>99459</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>64</td><td>8976.2</td><td>7.64</td><td>149.43</td><td>123.630</td><td>180018</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>128</td><td>8285.3</td><td>18.20</td><td>992.34</td><td>32.260</td><td>166006</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>4</td><td>9522.9</td><td>0.43</td><td>35.93</td><td>131.170</td><td>191445</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>8</td><td>3324.2</td><td>11.34</td><td>494.21</td><td>45.450</td><td>66803</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>3861.3</td><td>4.42</td><td>118.28</td><td>53.170</td><td>77617</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>9457.0</td><td>3.38</td><td>33.15</td><td>130.260</td><td>189566</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>64</td><td>4020.6</td><td>16.02</td><td>92.04</td><td>55.370</td><td>80566</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>128</td><td>9329.2</td><td>16.38</td><td>450.05</td><td>38.670</td><td>187836</td><td class="http-ok">200</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
@@ -313,8 +393,12 @@
         <h2>API Index</h2>
         <p class="meta ep-url"><code>/apiroot</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="/static/benchmark_assets/api_root_throughput.svg" alt="Throughput API Index"></div>
-              <div class="graph"><img src="/static/benchmark_assets/api_root_latency.svg" alt="Latency API Index"></div>
+              <div class="graph" data-src="/static/benchmark_assets/api_root_throughput.svg" data-title="API Index — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/api_root_throughput.svg" alt="Throughput API Index">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/api_root_latency.svg" data-title="API Index — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/api_root_latency.svg" alt="Latency API Index">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -326,12 +410,12 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>9800.5</td><td>0.41</td><td>12.64</td><td>75.330</td><td>196988</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>4498.9</td><td>1.77</td><td>32.31</td><td>34.570</td><td>90165</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>4510.7</td><td>3.52</td><td>24.45</td><td>34.670</td><td>90486</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>5996.9</td><td>5.33</td><td>39.21</td><td>46.090</td><td>120215</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>64</td><td>5749.6</td><td>11.10</td><td>43.26</td><td>44.180</td><td>115387</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>128</td><td>10607.7</td><td>14.15</td><td>482.26</td><td>32.120</td><td>213081</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>4</td><td>4597.9</td><td>2.09</td><td>250.30</td><td>35.340</td><td>92113</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>8</td><td>6461.3</td><td>1.23</td><td>17.82</td><td>49.660</td><td>129320</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>10351.8</td><td>1.56</td><td>42.44</td><td>79.560</td><td>207207</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>3615.1</td><td>11.54</td><td>463.16</td><td>27.780</td><td>72582</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>64</td><td>3827.1</td><td>17.17</td><td>153.14</td><td>29.410</td><td>76800</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>128</td><td>8585.7</td><td>26.03</td><td>1060.00</td><td>26.860</td><td>172238</td><td class="http-ok">200</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
@@ -340,8 +424,12 @@
         <h2>System Metrics API</h2>
         <p class="meta ep-url"><code>/api/metrics</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="/static/benchmark_assets/api_metrics_throughput.svg" alt="Throughput System Metrics API"></div>
-              <div class="graph"><img src="/static/benchmark_assets/api_metrics_latency.svg" alt="Latency System Metrics API"></div>
+              <div class="graph" data-src="/static/benchmark_assets/api_metrics_throughput.svg" data-title="System Metrics API — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/api_metrics_throughput.svg" alt="Throughput System Metrics API">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/api_metrics_latency.svg" data-title="System Metrics API — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/api_metrics_latency.svg" alt="Latency System Metrics API">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -353,12 +441,12 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>92.7</td><td>48.25</td><td>440.48</td><td>0.342</td><td>1863</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>93.0</td><td>85.81</td><td>196.95</td><td>0.343</td><td>1865</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>90.3</td><td>175.97</td><td>303.41</td><td>0.333</td><td>1810</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>105.9</td><td>299.26</td><td>556.53</td><td>0.390</td><td>2123</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>64</td><td>90.7</td><td>691.26</td><td>835.99</td><td>0.334</td><td>1823</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>128</td><td>440.4</td><td>375.21</td><td>1510.00</td><td>1.610</td><td>8849</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>4</td><td>97.6</td><td>45.16</td><td>458.06</td><td>0.361</td><td>1963</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>8</td><td>92.1</td><td>86.64</td><td>199.64</td><td>0.340</td><td>1850</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>103.3</td><td>154.39</td><td>435.51</td><td>0.382</td><td>2072</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>94.8</td><td>333.88</td><td>486.28</td><td>0.350</td><td>1904</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>64</td><td>95.6</td><td>656.36</td><td>821.93</td><td>0.353</td><td>1919</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>128</td><td>460.9</td><td>402.28</td><td>1550.00</td><td>1.690</td><td>9263</td><td class="http-ok">200</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
@@ -367,8 +455,12 @@
         <h2>Network Info API</h2>
         <p class="meta ep-url"><code>/api/networking</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="/static/benchmark_assets/api_networking_throughput.svg" alt="Throughput Network Info API"></div>
-              <div class="graph"><img src="/static/benchmark_assets/api_networking_latency.svg" alt="Latency Network Info API"></div>
+              <div class="graph" data-src="/static/benchmark_assets/api_networking_throughput.svg" data-title="Network Info API — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/api_networking_throughput.svg" alt="Throughput Network Info API">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/api_networking_latency.svg" data-title="Network Info API — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/api_networking_latency.svg" alt="Latency Network Info API">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -380,12 +472,12 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>2835.8</td><td>1.44</td><td>39.61</td><td>11.600</td><td>56908</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>1336.1</td><td>5.99</td><td>27.27</td><td>5.440</td><td>26834</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>2799.4</td><td>5.71</td><td>26.19</td><td>11.400</td><td>56063</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>1224.2</td><td>26.06</td><td>54.96</td><td>5.010</td><td>24586</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>64</td><td>1619.4</td><td>39.38</td><td>72.68</td><td>6.600</td><td>32525</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>128</td><td>2871.6</td><td>42.67</td><td>91.10</td><td>11.570</td><td>57649</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>4</td><td>1282.7</td><td>3.11</td><td>19.65</td><td>5.240</td><td>25789</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>8</td><td>2547.7</td><td>3.61</td><td>128.70</td><td>10.420</td><td>51134</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>1122.3</td><td>16.93</td><td>359.50</td><td>4.570</td><td>22543</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>2619.4</td><td>12.55</td><td>162.67</td><td>10.670</td><td>52641</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>64</td><td>1091.9</td><td>58.43</td><td>118.89</td><td>4.460</td><td>21895</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>128</td><td>2726.6</td><td>45.01</td><td>83.55</td><td>11.020</td><td>54664</td><td class="http-ok">200</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
@@ -394,8 +486,12 @@
         <h2>Package Search</h2>
         <p class="meta ep-url"><code>/api/packages/search?q=curl</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="/static/benchmark_assets/api_pkg_search_throughput.svg" alt="Throughput Package Search"></div>
-              <div class="graph"><img src="/static/benchmark_assets/api_pkg_search_latency.svg" alt="Latency Package Search"></div>
+              <div class="graph" data-src="/static/benchmark_assets/api_pkg_search_throughput.svg" data-title="Package Search — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/api_pkg_search_throughput.svg" alt="Throughput Package Search">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/api_pkg_search_latency.svg" data-title="Package Search — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/api_pkg_search_latency.svg" alt="Latency Package Search">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -407,12 +503,12 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>11.1</td><td>356.28</td><td>404.88</td><td>0.006</td><td>222</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>5.5</td><td>1410.00</td><td>1600.00</td><td>0.003</td><td>110</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>6.1</td><td>1300.00</td><td>1980.00</td><td>0.003</td><td>122</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>10.9</td><td>1190.00</td><td>1910.00</td><td>0.006</td><td>220</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>64</td><td>5.4</td><td>1200.00</td><td>1590.00</td><td>0.003</td><td>108</td><td class="http-ok">000000</td><td>OK</td></tr>
-<tr><td>128</td><td>3.8</td><td>0.00</td><td>0.00</td><td>0.002</td><td>76</td><td class="http-ok">000000</td><td>OK</td></tr>
+<tr><td>4</td><td>4.9</td><td>807.62</td><td>963.25</td><td>0.003</td><td>98</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>8</td><td>5.1</td><td>1440.00</td><td>1800.00</td><td>0.003</td><td>103</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>10.4</td><td>1470.00</td><td>1650.00</td><td>0.006</td><td>210</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>4.1</td><td>1160.00</td><td>1220.00</td><td>0.002</td><td>82</td><td class="http-ok">000000</td><td>OK</td></tr>
+<tr><td>64</td><td>4.3</td><td>1440.00</td><td>1840.00</td><td>0.002</td><td>86</td><td class="http-ok">000000</td><td>OK</td></tr>
+<tr><td>128</td><td>3.6</td><td>0.00</td><td>0.00</td><td>0.002</td><td>72</td><td class="http-ok">000000</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
@@ -421,8 +517,12 @@
         <h2>Package Info</h2>
         <p class="meta ep-url"><code>/api/packages/info?name=curl</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="/static/benchmark_assets/api_pkg_info_throughput.svg" alt="Throughput Package Info"></div>
-              <div class="graph"><img src="/static/benchmark_assets/api_pkg_info_latency.svg" alt="Latency Package Info"></div>
+              <div class="graph" data-src="/static/benchmark_assets/api_pkg_info_throughput.svg" data-title="Package Info — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/api_pkg_info_throughput.svg" alt="Throughput Package Info">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/api_pkg_info_latency.svg" data-title="Package Info — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/api_pkg_info_latency.svg" alt="Latency Package Info">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -434,12 +534,12 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>12.5</td><td>315.89</td><td>591.49</td><td>0.014</td><td>252</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>14.0</td><td>561.36</td><td>663.37</td><td>0.015</td><td>281</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>24.9</td><td>630.52</td><td>672.48</td><td>0.028</td><td>500</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>11.1</td><td>1140.00</td><td>1900.00</td><td>0.012</td><td>224</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>64</td><td>11.8</td><td>1100.00</td><td>1820.00</td><td>0.013</td><td>236</td><td class="http-ok">000000</td><td>OK</td></tr>
-<tr><td>128</td><td>813.2</td><td>183.38</td><td>2000.00</td><td>0.123</td><td>16346</td><td class="http-ok">000000</td><td>OK</td></tr>
+<tr><td>4</td><td>9.7</td><td>404.69</td><td>858.92</td><td>0.011</td><td>196</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>8</td><td>6.9</td><td>1120.00</td><td>1560.00</td><td>0.008</td><td>139</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>7.9</td><td>1140.00</td><td>1990.00</td><td>0.009</td><td>159</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>19.5</td><td>1550.00</td><td>2000.00</td><td>0.022</td><td>391</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>64</td><td>6.9</td><td>1020.00</td><td>1660.00</td><td>0.008</td><td>138</td><td class="http-ok">000000</td><td>OK</td></tr>
+<tr><td>128</td><td>6.0</td><td>0.00</td><td>0.00</td><td>0.007</td><td>121</td><td class="http-ok">000000</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
@@ -448,8 +548,12 @@
         <h2>Package Files</h2>
         <p class="meta ep-url"><code>/api/packages/files?name=curl</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="/static/benchmark_assets/api_pkg_files_throughput.svg" alt="Throughput Package Files"></div>
-              <div class="graph"><img src="/static/benchmark_assets/api_pkg_files_latency.svg" alt="Latency Package Files"></div>
+              <div class="graph" data-src="/static/benchmark_assets/api_pkg_files_throughput.svg" data-title="Package Files — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/api_pkg_files_throughput.svg" alt="Throughput Package Files">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/api_pkg_files_latency.svg" data-title="Package Files — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/api_pkg_files_latency.svg" alt="Latency Package Files">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -461,12 +565,12 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>6.6</td><td>595.97</td><td>1080.00</td><td>0.153</td><td>132</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>7.7</td><td>1010.00</td><td>1620.00</td><td>0.180</td><td>155</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>15.6</td><td>994.64</td><td>1430.00</td><td>0.365</td><td>314</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>6.6</td><td>1190.00</td><td>1810.00</td><td>0.156</td><td>133</td><td class="http-ok">000000</td><td>OK</td></tr>
-<tr><td>64</td><td>7.4</td><td>1160.00</td><td>1740.00</td><td>0.172</td><td>148</td><td class="http-ok">000000</td><td>OK</td></tr>
-<tr><td>128</td><td>7.4</td><td>1980.00</td><td>1980.00</td><td>0.173</td><td>149</td><td class="http-ok">000000</td><td>OK</td></tr>
+<tr><td>4</td><td>5.0</td><td>781.25</td><td>1730.00</td><td>0.117</td><td>101</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>8</td><td>5.7</td><td>1360.00</td><td>1990.00</td><td>0.133</td><td>114</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>15.8</td><td>987.91</td><td>1370.00</td><td>0.368</td><td>316</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>7.3</td><td>1170.00</td><td>1780.00</td><td>0.170</td><td>146</td><td class="http-ok">000000</td><td>OK</td></tr>
+<tr><td>64</td><td>7.4</td><td>1160.00</td><td>1710.00</td><td>0.172</td><td>148</td><td class="http-ok">000000</td><td>OK</td></tr>
+<tr><td>128</td><td>6.2</td><td>0.00</td><td>0.00</td><td>0.144</td><td>124</td><td class="http-ok">000000</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
@@ -475,8 +579,12 @@
         <h2>Man Search</h2>
         <p class="meta ep-url"><code>/api/man/search?q=pledge</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="/static/benchmark_assets/man_search_throughput.svg" alt="Throughput Man Search"></div>
-              <div class="graph"><img src="/static/benchmark_assets/man_search_latency.svg" alt="Latency Man Search"></div>
+              <div class="graph" data-src="/static/benchmark_assets/man_search_throughput.svg" data-title="Man Search — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/man_search_throughput.svg" alt="Throughput Man Search">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/man_search_latency.svg" data-title="Man Search — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/man_search_latency.svg" alt="Latency Man Search">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -488,12 +596,12 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>21.8</td><td>183.02</td><td>382.18</td><td>0.005</td><td>438</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>21.9</td><td>361.86</td><td>453.37</td><td>0.005</td><td>440</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>25.6</td><td>613.53</td><td>1220.00</td><td>0.006</td><td>514</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>14.3</td><td>1700.00</td><td>2000.00</td><td>0.003</td><td>287</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>64</td><td>16.9</td><td>1150.00</td><td>1980.00</td><td>0.004</td><td>339</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>128</td><td>459.4</td><td>161.68</td><td>2000.00</td><td>0.072</td><td>9227</td><td class="http-ok">000000</td><td>OK</td></tr>
+<tr><td>4</td><td>20.3</td><td>195.89</td><td>317.17</td><td>0.005</td><td>409</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>8</td><td>43.3</td><td>183.73</td><td>261.00</td><td>0.011</td><td>869</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>19.4</td><td>806.91</td><td>913.25</td><td>0.005</td><td>390</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>18.8</td><td>1570.00</td><td>1880.00</td><td>0.005</td><td>378</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>64</td><td>15.6</td><td>815.40</td><td>1820.00</td><td>0.004</td><td>314</td><td class="http-ok">000000</td><td>OK</td></tr>
+<tr><td>128</td><td>19.7</td><td>1080.00</td><td>1970.00</td><td>0.005</td><td>395</td><td class="http-ok">000000</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
@@ -502,8 +610,12 @@
         <h2>Man Page (HTML)</h2>
         <p class="meta ep-url"><code>/man/1/1/ls</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="/static/benchmark_assets/man_html_throughput.svg" alt="Throughput Man Page (HTML)"></div>
-              <div class="graph"><img src="/static/benchmark_assets/man_html_latency.svg" alt="Latency Man Page (HTML)"></div>
+              <div class="graph" data-src="/static/benchmark_assets/man_html_throughput.svg" data-title="Man Page (HTML) — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/man_html_throughput.svg" alt="Throughput Man Page (HTML)">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/man_html_latency.svg" data-title="Man Page (HTML) — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/man_html_latency.svg" alt="Latency Man Page (HTML)">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -515,12 +627,12 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>7703.5</td><td>1.39</td><td>33.66</td><td>160.910</td><td>154746</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>15805.8</td><td>1.03</td><td>173.72</td><td>332.380</td><td>317073</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>7083.0</td><td>2.49</td><td>80.87</td><td>148.350</td><td>142034</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>8384.5</td><td>3.89</td><td>104.14</td><td>175.330</td><td>168376</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>64</td><td>7990.8</td><td>7.17</td><td>92.21</td><td>166.260</td><td>160591</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>128</td><td>10070.0</td><td>13.19</td><td>261.80</td><td>103.330</td><td>202442</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>4</td><td>6036.7</td><td>1.93</td><td>89.51</td><td>126.570</td><td>121316</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>8</td><td>15375.4</td><td>0.75</td><td>26.54</td><td>323.170</td><td>309134</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>13912.0</td><td>1.27</td><td>56.23</td><td>292.670</td><td>278589</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>5962.6</td><td>9.45</td><td>487.43</td><td>124.590</td><td>119686</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>64</td><td>6154.8</td><td>9.83</td><td>182.34</td><td>128.140</td><td>123713</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>128</td><td>11515.2</td><td>11.24</td><td>361.83</td><td>111.720</td><td>231456</td><td class="http-ok">200</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
@@ -529,8 +641,12 @@
         <h2>Man Page (.html)</h2>
         <p class="meta ep-url"><code>/man/1/1/ls.html</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="/static/benchmark_assets/man_html_ext_throughput.svg" alt="Throughput Man Page (.html)"></div>
-              <div class="graph"><img src="/static/benchmark_assets/man_html_ext_latency.svg" alt="Latency Man Page (.html)"></div>
+              <div class="graph" data-src="/static/benchmark_assets/man_html_ext_throughput.svg" data-title="Man Page (.html) — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/man_html_ext_throughput.svg" alt="Throughput Man Page (.html)">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/man_html_ext_latency.svg" data-title="Man Page (.html) — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/man_html_ext_latency.svg" alt="Latency Man Page (.html)">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -542,12 +658,12 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>7563.5</td><td>1.15</td><td>77.19</td><td>158.240</td><td>152075</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>10118.8</td><td>1.04</td><td>47.51</td><td>212.640</td><td>203473</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>10524.5</td><td>1.61</td><td>77.79</td><td>220.180</td><td>211135</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>9418.2</td><td>3.23</td><td>62.49</td><td>196.520</td><td>189189</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>64</td><td>16554.4</td><td>3.63</td><td>161.61</td><td>345.130</td><td>331993</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>128</td><td>9753.0</td><td>13.34</td><td>526.09</td><td>100.600</td><td>196015</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>4</td><td>7414.5</td><td>1.25</td><td>46.65</td><td>154.840</td><td>148968</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>8</td><td>7394.1</td><td>2.14</td><td>131.38</td><td>155.410</td><td>148547</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>7620.1</td><td>2.22</td><td>90.24</td><td>159.470</td><td>152959</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>7753.8</td><td>4.80</td><td>121.83</td><td>162.210</td><td>155867</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>64</td><td>13862.3</td><td>4.36</td><td>63.79</td><td>289.120</td><td>278185</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>128</td><td>7454.2</td><td>19.15</td><td>783.46</td><td>74.340</td><td>149774</td><td class="http-ok">200</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
@@ -556,8 +672,12 @@
         <h2>Man Page (Markdown)</h2>
         <p class="meta ep-url"><code>/man/1/1/ls.md</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="/static/benchmark_assets/man_md_throughput.svg" alt="Throughput Man Page (Markdown)"></div>
-              <div class="graph"><img src="/static/benchmark_assets/man_md_latency.svg" alt="Latency Man Page (Markdown)"></div>
+              <div class="graph" data-src="/static/benchmark_assets/man_md_throughput.svg" data-title="Man Page (Markdown) — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/man_md_throughput.svg" alt="Throughput Man Page (Markdown)">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/man_md_latency.svg" data-title="Man Page (Markdown) — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/man_md_latency.svg" alt="Latency Man Page (Markdown)">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -569,12 +689,12 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>7437.5</td><td>1.30</td><td>74.50</td><td>74.030</td><td>149424</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>8749.2</td><td>1.28</td><td>44.37</td><td>87.420</td><td>175259</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>17467.0</td><td>0.97</td><td>31.82</td><td>173.890</td><td>351106</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>7469.4</td><td>4.17</td><td>75.54</td><td>74.220</td><td>150087</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>64</td><td>9107.3</td><td>6.58</td><td>73.52</td><td>90.250</td><td>183092</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>128</td><td>23996.9</td><td>5.31</td><td>228.93</td><td>117.640</td><td>482162</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>4</td><td>6616.6</td><td>1.36</td><td>36.06</td><td>65.810</td><td>132770</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>8</td><td>15899.3</td><td>0.76</td><td>41.79</td><td>159.010</td><td>318545</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>6775.4</td><td>2.53</td><td>94.92</td><td>67.370</td><td>135931</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>16695.0</td><td>1.85</td><td>42.07</td><td>165.310</td><td>334431</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>64</td><td>6759.8</td><td>9.35</td><td>181.42</td><td>67.040</td><td>135556</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>128</td><td>9174.9</td><td>15.86</td><td>517.59</td><td>43.530</td><td>184157</td><td class="http-ok">200</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
@@ -582,5 +702,60 @@
     </div>
   </main>
   <script src="/static/js/theme_toggler.js"></script>
+
+  <!-- ===== IMAGE MODAL ===== -->
+  <div id="img-modal" role="dialog" aria-modal="true" aria-label="Graph fullscreen view">
+    <div class="modal-inner" id="modal-inner">
+      <div class="modal-header">
+        <span class="modal-title" id="modal-title"></span>
+        <button class="modal-close" id="modal-close" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <img id="modal-img" src="" alt="" />
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var modal    = document.getElementById('img-modal');
+      var modalImg = document.getElementById('modal-img');
+      var modalTtl = document.getElementById('modal-title');
+
+      function openModal(src, title) {
+        modalImg.src = src;
+        modalImg.alt = title;
+        modalTtl.textContent = title;
+        modal.classList.add('open');
+        document.body.style.overflow = 'hidden';
+      }
+
+      function closeModal() {
+        modal.classList.remove('open');
+        document.body.style.overflow = '';
+        modalImg.src = '';
+      }
+
+      // Click on graph cards
+      document.querySelectorAll('.graph[data-src]').forEach(function (card) {
+        card.addEventListener('click', function () {
+          openModal(card.dataset.src, card.dataset.title || '');
+        });
+      });
+
+      // Close button
+      document.getElementById('modal-close').addEventListener('click', closeModal);
+
+      // Click outside modal inner
+      modal.addEventListener('click', function (e) {
+        if (e.target === modal) closeModal();
+      });
+
+      // Escape key
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && modal.classList.contains('open')) closeModal();
+      });
+    })();
+  </script>
 </body>
 </html>

@@ -427,60 +427,97 @@ cat <<HTMLHEAD
     .ep-nav-link:hover { background: var(--surface-3, #e2e8f0); }
     .ep-section   { margin-top: 1.5rem; scroll-margin-top: 4rem; }
     .overall-section { margin-top: .5rem; }
-    /* ---- Graph card click-to-expand ---- */
-    .graph        { cursor: pointer; position: relative; }
+    /* ---- Graph card: clickable ---- */
+    .graph {
+      cursor: zoom-in;
+      position: relative;
+      transition: opacity .15s;
+    }
+    .graph:hover { opacity: .88; }
     .graph::after {
       content: '⤢';
-      position: absolute; top: .45rem; right: .55rem;
-      font-size: .8rem; opacity: .45;
+      position: absolute; top: .5rem; right: .65rem;
+      font-size: .85rem; color: var(--text-muted); opacity: .5;
       pointer-events: none;
     }
-    .graph:hover::after { opacity: .85; }
-    .graph:hover img { opacity: .92; }
-    /* ---- Fullscreen modal ---- */
+    .graph:hover::after { opacity: 1; }
+    /* ---- Fullscreen image modal ---- */
     #img-modal {
       display: none;
-      position: fixed; inset: 0; z-index: 9999;
-      background: rgba(0,0,0,.78);
-      backdrop-filter: blur(4px);
-      align-items: center; justify-content: center;
-      padding: 1.5rem;
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: rgba(0,0,0,.84);
+      backdrop-filter: blur(5px);
+      -webkit-backdrop-filter: blur(5px);
+      padding: 20px;
+      box-sizing: border-box;
+      align-items: stretch;
+      justify-content: stretch;
     }
     #img-modal.open { display: flex; }
     #img-modal .modal-inner {
-      position: relative;
-      max-width: min(92vw, 1300px);
-      max-height: 90vh;
-      background: var(--surface, #fff);
-      border-radius: 1rem;
-      box-shadow: 0 24px 80px rgba(0,0,0,.45);
+      width: 100%;
+      height: 100%;
+      background: var(--surface, #ffffff);
+      border-radius: .9rem;
+      box-shadow: 0 40px 120px rgba(0,0,0,.6);
       overflow: hidden;
-      display: flex; flex-direction: column;
+      display: flex;
+      flex-direction: column;
+      box-sizing: border-box;
     }
     #img-modal .modal-header {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: .7rem 1rem .55rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: .7rem 1rem .6rem;
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
+      min-height: 48px;
     }
     #img-modal .modal-title {
-      font-size: .95rem; font-weight: 600;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      font-size: .95rem;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     #img-modal .modal-close {
-      background: none; border: none; cursor: pointer;
-      font-size: 1.3rem; line-height: 1;
-      color: var(--text-muted); padding: .1rem .3rem;
-      border-radius: .35rem; flex-shrink: 0; margin-left: .75rem;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 1.5rem;
+      line-height: 1;
+      color: var(--text-muted);
+      padding: .1rem .45rem;
+      border-radius: .4rem;
+      flex-shrink: 0;
+      margin-left: 1rem;
+      transition: background .12s, color .12s;
     }
-    #img-modal .modal-close:hover { background: var(--surface-2); color: var(--text); }
+    #img-modal .modal-close:hover {
+      background: var(--surface-2);
+      color: var(--text);
+    }
     #img-modal .modal-body {
-      overflow: auto; padding: 1rem;
-      display: flex; align-items: center; justify-content: center;
+      flex: 1 1 0;
+      min-height: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      box-sizing: border-box;
+      overflow: hidden;
     }
     #img-modal .modal-body img {
-      max-width: 100%; max-height: calc(90vh - 60px);
-      border-radius: .5rem; display: block;
+      display: block;
+      max-width: 100%;
+      max-height: 100%;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      border-radius: .5rem;
     }
   </style>
 </head>
@@ -533,12 +570,12 @@ cat <<HTMLFOOT
   </main>
   <script src="/static/js/theme_toggler.js"></script>
 
-  <!-- ===== IMAGE MODAL ===== -->
+  <!-- ===== FULLSCREEN IMAGE MODAL ===== -->
   <div id="img-modal" role="dialog" aria-modal="true" aria-label="Graph fullscreen view">
-    <div class="modal-inner" id="modal-inner">
+    <div class="modal-inner">
       <div class="modal-header">
         <span class="modal-title" id="modal-title"></span>
-        <button class="modal-close" id="modal-close" aria-label="Close">&times;</button>
+        <button class="modal-close" id="modal-close" aria-label="Close">&#x2715;</button>
       </div>
       <div class="modal-body">
         <img id="modal-img" src="" alt="" />
@@ -554,8 +591,8 @@ cat <<HTMLFOOT
 
       function openModal(src, title) {
         modalImg.src = src;
-        modalImg.alt = title;
-        modalTtl.textContent = title;
+        modalImg.alt = title || '';
+        modalTtl.textContent = title || '';
         modal.classList.add('open');
         document.body.style.overflow = 'hidden';
       }
@@ -563,27 +600,30 @@ cat <<HTMLFOOT
       function closeModal() {
         modal.classList.remove('open');
         document.body.style.overflow = '';
-        modalImg.src = '';
+        /* defer clearing src so close animation is smooth */
+        setTimeout(function () { modalImg.src = ''; }, 200);
       }
 
-      // Click on graph cards
+      /* click on any graph card that carries data-src */
       document.querySelectorAll('.graph[data-src]').forEach(function (card) {
         card.addEventListener('click', function () {
           openModal(card.dataset.src, card.dataset.title || '');
         });
       });
 
-      // Close button
+      /* × button */
       document.getElementById('modal-close').addEventListener('click', closeModal);
 
-      // Click outside modal inner
+      /* click on the dark backdrop (not the inner panel) */
       modal.addEventListener('click', function (e) {
         if (e.target === modal) closeModal();
       });
 
-      // Escape key
+      /* Escape key */
       document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape' && modal.classList.contains('open')) closeModal();
+        if ((e.key === 'Escape' || e.keyCode === 27) && modal.classList.contains('open')) {
+          closeModal();
+        }
       });
     })();
   </script>

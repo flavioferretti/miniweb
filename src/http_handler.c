@@ -627,6 +627,8 @@ http_send_file(http_request_t *req, const char *path, const char *mime)
 		return -1;
 	}
 	resp->content_type = mime;
+	if (mime && strncmp(mime, "text/plain", 10) == 0)
+		http_response_add_header(resp, "Content-Disposition", "inline");
 
 	char *cached = NULL;
 	size_t cached_len = 0;
