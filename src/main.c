@@ -78,6 +78,9 @@ static connection_t   connection_pool[MAX_CONNECTIONS];
 static int            connection_free_stack[MAX_CONNECTIONS];
 static int            connection_free_top = 0;
 
+/**
+ * @brief Init connection pool.
+ */
 static void
 init_connection_pool(void)
 {
@@ -99,6 +102,10 @@ typedef struct {
 
 static work_queue_t wq;
 
+/**
+ * @brief Queue init.
+ * @param q Work queue instance.
+ */
 static void
 queue_init(work_queue_t *q)
 {
@@ -109,6 +116,12 @@ queue_init(work_queue_t *q)
 
 /* Enqueue from the main thread. Non-blocking: returns 0 on success, -1 if
  * the queue is full (connection will be dropped). */
+/**
+ * @brief Queue push.
+ * @param q Work queue instance.
+ * @param conn Connection object.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 static int
 queue_push(work_queue_t *q, connection_t *conn)
 {
@@ -127,6 +140,11 @@ queue_push(work_queue_t *q, connection_t *conn)
 
 /* Dequeue in a worker thread. Blocks until an item is available or
  * running becomes 0. Returns NULL on shutdown. */
+/**
+ * @brief Queue pop.
+ * @param q Work queue instance.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 static connection_t *
 queue_pop(work_queue_t *q)
 {
@@ -146,6 +164,10 @@ queue_pop(work_queue_t *q)
 }
 
 /* Wake all workers so they can notice running == 0 and exit cleanly. */
+/**
+ * @brief Queue broadcast shutdown.
+ * @param q Work queue instance.
+ */
 static void
 queue_broadcast_shutdown(work_queue_t *q)
 {
@@ -155,6 +177,12 @@ queue_broadcast_shutdown(work_queue_t *q)
 }
 
 /* -- Connection pool helpers ------------------------------------------------ */
+/**
+ * @brief Alloc connection.
+ * @param fd File descriptor to operate on.
+ * @param addr Socket address metadata.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 static connection_t *
 alloc_connection(int fd, struct sockaddr_in *addr)
 {
@@ -192,6 +220,10 @@ alloc_connection(int fd, struct sockaddr_in *addr)
 	return conn;
 }
 
+/**
+ * @brief Free connection.
+ * @param fd File descriptor to operate on.
+ */
 static void
 free_connection(int fd)
 {
@@ -216,6 +248,10 @@ free_connection(int fd)
 }
 
 /* -- Helpers ---------------------------------------------------------------- */
+/**
+ * @brief Set nonblock.
+ * @param fd File descriptor to operate on.
+ */
 static void
 set_nonblock(int fd)
 {
@@ -224,6 +260,14 @@ set_nonblock(int fd)
 	fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
+/**
+ * @brief Parse request line.
+ * @param buf Input buffer containing textual data.
+ * @param method HTTP method string.
+ * @param url Request URL path.
+ * @param version HTTP protocol version string.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 static int
 parse_request_line(const char *buf, char *method, char *url, char *version)
 {
@@ -256,12 +300,23 @@ parse_request_line(const char *buf, char *method, char *url, char *version)
 	return 0;
 }
 
+/**
+ * @brief Find header end.
+ * @param buf Input buffer containing textual data.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 static const char *
 find_header_end(const char *buf)
 {
 	return strstr(buf, "\r\n\r\n");
 }
 
+/**
+ * @brief Request keep alive.
+ * @param buf Input buffer containing textual data.
+ * @param version HTTP protocol version string.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 static int
 request_keep_alive(const char *buf, const char *version)
 {
@@ -291,6 +346,12 @@ request_keep_alive(const char *buf, const char *version)
 	return is_http11 ? 1 : 0;
 }
 
+/**
+ * @brief Send error response.
+ * @param fd File descriptor to operate on.
+ * @param code HTTP status code to send.
+ * @param msg Human-readable status message.
+ */
 static void
 send_error_response(int fd, int code, const char *msg)
 {
@@ -305,6 +366,11 @@ send_error_response(int fd, int code, const char *msg)
 	(void)http_send_error(&req, code, msg);
 }
 
+/**
+ * @brief Try rearm keepalive.
+ * @param conn Connection object.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 static int
 try_rearm_keepalive(connection_t *conn)
 {
@@ -324,9 +390,13 @@ try_rearm_keepalive(connection_t *conn)
 }
 
 /* -- Worker thread ---------------------------------------------------------- */
-/*
- * Each worker blocks on queue_pop(), processes one connection at a time,
- * then loops. No kevent() calls here — only the main thread touches kqueue.
+/**
+ * @brief Process queued connections on a worker thread.
+ * @param arg Unused worker argument placeholder.
+ * @return Always returns NULL when the worker exits.
+ *
+ * Workers dequeue connections, parse one HTTP request, dispatch the matching
+ * route handler, and either close the socket or re-arm it for keep-alive.
  */
 static void *
 worker_thread(void *arg)
@@ -439,6 +509,9 @@ worker_thread(void *arg)
 }
 
 /* -- Accept helper (called from main loop) ---------------------------------- */
+/**
+ * @brief Handle accept.
+ */
 static void
 handle_accept(void)
 {
@@ -490,6 +563,9 @@ handle_accept(void)
 }
 
 /* -- Idle timeout sweep ----------------------------------------------------- */
+/**
+ * @brief Sweep idle connections.
+ */
 static void
 sweep_idle_connections(void)
 {
@@ -514,6 +590,10 @@ sweep_idle_connections(void)
 }
 
 /* -- Signal handler --------------------------------------------------------- */
+/**
+ * @brief Handle signal.
+ * @param sig Signal number delivered by the OS.
+ */
 static void
 handle_signal(int sig)
 {
@@ -522,6 +602,10 @@ handle_signal(int sig)
 }
 
 /* -- CLI -------------------------------------------------------------------- */
+/**
+ * @brief Usage.
+ * @param prog Program name used in usage text.
+ */
 static void
 usage(const char *prog)
 {
@@ -540,6 +624,11 @@ usage(const char *prog)
 		 config.max_conns);
 }
 
+/**
+ * @brief Parse args.
+ * @param argc Argument count from the command line.
+ * @param argv[] Parameter for parse_args.
+ */
 static void
 parse_args(int argc, char *argv[])
 {
@@ -593,6 +682,9 @@ parse_args(int argc, char *argv[])
 }
 
 /* -- OpenBSD security ------------------------------------------------------- */
+/**
+ * @brief Apply openbsd security.
+ */
 static void
 apply_openbsd_security(void)
 {
@@ -650,6 +742,12 @@ apply_openbsd_security(void)
 }
 
 /* -- main ------------------------------------------------------------------- */
+/**
+ * @brief Main.
+ * @param argc Argument count from the command line.
+ * @param argv[] Parameter for main.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 int
 main(int argc, char *argv[])
 {

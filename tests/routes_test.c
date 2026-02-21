@@ -9,6 +9,10 @@ int config_verbose = 0;
 char config_static_dir[] = "static";
 char config_templates_dir[] = "templates";
 
+/**
+ * @brief Validate route registration and route matching behavior.
+ * @return Returns 0 when all assertions pass.
+ */
 int main(void)
 {
 	init_routes();

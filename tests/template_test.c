@@ -6,6 +6,10 @@
 
 char config_templates_dir[] = "templates";
 
+/**
+ * @brief Validate template rendering with baseline template data.
+ * @return Returns 0 when all assertions pass.
+ */
 int main(void)
 {
 	char *out = NULL;

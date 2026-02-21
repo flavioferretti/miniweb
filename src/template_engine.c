@@ -8,9 +8,11 @@
 #include "../include/template_engine.h"
 #include "../include/config.h"
 
-/*
- * Read file content into a dynamically allocated buffer.
- * Returns 0 on success, -1 on failure.
+/**
+ * @brief Read an entire file into a newly allocated NUL-terminated buffer.
+ * @param path Filesystem path of the file to read.
+ * @param content Output pointer that receives the allocated buffer on success.
+ * @return Returns 0 on success or -1 on failure.
  */
 static int
 read_file_content(const char *path, char **content)
@@ -44,8 +46,11 @@ read_file_content(const char *path, char **content)
 	return 0;
 }
 
-/*
- * Helper to read a template file from the dedicated templates/ directory.
+/**
+ * @brief Load a template file from the configured templates directory.
+ * @param filename Template filename relative to the templates directory.
+ * @param content Output pointer that receives the allocated template content.
+ * @return Returns 0 on success or -1 on failure.
  */
 static int
 read_template_file(const char *filename, char **content)
@@ -60,9 +65,14 @@ read_template_file(const char *filename, char **content)
 static char *replace_single(const char *str, const char *needle,
 							const char *value);
 
-/*
- * Orchestrate the replacement of all template tags with dynamic data.
- * Returns a newly allocated string or NULL on failure.
+/**
+ * @brief Replace all supported placeholders in the base template string.
+ * @param template_str Base template text containing placeholders.
+ * @param title Value for the {{title}} placeholder.
+ * @param page_content Value for the {{page_content}} placeholder.
+ * @param extra_head Value for the {{extra_head}} placeholder.
+ * @param extra_js Value for the {{extra_js}} placeholder.
+ * @return Newly allocated rendered string, or NULL on failure.
  */
 static char *
 replace_all(const char *template_str, const char *title,
@@ -119,9 +129,12 @@ replace_all(const char *template_str, const char *title,
 	return result;
 }
 
-/*
- * Replace the first occurrence of a needle with a value in a string.
- * This handles manual string building to avoid buffer overflows.
+/**
+ * @brief Replace the first occurrence of a token in a string.
+ * @param str Source string to search.
+ * @param needle Placeholder token to replace.
+ * @param value Replacement value to inject.
+ * @return Newly allocated string containing the replacement, or NULL on error.
  */
 static char *
 replace_single(const char *str, const char *needle, const char *value)
@@ -150,9 +163,11 @@ replace_single(const char *str, const char *needle, const char *value)
 	return result;
 }
 
-/*
- * Main entry point for the template engine.
- * Combines base.html with dynamic content and placeholders.
+/**
+ * @brief Render a full HTML page using base and content templates.
+ * @param data Template metadata and optional fragment filenames.
+ * @param output Output pointer that receives the rendered HTML buffer.
+ * @return Returns 0 on success or -1 when rendering fails.
  */
 int
 template_render_with_data(struct template_data *data, char **output)
@@ -220,7 +235,15 @@ template_render_with_data(struct template_data *data, char **output)
 	return ret;
 }
 
-/* Wrapper for backward compatibility */
+/**
+ * @brief Backward-compatible wrapper around template_render_with_data().
+ */
+/**
+ * @brief Render a template page with default metadata values.
+ * @param page Template filename to load as page content.
+ * @param output Output pointer that receives the rendered HTML buffer.
+ * @return Returns 0 on success or -1 on failure.
+ */
 int
 template_render(const char *page, char **output)
 {

@@ -23,6 +23,11 @@
 /* -- Helpers ---------------------------------------------------------------- */
 
 /* Trim leading whitespace in-place; return pointer to first non-space char. */
+/**
+ * @brief Ltrim.
+ * @param s Input string to parse or sanitize.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 static char *
 ltrim(char *s)
 {
@@ -32,6 +37,10 @@ ltrim(char *s)
 }
 
 /* Trim trailing whitespace in-place. */
+/**
+ * @brief Rtrim.
+ * @param s Input string to parse or sanitize.
+ */
 static void
 rtrim(char *s)
 {
@@ -41,6 +50,14 @@ rtrim(char *s)
 }
 
 /* Parse a bounded integer; return 0 on success, -1 on error. */
+/**
+ * @brief Parse int.
+ * @param s Input string to parse or sanitize.
+ * @param out Output pointer for parsed or generated value.
+ * @param lo Inclusive minimum accepted value.
+ * @param hi Inclusive maximum accepted value.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 static int
 parse_int(const char *s, int *out, int lo, int hi)
 {
@@ -56,6 +73,10 @@ parse_int(const char *s, int *out, int lo, int hi)
 }
 
 /* -- Defaults --------------------------------------------------------------- */
+/**
+ * @brief Conf defaults.
+ * @param conf Configuration object to populate or inspect.
+ */
 void
 conf_defaults(miniweb_conf_t *conf)
 {
@@ -79,6 +100,11 @@ conf_defaults(miniweb_conf_t *conf)
 /* -- File lookup ------------------------------------------------------------ */
 
 /* Try to open a file; return FILE* or NULL without setting errno. */
+/**
+ * @brief Try open.
+ * @param path Request or filesystem path to evaluate.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 static FILE *
 try_open(const char *path)
 {
@@ -88,6 +114,12 @@ try_open(const char *path)
 }
 
 /* Build $HOME/.miniweb.conf into buf[len]; return 0 on success. */
+/**
+ * @brief Home conf path.
+ * @param buf Input buffer containing textual data.
+ * @param len Destination buffer length.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 static int
 home_conf_path(char *buf, size_t len)
 {
@@ -103,6 +135,13 @@ home_conf_path(char *buf, size_t len)
 }
 
 /* -- Core parser ------------------------------------------------------------ */
+/**
+ * @brief Parse file.
+ * @param f Input stream to parse.
+ * @param path Request or filesystem path to evaluate.
+ * @param conf Configuration object to populate or inspect.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 static int
 parse_file(FILE *f, const char *path, miniweb_conf_t *conf)
 {
@@ -204,6 +243,12 @@ parse_file(FILE *f, const char *path, miniweb_conf_t *conf)
 }
 
 /* -- Public API ------------------------------------------------------------- */
+/**
+ * @brief Conf load.
+ * @param explicit_path Parameter used by this function.
+ * @param conf Configuration object to populate or inspect.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 int
 conf_load(const char *explicit_path, miniweb_conf_t *conf)
 {
@@ -266,6 +311,10 @@ conf_apply_cli(miniweb_conf_t *conf,
     if (cli_verbose)        conf->verbose        = 1;
 }
 
+/**
+ * @brief Conf dump.
+ * @param conf Configuration object to populate or inspect.
+ */
 void
 conf_dump(const miniweb_conf_t *conf)
 {

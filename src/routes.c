@@ -15,6 +15,11 @@
 #include "../include/urls.h"
 
 /* Generic template-backed view handler */
+/**
+ * @brief View template handler.
+ * @param req Request context for response generation.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 int
 view_template_handler(http_request_t *req)
 {
@@ -34,6 +39,11 @@ view_template_handler(http_request_t *req)
 }
 
 /* Favicon handler */
+/**
+ * @brief Favicon handler.
+ * @param req Request context for response generation.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 int
 favicon_handler(http_request_t *req)
 {
@@ -45,6 +55,11 @@ favicon_handler(http_request_t *req)
 /* Static file handler */
 /* static_handler - Serve static CSS, JS, image, and HTML assets. */
 /* routes.c - static file serving helpers. */
+/**
+ * @brief Static handler.
+ * @param req Request context for response generation.
+ * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ */
 int
 static_handler(http_request_t *req)
 {
