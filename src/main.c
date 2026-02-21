@@ -557,6 +557,8 @@ parse_args(int argc, char *argv[])
 	if (config.threads  < 1)               config.threads  = 1;
 	if (config.threads  > THREAD_POOL_SIZE) config.threads  = THREAD_POOL_SIZE;
 	if (config.max_conns > MAX_CONNECTIONS) config.max_conns = MAX_CONNECTIONS;
+	if (config.max_req_size > REQUEST_BUFFER_SIZE)
+		config.max_req_size = REQUEST_BUFFER_SIZE;
 
 	/* Propagate config to global values consulted by other modules */
 	config_verbose = config.verbose;
