@@ -84,8 +84,9 @@
         fontSize  : 12,
         dotRadius : 3,          // set 0 to disable dots
         dotThreshold: 150,      // dots drawn only when data.length < dotThreshold
-        padding   : { top: 44, right: 28, bottom: 52, left: 62 },
-        fillOpacity: 0.35
+        padding     : { top: 44, right: 28, bottom: 52, left: 62 },
+        fillOpacity : 0.35,
+        xFormatter  : null          // optional function(x) => string for X tick labels
     };
 
     /* ─────────────────────────────────────────
@@ -245,10 +246,14 @@
             if (typeof item === 'number' || (typeof item === 'string' && !isNaN(parseFloat(item)))) {
                 out.push({ x: i, y: parseFloat(item) });
             } else if (item && typeof item === 'object' && 'y' in item) {
-                out.push({
-                    x: ('x' in item) ? (parseFloat(item.x) || i) : i,
-                    y: parseFloat(item.y)
-                });
+                var xVal;
+                if (!('x' in item)) {
+                    xVal = i;
+                } else {
+                    var parsed = parseFloat(item.x);
+                    xVal = isNaN(parsed) ? item.x : parsed;
+                }
+                out.push({ x: xVal, y: parseFloat(item.y) });
             } else {
                 console.warn('flvChart: skipping invalid point', item);
             }
@@ -346,8 +351,8 @@
         var fillOpacity = (cfg.fillOpacity !== undefined) ? cfg.fillOpacity : 0.35;
         fillOpacity = Math.max(0, Math.min(1, fillOpacity));
         grad.addColorStop(0,   hexToRgba(cfg.color, fillOpacity));
-        grad.addColorStop(0.7, hexToRgba(cfg.color, 0.08));
-        grad.addColorStop(1,   hexToRgba(cfg.color, 0.00));
+        grad.addColorStop(0.5, hexToRgba(cfg.color, fillOpacity * 0.5));
+        grad.addColorStop(1,   hexToRgba(cfg.color, 0.04));
         ctx.fillStyle = grad;
 
         ctx.beginPath();
@@ -430,7 +435,10 @@
             var xpx  = xPx(idx);
             ctx.beginPath(); ctx.moveTo(xpx, B); ctx.lineTo(xpx, B + 4); ctx.stroke();
             var xl = data[idx].x;
-            ctx.fillText(typeof xl === 'number' ? xl.toFixed(0) : String(xl), xpx, B + 6);
+            var xlStr = cfg.xFormatter
+                ? cfg.xFormatter(xl)
+                : (typeof xl === 'number' ? xl.toFixed(0) : String(xl));
+            ctx.fillText(xlStr, xpx, B + 6);
         }
         ctx.restore();
 

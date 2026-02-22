@@ -22,12 +22,19 @@
 
   const mbToGb = (mb) => (mb / 1024).toFixed(1);
   const pct = (n, d) => (d > 0 ? Math.round((n / d) * 100) : 0);
+  // Returns HH:MM string from a unix timestamp (seconds).
+  // Used both as X data value and via xFormatter in flvChart config.
   const timeLabel = (ts) => {
     if (!ts) return '--:--';
     const dt = new Date(Number(ts) * 1000);
     if (Number.isNaN(dt.getTime())) return '--:--';
-    return dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    // Build HH:MM manually — toLocaleTimeString varies by locale/OS
+    return String(dt.getHours()).padStart(2, '0') + ':' + String(dt.getMinutes()).padStart(2, '0');
   };
+
+  // xFormatter for flvChart: receives the raw X value (unix seconds as number)
+  // and returns the HH:MM string for the axis label.
+  const xTickFormatter = (x) => timeLabel(x);
 
   const panel = (title, body, klass = '') =>
     `<article class="panel stat-card ${klass}"><h3>${title}</h3>${body}</article>`;
@@ -85,6 +92,7 @@
         xTicks: 5,
         yTicks: 4,
         fillOpacity: 0.55,
+        xFormatter: xTickFormatter,
         padding: { top: 36, right: 20, bottom: 48, left: 52 },
       });
     }
@@ -103,14 +111,17 @@
         xTicks: 5,
         yTicks: 4,
         fillOpacity: 0.55,
+        xFormatter: xTickFormatter,
         padding: { top: 36, right: 20, bottom: 48, left: 52 },
       });
     }
 
     const boundedHistory = history.slice(-MAX_WINDOW_POINTS);
-    const cpuSeries = boundedHistory.map((s) => ({ x: timeLabel(s.ts), y: s.cpu || 0 }));
+    // Pass unix timestamp as numeric x so flvChart never mangles it with parseFloat.
+    // xFormatter converts it to "HH:MM" only at render time.
+    const cpuSeries = boundedHistory.map((s) => ({ x: Number(s.ts), y: s.cpu || 0 }));
     const memSeries = boundedHistory.map((s) => ({
-      x: timeLabel(s.ts),
+      x: Number(s.ts),
       y: pct(s.mem_used_mb || 0, s.mem_total_mb || 1),
     }));
 
@@ -120,7 +131,8 @@
 
   const mountOverview = () => {
     dashboard.innerHTML = [
-      panel('Overview Charts', `
+
+      panel('Overview Charts',`
         <div class="chart-grid">
           <div class="flvchart-card">
             <p class="flvchart-title">CPU usage (history)</p>
@@ -138,7 +150,7 @@
       panel('Memory', '<p class="stat-value" id="overviewMemValue">-</p><div class="progress"><span id="overviewMemBar" style="width:0%"></span></div><p class="muted" id="overviewMemMeta">-</p>'),
       panel('Load Average', '<p class="stat-value" id="overviewLoadValue">-</p><p class="muted" id="overviewLoadMeta">-</p>'),
       panel('Swap', '<p class="stat-value" id="overviewSwapValue">-</p><div class="progress"><span id="overviewSwapBar" style="width:0%"></span></div>'),
-      panel('OS', '<p id="overviewOsValue">Unknown</p><p class="muted" id="overviewOsMeta"></p>'),
+
     ].join('');
     cpuChart = null;
     memChart = null;
@@ -173,8 +185,8 @@
       document.getElementById('overviewLoadMeta').textContent = `1m · ${(load['5min'] ?? 0).toFixed(2)} (5m) · ${(load['15min'] ?? 0).toFixed(2)} (15m)`;
       document.getElementById('overviewSwapValue').textContent = `${mbToGb(swap.used_mb || 0)} / ${mbToGb(swap.total_mb || 0)} GB`;
       document.getElementById('overviewSwapBar').style.width = `${swapUsedPct}%`;
-      document.getElementById('overviewOsValue').textContent = `${latest.os?.type || 'Unknown'} ${latest.os?.release || ''}`;
-      document.getElementById('overviewOsMeta').textContent = latest.os?.machine || '';
+      // document.getElementById('overviewOsValue').textContent = `${latest.os?.type || 'Unknown'} ${latest.os?.release || ''}`;
+      // document.getElementById('overviewOsMeta').textContent = latest.os?.machine || '';
 
       renderOverviewCharts();
       return;
@@ -257,7 +269,10 @@
       const response = await fetch('/api/metrics', { cache: 'no-store' });
       if (!response.ok) throw new Error('request failed');
       latest = await response.json();
-      hostInfo.textContent = `${latest.hostname || 'localhost'} · ${latest.os?.type || ''} ${latest.os?.release || ''}`;
+      hostInfo.textContent = `${latest.hostname || 'localhost'} ·
+      ${latest.os?.type || ''}
+      ${latest.os?.release || ''} ·
+      ${latest.os?.machine || ''}`;
       lastUpdate.textContent = latest.timestamp || '-';
       uptime.textContent = latest.uptime || '-';
       render();

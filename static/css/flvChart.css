@@ -15,9 +15,9 @@
  * Minimal reset is scoped to .flvchart-* — no global side effects.
  */
 
-/* ─────────────────────────────────────────────
+/* ---------------------------------------------
    Custom properties (override to theme)
-   ───────────────────────────────────────────── */
+   --------------------------------------------- */
 :root {
     --flvc-bg          : #ffffff;
     --flvc-bg-card     : #f8fafc;
@@ -57,9 +57,9 @@
     --flvc-dot-fill    : #0f172a;
 }
 
-/* ─────────────────────────────────────────────
+/* ---------------------------------------------
    Card container
-   ───────────────────────────────────────────── */
+   --------------------------------------------- */
 .flvchart-card {
     box-sizing        : border-box;
     background        : var(--flvc-bg-card);
@@ -74,18 +74,18 @@
     box-shadow: var(--flvc-shadow-hover);
 }
 
-/* ─────────────────────────────────────────────
+/* ---------------------------------------------
    Chart wrapper (inside a card or standalone)
-   ───────────────────────────────────────────── */
+   --------------------------------------------- */
 .flvchart-wrap {
     box-sizing : border-box;
     width      : 100%;
     position   : relative;
 }
 
-/* ─────────────────────────────────────────────
+/* ---------------------------------------------
    Canvas element
-   ───────────────────────────────────────────── */
+   --------------------------------------------- */
 .flvchart-canvas {
     display      : block;
     width        : 100%;
@@ -94,9 +94,9 @@
     background   : var(--flvc-bg);
 }
 
-/* ─────────────────────────────────────────────
+/* ---------------------------------------------
    Optional title above canvas
-   ───────────────────────────────────────────── */
+   --------------------------------------------- */
 .flvchart-title {
     font-family  : var(--flvc-font-ui);
     font-size    : 0.9rem;
@@ -113,9 +113,9 @@
     margin       : -6px 0 10px 0;
 }
 
-/* ─────────────────────────────────────────────
+/* ---------------------------------------------
    Metric badge  (current value + label)
-   ───────────────────────────────────────────── */
+   --------------------------------------------- */
 .flvchart-badge {
     display       : inline-flex;
     flex-direction: column;
@@ -141,13 +141,13 @@
     letter-spacing: 0.06em;
 }
 
-/* ── colour variants ── */
+/* -- colour variants -- */
 .flvchart-badge--up   .flvchart-badge__value { color: var(--flvc-color-up);   }
 .flvchart-badge--down .flvchart-badge__value { color: var(--flvc-color-down); }
 
-/* ─────────────────────────────────────────────
+/* ---------------------------------------------
    Multi-chart CSS grid
-   ───────────────────────────────────────────── */
+   --------------------------------------------- */
 .flvchart-grid {
     display              : grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -155,9 +155,9 @@
     box-sizing           : border-box;
 }
 
-/* ─────────────────────────────────────────────
+/* ---------------------------------------------
    Loading / empty overlay
-   ───────────────────────────────────────────── */
+   --------------------------------------------- */
 .flvchart-wrap[data-loading]::after {
     content       : 'loading…';
     position      : absolute;
@@ -173,9 +173,9 @@
     letter-spacing: 0.04em;
 }
 
-/* ─────────────────────────────────────────────
+/* ---------------------------------------------
    Dark theme  (prefers-color-scheme)
-   ───────────────────────────────────────────── */
+   --------------------------------------------- */
 @media (prefers-color-scheme: dark) {
     :root:not([data-theme='light']) {
         --flvc-bg          : #0f172a;
@@ -192,9 +192,9 @@
     }
 }
 
-/* ─────────────────────────────────────────────
+/* ---------------------------------------------
    Force dark theme via class  .flvchart-dark
-   ───────────────────────────────────────────── */
+   --------------------------------------------- */
 .flvchart-dark,
 .flvchart-dark .flvchart-card,
 .flvchart-dark .flvchart-wrap {
