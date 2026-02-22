@@ -553,24 +553,39 @@ guarded by a mutex.
 .Sh PERFORMANCE
 Benchmarks collected on OpenBSD 7.8 using
 .Xr wrk 1
-with 4 threads and 10-second runs.
+with 4 threads and 20-second runs.
 Only representative endpoints are listed.
+.Ss Overall Summary
+.Bl -bullet -compact
+.It
+Peak throughput: 35,462.49 requests/s.
+.It
+Average throughput: 11,678.0 requests/s.
+.It
+Best average latency: 0.160 ms.
+.It
+Worst max latency: 1950.000 ms.
+.It
+Grand average latency: 108.58 ms.
+.El
 .Ss Representative Endpoints
-.Bl -tag -width "/static/js/theme_toggler.js (100 connections)"
-.It Pa /static/js/theme_toggler.js Pq 100 connections
-29,680.3 requests/s; average latency 3.15 ms.
-.It Pa /networking Pq 100 connections
-25,570.0 requests/s; average latency 3.11 ms.
-.It Pa /api/metrics Pq 100 connections
-726.2 requests/s; average latency 136.60 ms.
-.It Pa /api/packages/info Pq 5 connections
-13.8 requests/s; average latency 283.69 ms.
+.Bl -tag -width "/api/packages/search?q=curl (4 connections)"
+.It Pa /static/js/theme_toggler.js Pq 256 connections
+34,833.8 requests/s; average latency 36.95 ms.
+.It Pa /networking Pq 32 connections
+24,331.2 requests/s; average latency 1.09 ms.
+.It Pa /api/metrics Pq 256 connections
+1,683.9 requests/s; average latency 71.94 ms.
+.It Pa /api/packages/search?q=curl Pq 4 connections
+11.0 requests/s; average latency 361.52 ms.
+.It Pa /api/packages/info?name=curl Pq all tested connection levels
+0.0 requests/s; endpoint health failed in this benchmark run.
 .El
 .Pp
 Static and template routes remain fast at high concurrency.
 System-snapshot and subprocess-backed endpoints
 .Pq Pa /api/metrics
-and the package APIs are compute-bound.
+and package APIs remain the dominant bottlenecks in this run.
 .Ss PR-63 Static HTML Benchmark Snapshot
 Measured with
 .Xr wrk 1
@@ -580,19 +595,19 @@ at 4 threads, 20 seconds, path
 .Pa /static/test.html :
 .Bl -tag -width "256 connections"
 .It 4 connections
-21,843.9 requests/s.
+21,191.0 requests/s.
 .It 8 connections
-11,364.4 requests/s.
+11,128.7 requests/s.
 .It 16 connections
-15,879.6 requests/s.
+15,691.2 requests/s.
 .It 32 connections
-11,835.3 requests/s.
+25,735.8 requests/s.
 .It 64 connections
-16,555.0 requests/s.
+12,010.7 requests/s.
 .It 128 connections
-17,135.3 requests/s.
+18,772.8 requests/s.
 .It 256 connections
-26,222.9 requests/s.
+21,039.0 requests/s.
 .El
 .Pp
 These results are consistent with PR-63 overload and memory protections:

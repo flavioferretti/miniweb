@@ -275,17 +275,27 @@ Internal refactoring keeps connection teardown logic in one path (`free_connecti
 
 ## Performance
 
-Updated from `static/benchmark.html` (OpenBSD 7.8, `wrk` with 4 threads, 10 s runs).
-To keep this section compact, only representative endpoints are shown:
+Updated from `static/benchmark.html` (OpenBSD 7.8, `wrk` with 4 threads, 20 s runs).
+
+Overall run summary:
+
+- Peak throughput: **35,462.49 req/s**
+- Average throughput: **11,678.0 req/s**
+- Best average latency: **0.160 ms**
+- Worst max latency: **1950.000 ms**
+- Grand average latency: **108.58 ms**
+
+Representative endpoints from this run:
 
 | Endpoint | Conns | Req/s | Avg latency |
 |---|---:|---:|---:|
-| `/static/js/theme_toggler.js` | 100 | **29,680.3** | 3.15 ms |
-| `/networking` | 100 | **25,570.0** | 3.11 ms |
-| `/api/metrics` | 100 | **726.2** | 136.60 ms |
-| `/api/packages/info` | 5 | **13.8** | 283.69 ms |
+| `/static/js/theme_toggler.js` | 256 | **34,833.8** | 36.95 ms |
+| `/networking` | 32 | **24,331.2** | 1.09 ms |
+| `/api/metrics` | 256 | **1,683.9** | 71.94 ms |
+| `/api/packages/search?q=curl` | 4 | **11.0** | 361.52 ms |
+| `/api/packages/info?name=curl` | any tested | **0.0** | HEALTH_FAILED |
 
-Takeaways: static and template routes are fast at high concurrency, while expensive system and subprocess-backed endpoints (`/api/metrics`, package APIs) remain compute-bound.
+Takeaways: static and template routes remain fast at high concurrency; `/api/metrics` scales better at higher concurrency in this run, while package subprocess endpoints are the primary bottleneck (with `/api/packages/info` failing health checks throughout this benchmark).
 
 ### PR-63 static HTML benchmark snapshot
 
@@ -293,13 +303,13 @@ From `benchmark.sh` (4 threads, 20s duration, `/static/test.html`):
 
 | Connections | Req/s |
 |---:|---:|
-| 4 | 21,843.9 |
-| 8 | 11,364.4 |
-| 16 | 15,879.6 |
-| 32 | 11,835.3 |
-| 64 | 16,555.0 |
-| 128 | 17,135.3 |
-| 256 | 26,222.9 |
+| 4 | 21,191.0 |
+| 8 | 11,128.7 |
+| 16 | 15,691.2 |
+| 32 | 25,735.8 |
+| 64 | 12,010.7 |
+| 128 | 18,772.8 |
+| 256 | 21,039.0 |
 
 These runs validate the PR-63 overload/memory guardrails under high fan-in:
 bounded queue depth, fixed connection slab, response object pool reuse, and
