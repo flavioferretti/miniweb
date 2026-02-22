@@ -12,6 +12,7 @@
   let latest = null;
   let cpuChart = null;
   let memChart = null;
+  let overviewMounted = false;
 
   const mbToGb = (mb) => (mb / 1024).toFixed(1);
   const pct = (n, d) => (d > 0 ? Math.round((n / d) * 100) : 0);
@@ -50,6 +51,13 @@
   };
 
   const renderOverviewCharts = () => {
+    if (!document.getElementById('cpuOverviewChart') || !document.getElementById('memOverviewChart')) {
+      cpuChart = null;
+      memChart = null;
+      overviewMounted = false;
+      return;
+    }
+
     const history = latest?.history || [];
     if (!cpuChart) {
       cpuChart = new flvChart({
@@ -95,6 +103,33 @@
     memChart.plot(memSeries);
   };
 
+  const mountOverview = () => {
+    dashboard.innerHTML = [
+      panel('CPU Usage', '<p class="stat-value" id="overviewCpuValue">-</p><div class="progress"><span id="overviewCpuBar" style="width:0%"></span></div><p class="muted" id="overviewCpuMeta">CPU data unavailable</p>'),
+      panel('Memory', '<p class="stat-value" id="overviewMemValue">-</p><div class="progress"><span id="overviewMemBar" style="width:0%"></span></div><p class="muted" id="overviewMemMeta">-</p>'),
+      panel('Load Average', '<p class="stat-value" id="overviewLoadValue">-</p><p class="muted" id="overviewLoadMeta">-</p>'),
+      panel('Swap', '<p class="stat-value" id="overviewSwapValue">-</p><div class="progress"><span id="overviewSwapBar" style="width:0%"></span></div>'),
+      panel('OS', '<p id="overviewOsValue">Unknown</p><p class="muted" id="overviewOsMeta"></p>'),
+      panel('Overview Charts', `
+        <div class="chart-grid">
+          <div class="flvchart-card">
+            <p class="flvchart-title">CPU usage (history)</p>
+            <p class="flvchart-subtitle">last values from /api/metrics ring buffer</p>
+            <div class="flvchart-wrap"><canvas id="cpuOverviewChart" class="flvchart-canvas" width="700" height="260"></canvas></div>
+          </div>
+          <div class="flvchart-card">
+            <p class="flvchart-title">Memory usage (history)</p>
+            <p class="flvchart-subtitle">same max/current scale as overview progress bar</p>
+            <div class="flvchart-wrap"><canvas id="memOverviewChart" class="flvchart-canvas" width="700" height="260"></canvas></div>
+          </div>
+        </div>
+      `, 'chart-panel'),
+    ].join('');
+    cpuChart = null;
+    memChart = null;
+    overviewMounted = true;
+  };
+
   const render = () => {
     if (!latest) return;
     const m = latest.memory || {};
@@ -107,34 +142,30 @@
       const cpu = latest.cpu || null;
       const cpuUsed = cpu ? (cpu.used_pct ?? 0) : null;
       const memUsedPct = pct(memInUse, memTotal);
+      const swapUsedPct = pct(swap.used_mb || 0, swap.total_mb || 1);
 
-      dashboard.innerHTML = [
-        panel('CPU Usage', cpu
-          ? `<p class="stat-value">${cpuUsed}%</p><div class="progress"><span style="width:${cpuUsed}%"></span></div><p class="muted">user ${cpu.user_pct}% · sys ${cpu.system_pct}% · intr ${cpu.interrupt_pct}% · idle ${cpu.idle_pct}%</p>`
-          : '<p class="muted">CPU data unavailable</p>'),
-        panel('Memory', `<p class="stat-value">${mbToGb(memInUse)} / ${mbToGb(memTotal)} GB</p><div class="progress"><span style="width:${memUsedPct}%"></span></div><p class="muted">active + wired · inactive ${mbToGb(m.inactive_mb || 0)} GB (cache) · free ${mbToGb(m.free_mb || 0)} GB</p>`),
-        panel('Load Average', `<p class="stat-value">${(load['1min'] ?? 0).toFixed(2)}</p><p class="muted">1m · ${(load['5min'] ?? 0).toFixed(2)} (5m) · ${(load['15min'] ?? 0).toFixed(2)} (15m)</p>`),
-        panel('Swap', `<p class="stat-value">${mbToGb(swap.used_mb || 0)} / ${mbToGb(swap.total_mb || 0)} GB</p><div class="progress"><span style="width:${pct(swap.used_mb || 0, swap.total_mb || 0)}%"></span></div>`),
-        panel('OS', `<p>${latest.os?.type || 'Unknown'} ${latest.os?.release || ''}</p><p class="muted">${latest.os?.machine || ''}</p>`),
-        panel('Overview Charts', `
-          <div class="chart-grid">
-            <div class="flvchart-card">
-              <p class="flvchart-title">CPU usage (history)</p>
-              <p class="flvchart-subtitle">last values from /api/metrics ring buffer</p>
-              <div class="flvchart-wrap"><canvas id="cpuOverviewChart" class="flvchart-canvas" width="700" height="260"></canvas></div>
-            </div>
-            <div class="flvchart-card">
-              <p class="flvchart-title">Memory usage (history)</p>
-              <p class="flvchart-subtitle">same max/current scale as overview progress bar</p>
-              <div class="flvchart-wrap"><canvas id="memOverviewChart" class="flvchart-canvas" width="700" height="260"></canvas></div>
-            </div>
-          </div>
-        `, 'chart-panel'),
-      ].join('');
+      if (!overviewMounted || !document.getElementById('cpuOverviewChart')) mountOverview();
+
+      document.getElementById('overviewCpuValue').textContent = cpu ? `${cpuUsed}%` : '-';
+      document.getElementById('overviewCpuBar').style.width = `${cpu ? cpuUsed : 0}%`;
+      document.getElementById('overviewCpuMeta').textContent = cpu
+        ? `user ${cpu.user_pct}% · sys ${cpu.system_pct}% · intr ${cpu.interrupt_pct}% · idle ${cpu.idle_pct}%`
+        : 'CPU data unavailable';
+      document.getElementById('overviewMemValue').textContent = `${mbToGb(memInUse)} / ${mbToGb(memTotal)} GB`;
+      document.getElementById('overviewMemBar').style.width = `${memUsedPct}%`;
+      document.getElementById('overviewMemMeta').textContent = `active + wired · inactive ${mbToGb(m.inactive_mb || 0)} GB (cache) · free ${mbToGb(m.free_mb || 0)} GB`;
+      document.getElementById('overviewLoadValue').textContent = (load['1min'] ?? 0).toFixed(2);
+      document.getElementById('overviewLoadMeta').textContent = `1m · ${(load['5min'] ?? 0).toFixed(2)} (5m) · ${(load['15min'] ?? 0).toFixed(2)} (15m)`;
+      document.getElementById('overviewSwapValue').textContent = `${mbToGb(swap.used_mb || 0)} / ${mbToGb(swap.total_mb || 0)} GB`;
+      document.getElementById('overviewSwapBar').style.width = `${swapUsedPct}%`;
+      document.getElementById('overviewOsValue').textContent = `${latest.os?.type || 'Unknown'} ${latest.os?.release || ''}`;
+      document.getElementById('overviewOsMeta').textContent = latest.os?.machine || '';
 
       renderOverviewCharts();
       return;
     }
+
+    overviewMounted = false;
 
     if (currentTab === 'cpu') {
       const cpu = latest.cpu || null;
