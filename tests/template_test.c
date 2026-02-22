@@ -19,11 +19,13 @@ int main(void)
 		.extra_head_file = NULL,
 		.extra_js_file = NULL,
 	};
+	assert(template_cache_init() == 0);
 	assert(template_render_with_data(&data, &out) == 0);
 	assert(out != NULL);
 	assert(strstr(out, "MiniWeb - Test") != NULL);
 	assert(strstr(out, "<html") != NULL);
 	free(out);
+	template_cache_cleanup();
 	puts("template_test: ok");
 	return 0;
 }
