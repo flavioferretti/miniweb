@@ -58,6 +58,7 @@ char config_templates_dir[CONF_STR_MAX] = "templates";
 static volatile sig_atomic_t running = 1;
 static int kq_fd     = -1;
 static int listen_fd = -1;
+static int spare_fd  = -1;
 
 /* -- Connection pool -------------------------------------------------------- */
 typedef struct connection {
@@ -528,6 +529,28 @@ handle_accept(void)
 			}
 			if (errno == EINTR)
 				continue;
+			if (errno == EMFILE || errno == ENFILE) {
+				/* Process/system fd table full: temporarily free one fd so we can
+				 * accept and immediately close one pending client. This prevents
+				 * the listen socket from staying permanently readable and spinning
+				 * the event loop under sustained connection fan-in. */
+				if (spare_fd >= 0) {
+					close(spare_fd);
+					spare_fd = -1;
+				}
+
+				int drop_fd = accept(listen_fd, NULL, NULL);
+				if (drop_fd >= 0)
+					close(drop_fd);
+
+				spare_fd = open("/dev/null", O_RDONLY);
+				if (config.verbose) {
+					fprintf(stderr,
+						"fd limit reached (errno=%d), shedding one pending connection\n",
+						errno);
+				}
+				return;
+			}
 			if (config.verbose)
 				perror("accept");
 			return;
@@ -805,6 +828,7 @@ main(int argc, char *argv[])
 	}
 
 	apply_openbsd_security();
+	spare_fd = open("/dev/null", O_RDONLY);
 
 	printf("Server started. Workers: %d  MaxConns: %d  Port: %d\n"
 	"Press Ctrl+C to stop.\n\n",
@@ -899,6 +923,8 @@ main(int argc, char *argv[])
 
 	close(listen_fd);
 	close(kq_fd);
+	if (spare_fd >= 0)
+		close(spare_fd);
 	template_cache_cleanup();
 
 	printf("Server stopped.\n");
