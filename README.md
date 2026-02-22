@@ -94,6 +94,31 @@ HTTP/1.1 unless the client sends `Connection: close`.
 Handlers may also force close behavior, and each connection is capped at 64 served
 requests before being closed.
 
+### Route matching and response behavior (actual runtime flow)
+
+`route_match()` applies routing in this order:
+
+1. exact static registrations (`init_routes()` table),
+2. dynamic `GET /man/...` (requires at least two slashes after `/man/`),
+3. dynamic `GET /api/man...`,
+4. dynamic `GET /api/packages...`,
+5. dynamic `GET /static/...`.
+
+Anything else returns a generated HTML `404 Not Found` page.
+
+| Route kind | Match rule | Response mechanism |
+|---|---|---|
+| View pages (`/`, `/docs`, `/apiroot`, `/networking`, `/packages`) | Exact `GET` match in `view_routes[]` | `view_template_handler()` -> `http_render_template()` -> HTML response from template cache |
+| Metrics JSON (`/api/metrics`) | Exact `GET` | `metrics_handler()` builds a fresh JSON snapshot each request and replies `application/json` (+ CORS `*`) |
+| Networking JSON (`/api/networking`) | Exact `GET` | `networking_api_handler()` builds live routes/DNS/interfaces JSON and replies `application/json` |
+| Package JSON (`/api/packages/*`) | Exact listed endpoints + dynamic prefix fallback | `pkg_api_handler()` dispatches to `pkg_info(1)`-backed helpers, returns `application/json`; missing query args => `400`, unknown subpath => `404` |
+| Man API (`/api/man/*`) | Dynamic prefix (`/api/man`) | `man_api_handler()` returns JSON for sections/pages/metadata endpoints and `text/plain` for search output |
+| Man render (`/man/{area}/{section}/{page}[.fmt]`) | Dynamic prefix + slash-count guard | `man_render_handler()` validates tokens, uses disk cache when available, otherwise renders via `mandoc(1)` and replies by MIME (`html/pdf/ps/md/txt`) |
+| Static assets (`/static/*`) | Dynamic prefix (`/static/`) | `static_handler()` blocks traversal (`..`, `//`), resolves MIME by extension, then streams through `http_send_file()` |
+| Favicon (`/favicon.ico`) | Exact `GET` | `favicon_handler()` serves `{static_dir}/assets/favicon.svg` as `image/svg+xml` |
+
+> Note: only `GET` routes are registered. Unsupported methods typically fall through to `404` (not `405`) because routing is method+path exact match.
+
 ### Web Interface
 
 | Endpoint | Description |
@@ -162,6 +187,28 @@ To remove a page, remove the corresponding `view_routes[]` entry and rebuild.
 | `GET /man/{area}/{section}/{page}.txt` | ASCII text |
 
 Rendered manual pages are cached for reuse under `static/man/{area}/{section}/{page}.{format}` (absolute path: `{static_dir}/man/{area}/{section}/{page}.{format}` where `static_dir` comes from config).
+
+## Caching facilities (implemented)
+
+MiniWeb currently uses three distinct caches:
+
+1. **Template cache (`template_engine.c`)**
+   - Preloaded once at startup by `template_cache_init()` by reading every regular file under `templates_dir`.
+   - Rendering looks up template fragments in memory and duplicates strings per request.
+   - No TTL/invalidation; refresh requires process restart.
+
+2. **In-memory static file cache (`http_handler.c`)**
+   - Fixed-size cache with `FILE_CACHE_SLOTS=32` and per-object max payload `FILE_CACHE_MAX_BYTES=256 KiB`.
+   - Admission is **two-hit**: first hit enters candidate table, second hit allows insertion.
+   - Insertion is **rate-limited** by token budget (`FILE_CACHE_INSERTS_PER_SEC=8`).
+   - Both cache entries and candidates are evicted by age (`FILE_CACHE_MAX_AGE_SEC=120`).
+   - Validation key is `(path, mtime)`; stale-on-disk changes invalidate hits automatically when mtime differs.
+
+3. **On-disk man render cache (`man.c`)**
+   - Cache path: `{static_dir}/man/{area}/{section}/{page}.{format}`.
+   - Supported cached formats: `html`, `txt`, `md`, `ps`, `pdf`.
+   - Request flow checks the cache first; on miss it renders via `mandoc`, writes cache file, then prefers serving back through static-file path.
+   - Cached man files can also benefit from the in-memory static cache after repeated access.
 
 ### Static Files
 
@@ -596,12 +643,13 @@ make DEBUG=1
 
 ## Roadmap
 
-- [ ] WebSocket support for live metric streaming
-- [ ] Historical data with ring-buffer storage and graphs
-- [ ] Alert thresholds and notifications
-- [ ] IPv6 support
-- [ ] Prometheus exporter endpoint
-- [ ] Port to FreeBSD / NetBSD
+- [ ] Add explicit method handling (`405 Method Not Allowed` + `Allow`) for non-GET requests on known paths.
+- [ ] Add conditional HTTP caching support (`ETag`/`If-None-Match`, `Last-Modified`/`If-Modified-Since`) for static and cached man assets.
+- [ ] Add cache observability counters (static cache hit/miss/admission/eviction and man cache hit/miss) under `/api/metrics`.
+- [ ] Add live streaming endpoint for metrics updates (SSE or WebSocket) to reduce polling overhead.
+- [ ] Add IPv6 listener and dual-stack configuration.
+- [ ] Add Prometheus-compatible export endpoint.
+- [ ] Evaluate portability layer for FreeBSD/NetBSD route + metrics collection.
 
 ## License
 
@@ -642,6 +690,8 @@ internal per-connection cap of 64 requests.
 MiniWeb originally used `libmicrohttpd`, then was rewritten in early 2026 around native `kqueue(2)` + `EV_DISPATCH` workers. This removed the external dependency and improved measured static throughput from ~7,000 req/s to over **23,000 req/s** (~+228%, measured with `wrk` at 32 concurrent connections on a four-core system).
 
 The configuration file system (`miniweb.conf`) was added afterward to replace hardcoded runtime values.
+
+Recent runtime-path improvements also added pooled response objects, two-hit/rate-limited/age-evicted static-file memory caching, and on-disk manpage render reuse under `static/man/...`.
 
 ## Authors
 

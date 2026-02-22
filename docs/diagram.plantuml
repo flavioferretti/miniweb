@@ -19,14 +19,14 @@ skinparam component {
 ' =========================
 package "<&layers*1> Project functions" #EAF4FF {
   component "main.c\n(queue_*, worker_thread,\nconnection slab/free-stack, main)" as Main #A8D8FF
-  component "http_handler.c\n(http_response_* pool,\nfile cache admission/eviction, http_send_*)" as HTTP #9ED9FF
+  component "http_handler.c\n(http_response_* pool,\nhttp_send_file with memory cache,\nhttp_send_error/http_render_template)" as HTTP #9ED9FF
   component "urls.c\n(init_routes, route_match,\nregister_route, find_view_route)" as URLS #B8E0FF
   component "routes.c\n(view/static/favicon handlers,\nrender_template_response)" as Routes #C4E8FF
   component "metrics.c\n(get_system_metrics_json, metrics_*)" as Metrics #D6EFFF
   component "networking.c\n(networking_get_*, networking_*_handler)" as Net #CFE6FF
-  component "man.c\n(man_api_handler, man_render_handler)" as Man #E3F2FF
+  component "man.c\n(man_api_handler, man_render_handler,\non-disk man cache)" as Man #E3F2FF
   component "pkg_manager.c\n(pkg_*_json, pkg_api_handler)" as Pkg #D9F7FF
-  component "template_engine.c\n(template_render*)" as Template #FFF2B2
+  component "template_engine.c\n(template cache preload +\ntemplate_render*)" as Template #FFF2B2
   component "http_utils.c\n(json_escape_string, safe_popen_read*)" as Utils #FFE6B2
   component "conf.c\n(conf_defaults/load/dump)" as Conf #DFF7E2
 }
@@ -131,12 +131,32 @@ note right of Main
 end note
 
 note right of HTTP
-  Cache/pool strategy:
-  FILE_CACHE_SLOTS=32
-  FILE_CACHE_MAX_BYTES=256KiB
-  FILE_CACHE_INSERTS_PER_SEC=8
-  FILE_CACHE_MAX_AGE_SEC=120s
-  response pool=256 objects
+  In-memory static cache:
+  - 32 slots, 256KiB/object max
+  - 2-hit admission candidate table
+  - insertion token budget: 8/sec
+  - age eviction: 120s entries/candidates
+  Response pool: 256 objects
+end note
+
+note bottom of URLS
+  Route resolution order:
+  1) exact registered routes
+  2) /man/... (GET)
+  3) /api/man...
+  4) /api/packages...
+  5) /static/...
+end note
+
+note right of Man
+  Persistent render cache path:
+  {static_dir}/man/{area}/{section}/{page}.{fmt}
+  Cached formats: html/txt/md/ps/pdf
+end note
+
+note right of Template
+  templates_dir files are preloaded
+  at startup by template_cache_init()
 end note
 
 ' ----------------------
