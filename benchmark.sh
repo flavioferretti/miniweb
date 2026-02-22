@@ -8,9 +8,9 @@ set -eu
 
 SERVER_PORT="${SERVER_PORT:-3000}"
 BASE_URL="http://localhost:${SERVER_PORT}"
-TEST_DURATION="${TEST_DURATION:-10}"
+TEST_DURATION="${TEST_DURATION:-20}"
 THREADS="${THREADS:-4}"
-CONNECTIONS="${CONNECTIONS:-5 100}"
+CONNECTIONS="${CONNECTIONS:-4 8 16 32 64 128 256}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-static}"
 ASSETS_DIR="${OUTPUT_ROOT}/benchmark_assets"
 TIMESTAMP="$(date '+%Y-%m-%d %H:%M:%S')"
@@ -127,6 +127,7 @@ while [ "$i" -lt "$total_endpoints" ]; do
     name="${ENDPOINT_NAMES[$i]}"
     url="${ENDPOINT_URLS[$i]}"
     safe_name="$(printf '%s' "$id" | tr '[:upper:]' '[:lower:]')"
+    sleep 5 ## cpu cooling pause
 
     printf '\n▶ Testing: %s\n' "$name"
     printf '  URL: %s\n' "${BASE_URL}${url}"
