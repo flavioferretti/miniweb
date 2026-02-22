@@ -56,10 +56,18 @@ wait_fd_writable(int fd)
 
 	for (;;) {
 		int rc = poll(&pfd, 1, WRITE_WAIT_MS);
-		if (rc > 0)
-			return 0;
+		if (rc > 0) {
+			if (pfd.revents & POLLOUT)
+				return 0;
+			if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL))
+				return -1;
+			continue;
+		}
+
+		/* Timeout: fail fast so write paths can bubble the error instead of
+		 * blocking each asset request for many retry intervals. */
 		if (rc == 0)
-			return -1;
+			return 0;
 		if (errno == EINTR)
 			continue;
 		return -1;
@@ -142,7 +150,7 @@ file_cache_evict_stale_locked(time_t now)
 			continue;
 		if ((now - file_cache_candidates[i].atime) > FILE_CACHE_MAX_AGE_SEC)
 			memset(&file_cache_candidates[i], 0,
-			       sizeof(file_cache_candidates[i]));
+				   sizeof(file_cache_candidates[i]));
 	}
 }
 
@@ -178,7 +186,7 @@ file_cache_admit_locked(const char *path, time_t now)
 		return 0;
 
 	strlcpy(file_cache_candidates[slot].path, path,
-		sizeof(file_cache_candidates[slot].path));
+			sizeof(file_cache_candidates[slot].path));
 	file_cache_candidates[slot].hits = 1;
 	file_cache_candidates[slot].atime = now;
 	return 0;
@@ -193,7 +201,7 @@ file_cache_admit_locked(const char *path, time_t now)
  */
 static void
 file_cache_store(const char *path, const struct stat *st, const char *data,
-		 size_t len)
+				 size_t len)
 {
 	if (!path || !st || !data || len == 0 || len > FILE_CACHE_MAX_BYTES)
 		return;
@@ -234,7 +242,7 @@ file_cache_store(const char *path, const struct stat *st, const char *data,
 		if (file_cache[slot].data) {
 			memcpy(file_cache[slot].data, data, len);
 			strlcpy(file_cache[slot].path, path,
-				sizeof(file_cache[slot].path));
+					sizeof(file_cache[slot].path));
 			file_cache[slot].len = len;
 			file_cache[slot].mtime = st->st_mtime;
 			file_cache[slot].atime = now;
@@ -256,12 +264,12 @@ file_cache_store(const char *path, const struct stat *st, const char *data,
  */
 static int
 file_cache_lookup(const char *path, const struct stat *st, char **out,
-		  size_t *out_len)
+				  size_t *out_len)
 {
 	int found = 0;
 
 	if (!path || !st || !out || !out_len || st->st_size <= 0 ||
-	    (size_t)st->st_size > FILE_CACHE_MAX_BYTES)
+		(size_t)st->st_size > FILE_CACHE_MAX_BYTES)
 		return 0;
 
 	pthread_mutex_lock(&file_cache_lock);
@@ -273,16 +281,16 @@ file_cache_lookup(const char *path, const struct stat *st, char **out,
 		if (file_cache[i].path[0] == '\0')
 			continue;
 		if (strcmp(file_cache[i].path, path) == 0 &&
-		    file_cache[i].mtime == st->st_mtime) {
+			file_cache[i].mtime == st->st_mtime) {
 			*out = malloc(file_cache[i].len);
-			if (*out) {
-				memcpy(*out, file_cache[i].data, file_cache[i].len);
-				*out_len = file_cache[i].len;
-				file_cache[i].atime = now;
-				found = 1;
-			}
-			break;
+		if (*out) {
+			memcpy(*out, file_cache[i].data, file_cache[i].len);
+			*out_len = file_cache[i].len;
+			file_cache[i].atime = now;
+			found = 1;
 		}
+		break;
+			}
 	}
 	pthread_mutex_unlock(&file_cache_lock);
 
@@ -341,7 +349,7 @@ http_response_set_status(http_response_t *resp, int code)
  */
 void
 http_response_set_body(http_response_t *resp, char *body, size_t len,
-		       int must_free)
+					   int must_free)
 {
 	resp->body = body;
 	resp->body_len = len; /* CRITICAL: use exact length, not strlen() */
@@ -357,11 +365,11 @@ http_response_set_body(http_response_t *resp, char *body, size_t len,
  */
 void
 http_response_add_header(http_response_t *resp, const char *name,
-		 const char *value)
+						 const char *value)
 {
 	int len = snprintf(resp->headers + resp->headers_len,
-			   sizeof(resp->headers) - resp->headers_len,
-			   "%s: %s\r\n", name, value);
+					   sizeof(resp->headers) - resp->headers_len,
+					   "%s: %s\r\n", name, value);
 	if (len > 0) {
 		resp->headers_len += len;
 	}
@@ -482,12 +490,12 @@ int http_response_send(http_request_t *req, http_response_t *resp)
 						  "HTTP/1.1 %d %s\r\n"
 						  "Content-Type: %s\r\n"
 						  "Content-Length: %zu\r\n"
-					  "Connection: %s\r\n"
-					  "Server: MiniWeb/kqueue\r\n",
-				   resp->status_code, status_text,
-				   resp->content_type,
-				   resp->body_len,
-				   req->keep_alive ? "keep-alive" : "close");
+						  "Connection: %s\r\n"
+						  "Server: MiniWeb/kqueue\r\n",
+					   resp->status_code, status_text,
+					   resp->content_type,
+					   resp->body_len,
+					   req->keep_alive ? "keep-alive" : "close");
 
 	/* Append custom headers if they fit */
 	if (resp->headers_len > 0) {
@@ -536,7 +544,7 @@ http_response_free(http_response_t *resp)
 		return;
 
 	/* If free_body is 1, release the allocated body buffer (for example
-	  * from fread). */
+	 * from fread). */
 	if (resp->free_body && resp->body) {
 		free(resp->body);
 	}
@@ -624,7 +632,7 @@ http_request_get_client_ip(http_request_t *req)
 	if (forwarded && forwarded[0]) {
 		const char *comma = strchr(forwarded, ',');
 		size_t len =
-		    comma ? (size_t)(comma - forwarded) : strlen(forwarded);
+		comma ? (size_t)(comma - forwarded) : strlen(forwarded);
 		if (len >= sizeof(req->ip_scratch))
 			len = sizeof(req->ip_scratch) - 1;
 		memcpy(req->ip_scratch, forwarded, len);
@@ -634,7 +642,7 @@ http_request_get_client_ip(http_request_t *req)
 
 	/* Fall back to socket peer address */
 	inet_ntop(AF_INET, &req->client_addr->sin_addr, req->ip_scratch,
-		  sizeof(req->ip_scratch));
+			  sizeof(req->ip_scratch));
 	return req->ip_scratch;
 }
 
@@ -666,18 +674,18 @@ http_send_error(http_request_t *req, int status_code, const char *message)
 	int body_len;
 
 	body_len = snprintf(
-	    body, sizeof(body),
-	    "<!DOCTYPE html><html><head>"
-	    "<meta charset=\"UTF-8\">"
-	    "<title>%d Error</title>"
-	    "<link rel=\"stylesheet\" href=\"/static/css/custom.css\">"
-	    "</head><body>"
-		"<div class=\"container\">"
-	    "<h1>%d Error</h1>"
-	    "<p>%s</p>"
-	    "<hr><p><a href=\"/\">MiniWeb</a> on OpenBSD</p></div>"
-	    "</body></html>",
-	    status_code, status_code, message ? message : "An error occurred");
+		body, sizeof(body),
+						"<!DOCTYPE html><html><head>"
+						"<meta charset=\"UTF-8\">"
+						"<title>%d Error</title>"
+						"<link rel=\"stylesheet\" href=\"/static/css/custom.css\">"
+						"</head><body>"
+						"<div class=\"container\">"
+						"<h1>%d Error</h1>"
+						"<p>%s</p>"
+						"<hr><p><a href=\"/\">MiniWeb</a> on OpenBSD</p></div>"
+						"</body></html>",
+					 status_code, status_code, message ? message : "An error occurred");
 
 	http_response_t *resp = http_response_create();
 	if (!resp)
@@ -825,7 +833,7 @@ http_send_file(http_request_t *req, const char *path, const char *mime)
  */
 int
 http_render_template(http_request_t *req, struct template_data *data,
-	     const char *fallback_template)
+					 const char *fallback_template)
 {
 	char *output = NULL;
 
@@ -833,13 +841,13 @@ http_render_template(http_request_t *req, struct template_data *data,
 	if (template_render_with_data(data, &output) != 0) {
 		/* If that fails and page content exists, try basic rendering. */
 		if (data->page_content &&
-		    template_render(data->page_content, &output) != 0) {
+			template_render(data->page_content, &output) != 0) {
 			/* If all rendering paths fail, use fallback or return 500. */
 			return http_send_error(
-			    req, 500,
-			    fallback_template ? fallback_template
-				      : "Template rendering failed");
-		}
+				req, 500,
+				fallback_template ? fallback_template
+				: "Template rendering failed");
+			}
 	}
 
 	http_response_t *resp = http_response_create();
