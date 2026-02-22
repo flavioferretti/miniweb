@@ -82,8 +82,9 @@
         lineColor : '#1d4ed8',
         maxPoints : 120,
         fontSize  : 12,
-        dotRadius : 3,          // set 0 to disable dots
+        dotRadius : 0,          // circles disabled by default
         dotThreshold: 150,      // dots drawn only when data.length < dotThreshold
+        smoothLines : true,
         padding     : { top: 44, right: 28, bottom: 52, left: 62 },
         fillOpacity : 0.35,
         xFormatter  : null          // optional function(x) => string for X tick labels
@@ -285,6 +286,31 @@
         return { min: min, max: max };
     }
 
+    function drawSmoothPath(ctx, points, tension) {
+        if (!points || !points.length) return;
+        if (points.length === 1) {
+            ctx.moveTo(points[0].x, points[0].y);
+            return;
+        }
+
+        var t = Math.max(0, Math.min(0.5, tension || 0.22));
+        ctx.moveTo(points[0].x, points[0].y);
+
+        for (var i = 0; i < points.length - 1; i++) {
+            var p0 = points[i - 1] || points[i];
+            var p1 = points[i];
+            var p2 = points[i + 1];
+            var p3 = points[i + 2] || p2;
+
+            var cp1x = p1.x + (p2.x - p0.x) * t;
+            var cp1y = p1.y + (p2.y - p0.y) * t;
+            var cp2x = p2.x - (p3.x - p1.x) * t;
+            var cp2y = p2.y - (p3.y - p1.y) * t;
+
+            ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+        }
+    }
+
     /* ─────────────────────────────────────────
      * Internal — main draw routine
      * ───────────────────────────────────────── */
@@ -345,6 +371,11 @@
         }
         ctx.restore();
 
+        var points = [];
+        for (var pi = 0; pi < data.length; pi++) {
+            points.push({ x: xPx(pi), y: yPx(data[pi].y) });
+        }
+
         /* ── area fill ── */
         ctx.save();
         var grad = ctx.createLinearGradient(0, T, 0, B);
@@ -356,11 +387,14 @@
         ctx.fillStyle = grad;
 
         ctx.beginPath();
-        ctx.moveTo(xPx(0), yPx(data[0].y));
-        for (var i = 1; i < data.length; i++)
-            ctx.lineTo(xPx(i), yPx(data[i].y));
-        ctx.lineTo(xPx(data.length - 1), B);
-        ctx.lineTo(xPx(0), B);
+        if (cfg.smoothLines && points.length > 2) drawSmoothPath(ctx, points, 0.2);
+        else {
+            ctx.moveTo(points[0].x, points[0].y);
+            for (var i = 1; i < points.length; i++)
+                ctx.lineTo(points[i].x, points[i].y);
+        }
+        ctx.lineTo(points[points.length - 1].x, B);
+        ctx.lineTo(points[0].x, B);
         ctx.closePath();
         ctx.fill();
         ctx.restore();
@@ -372,9 +406,12 @@
         ctx.lineJoin    = 'round';
         ctx.lineCap     = 'round';
         ctx.beginPath();
-        ctx.moveTo(xPx(0), yPx(data[0].y));
-        for (var j = 1; j < data.length; j++)
-            ctx.lineTo(xPx(j), yPx(data[j].y));
+        if (cfg.smoothLines && points.length > 2) drawSmoothPath(ctx, points, 0.2);
+        else {
+            ctx.moveTo(points[0].x, points[0].y);
+            for (var j = 1; j < points.length; j++)
+                ctx.lineTo(points[j].x, points[j].y);
+        }
         ctx.stroke();
         ctx.restore();
 

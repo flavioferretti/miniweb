@@ -40,7 +40,6 @@
     --flvc-grid        : rgba(100, 116, 139, 0.14);
     --flvc-axis        : #334155;
     --flvc-label       : #64748b;
-    --flvc-dot-fill    : #ffffff;
 }
 
 :root[data-theme='dark'] {
@@ -54,7 +53,6 @@
     --flvc-grid        : rgba(148, 163, 184, 0.24);
     --flvc-axis        : #94a3b8;
     --flvc-label       : #94a3b8;
-    --flvc-dot-fill    : #0f172a;
 }
 
 /* ---------------------------------------------
@@ -188,7 +186,6 @@
         --flvc-grid        : rgba(148, 163, 184, 0.24);
         --flvc-axis        : #94a3b8;
         --flvc-label       : #94a3b8;
-        --flvc-dot-fill    : #0f172a;
     }
 }
 
@@ -208,7 +205,6 @@
     --flvc-grid        : rgba(148, 163, 184, 0.24);
     --flvc-axis        : #94a3b8;
     --flvc-label       : #94a3b8;
-    --flvc-dot-fill    : #0f172a;
 }
 
 .flvchart-dark .flvchart-canvas {
