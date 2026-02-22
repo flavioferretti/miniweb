@@ -524,7 +524,7 @@ char *
 networking_get_json(void)
 {
 	NetworkingSample sample;
-	NetworkingSample history[120];
+	NetworkingSample *history = NULL;
 	size_t history_count = 0;
 	char *json = NULL;
 	size_t json_size = NETWORK_JSON_BUFFER_SIZE;
@@ -533,16 +533,23 @@ networking_get_json(void)
 	char timestamp[64];
 	struct tm *tm_ptr;
 
+	history = calloc(120, sizeof(*history));
+	if (!history) {
+		LOG("Failed to allocate networking history buffer");
+		return NULL;
+	}
+
 	(void)pthread_once(&g_networking_once, networking_ring_bootstrap);
 	if (!networking_ring_last(&g_networking_ring, &sample))
 		networking_collect_sample(&sample);
 	history_count = networking_ring_last_n(&g_networking_ring,
-		sizeof(history) / sizeof(history[0]), history);
+		120, history);
 
 	/* Allocate JSON buffer */
 	json = malloc(json_size);
 	if (!json) {
 		LOG("Failed to allocate JSON buffer");
+		free(history);
 		return NULL;
 	}
 
@@ -626,6 +633,7 @@ networking_get_json(void)
 
 	offset += snprintf(json + offset, json_size - offset, "}");
 
+	free(history);
 	return json;
 }
 
