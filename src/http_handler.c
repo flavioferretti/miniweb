@@ -25,8 +25,8 @@
 #define FILE_CACHE_MAX_AGE_SEC 120
 
 typedef struct {
-	http_response_t items[256];
-	int free_stack[256];
+	http_response_t items[1024];
+	int free_stack[1024];
 	int free_top;
 	pthread_mutex_t lock;
 	int initialized;
@@ -91,9 +91,9 @@ response_pool_init_locked(void)
 	if (response_pool.initialized)
 		return;
 
-	response_pool.free_top = 256;
-	for (int i = 0; i < 256; i++)
-		response_pool.free_stack[i] = 255 - i;
+	response_pool.free_top = 1024;
+	for (int i = 0; i < 1024; i++)
+		response_pool.free_stack[i] = 1023 - i;
 	response_pool.initialized = 1;
 }
 
@@ -297,8 +297,11 @@ http_response_create(void)
 	}
 	pthread_mutex_unlock(&response_pool.lock);
 
-	if (!resp)
-		return NULL;
+	if (!resp) {
+		resp = calloc(1, sizeof(*resp));
+		if (!resp)
+			return NULL;
+	}
 
 	resp->status_code = 200;
 	resp->content_type = "text/html; charset=utf-8";
@@ -525,10 +528,10 @@ http_response_free(http_response_t *resp)
 	}
 
 	ptrdiff_t idx = resp - response_pool.items;
-	if (idx >= 0 && idx < 256) {
+	if (idx >= 0 && idx < 1024) {
 		pthread_mutex_lock(&response_pool.lock);
 		memset(resp, 0, sizeof(*resp));
-		if (response_pool.free_top < 256)
+		if (response_pool.free_top < 1024)
 			response_pool.free_stack[response_pool.free_top++] = (int)idx;
 		pthread_mutex_unlock(&response_pool.lock);
 		return;
@@ -663,6 +666,8 @@ http_send_error(http_request_t *req, int status_code, const char *message)
 	    status_code, status_code, message ? message : "An error occurred");
 
 	http_response_t *resp = http_response_create();
+	if (!resp)
+		return -1;
 	http_response_set_status(resp, status_code);
 	http_response_set_body(resp, body, body_len, 0);
 
