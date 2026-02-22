@@ -49,6 +49,9 @@ static void append_process_json_sections(char *top_cpu_json,
 	char *proc_stats_json,
 	size_t proc_stats_json_size);
 
+/**
+ * @brief Internal data structure.
+ */
 typedef struct {
 	int64_t ts;
 	float cpu;
@@ -61,6 +64,9 @@ typedef struct {
 	uint32_t net_tx;
 } MetricSample;
 
+/**
+ * @brief Internal data structure.
+ */
 typedef struct {
 	MetricSample *buf;
 	size_t head;
