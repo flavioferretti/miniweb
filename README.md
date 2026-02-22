@@ -83,6 +83,7 @@ Open <http://127.0.0.1:9001>.
   -b ADDR   Address to bind to       (default: 127.0.0.1)
   -t NUM    Worker thread count      (default: 4)
   -c NUM    Max concurrent conns     (default: 1280)
+  -l FILE   Log file path             (default: stderr)
   -v        Verbose logging to stderr
   -h        Show this help
 ```
@@ -559,6 +560,7 @@ miniweb -f /etc/miniweb.conf
 miniweb -f /etc/miniweb.conf -p 8080
 miniweb -b 0.0.0.0 -p 8080 -t 8
 miniweb -b 127.0.0.1 -p 9001 -c 1280 -t 4
+miniweb -l /var/log/miniweb.log -v
 curl -s http://127.0.0.1:9001/api/metrics | jq .
 ```
 

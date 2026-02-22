@@ -94,6 +94,14 @@ See
 for the file format and default search order.
 .It Fl h
 Print a usage summary and exit.
+.It Fl l Ar file
+Write runtime logs to
+.Ar file
+in append mode.
+By default, logs are written to standard error.
+This overrides
+.Cm log_file
+from the configuration file.
 .It Fl p Ar port
 Listen on the specified TCP port.
 The default is
@@ -960,6 +968,11 @@ Production configuration behind
 with the maximum connection limit:
 .Bd -literal -offset indent
 $ miniweb -b 127.0.0.1 -p 9001 -c 1280 -t 4
+.Ed
+.Pp
+Write logs to a file for service-style runs:
+.Bd -literal -offset indent
+$ miniweb -l /var/log/miniweb.log -v
 .Ed
 .Pp
 Query the metrics endpoint:

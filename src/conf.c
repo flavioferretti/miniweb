@@ -304,12 +304,14 @@ conf_load(const char *explicit_path, miniweb_conf_t *conf)
  * @param cli_bind Bind address override value.
  * @param cli_threads Worker thread count override value.
  * @param cli_max_conns Maximum concurrent connections override value.
+ * @param cli_log_file Log file path override value.
  * @param cli_verbose Non-zero to force verbose logging.
  */
 void
 conf_apply_cli(miniweb_conf_t *conf,
                int cli_port, const char *cli_bind,
                int cli_threads, int cli_max_conns,
+               const char *cli_log_file,
                int cli_verbose)
 {
     if (cli_port    > 0)    conf->port           = cli_port;
@@ -317,6 +319,8 @@ conf_apply_cli(miniweb_conf_t *conf,
         sizeof(conf->bind_addr));
     if (cli_threads > 0)    conf->threads        = cli_threads;
     if (cli_max_conns > 0)  conf->max_conns      = cli_max_conns;
+    if (cli_log_file)       strlcpy(conf->log_file, cli_log_file,
+        sizeof(conf->log_file));
     if (cli_verbose)        conf->verbose        = 1;
 }
 
