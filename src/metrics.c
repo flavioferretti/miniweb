@@ -24,6 +24,7 @@
 #include "../include/config.h"
 #include "../include/http_handler.h"
 #include "../include/http_utils.h"
+#include "../include/log.h"
 
 #define JSON_BUFFER_SIZE 65536
 #define MB (1024 * 1024)
@@ -33,13 +34,11 @@
 
 
 /* Logging macro controlled by global configuration. */
-#define LOG(...)                                            \
-do {                                                        \
-	if (config_verbose) {                                   \
-		fprintf(stderr, "[METRICS] " __VA_ARGS__);          \
-		fprintf(stderr, "\n");                              \
-	}                                                       \
-} while (0)
+#define LOG(...)                            \
+ do {                                      \
+	if (config_verbose)                     \
+		log_debug("[METRICS] " __VA_ARGS__); \
+ } while (0)
 
 
 static struct kinfo_proc *get_procs_snapshot(size_t *nprocs);

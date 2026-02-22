@@ -20,6 +20,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "../include/log.h"
+
 /* -- Helpers ---------------------------------------------------------------- */
 
 /* Trim leading whitespace in-place; return pointer to first non-space char. */
@@ -89,6 +91,7 @@ conf_defaults(miniweb_conf_t *conf)
     conf->max_req_size   = 16384;
     conf->mandoc_timeout = 10;
     conf->verbose        = 0;
+    conf->log_file[0]    = '\0';
 
     strlcpy(conf->bind_addr,     "127.0.0.1",         sizeof(conf->bind_addr));
     strlcpy(conf->static_dir,    "static",             sizeof(conf->static_dir));
@@ -163,8 +166,7 @@ parse_file(FILE *f, const char *path, miniweb_conf_t *conf)
         char val[CONF_STR_MAX] = {0};
 
         if (sscanf(p, "%63s %255[^\n]", key, val) < 2) {
-            fprintf(stderr, "%s:%d: missing value for key '%s'\n",
-                    path, lineno, key);
+            log_error("%s:%d: missing value for key '%s'", path, lineno, key);
             errors++;
             continue;
         }
@@ -181,8 +183,7 @@ parse_file(FILE *f, const char *path, miniweb_conf_t *conf)
             if (strcasecmp(key, name) == 0) { \
                 int _v; \
                 if (parse_int(val, &_v, lo, hi) != 0) { \
-                    fprintf(stderr, "%s:%d: invalid value for '%s': %s " \
-                    "(must be %d–%d)\n", path, lineno, key, val, lo, hi); \
+                    log_error("%s:%d: invalid value for '%s': %s (must be %d-%d)", path, lineno, key, val, lo, hi); \
                     errors++; \
                 } else { conf->field = _v; } \
                     continue; \
@@ -199,8 +200,7 @@ parse_file(FILE *f, const char *path, miniweb_conf_t *conf)
                         strcmp(val, "0") == 0) \
                         conf->field = 0; \
                         else { \
-                            fprintf(stderr, "%s:%d: invalid boolean for '%s': %s\n", \
-                            path, lineno, key, val); \
+                            log_error("%s:%d: invalid boolean for '%s': %s", path, lineno, key, val); \
                             errors++; \
                         } \
                         continue; \
@@ -229,14 +229,14 @@ parse_file(FILE *f, const char *path, miniweb_conf_t *conf)
 
             /* Logging */
             KBOOL("verbose",         verbose)
+            KSTR ("log_file",        log_file)
 
             #undef KSTR
             #undef KINT
             #undef KBOOL
 
             /* Unknown key */
-            fprintf(stderr, "%s:%d: unknown key '%s' (ignored)\n",
-                    path, lineno, key);
+            log_error("%s:%d: unknown key '%s' (ignored)", path, lineno, key);
     }
 
     return errors ? -1 : 0;
@@ -260,8 +260,7 @@ conf_load(const char *explicit_path, miniweb_conf_t *conf)
     if (explicit_path) {
         f = try_open(explicit_path);
         if (!f) {
-            fprintf(stderr, "conf: cannot open '%s': %s\n",
-                    explicit_path, strerror(errno));
+            log_error("conf: cannot open '%s': %s", explicit_path, strerror(errno));
             return -1;   /* explicit path failing IS fatal */
         }
         used = explicit_path;
@@ -291,7 +290,7 @@ conf_load(const char *explicit_path, miniweb_conf_t *conf)
     if (!f)
         return 0;
 
-    fprintf(stderr, "conf: loading %s\n", used);
+    log_info("conf: loading %s", used);
     int rc = parse_file(f, used, conf);
     fclose(f);
     return rc;
@@ -327,30 +326,18 @@ conf_apply_cli(miniweb_conf_t *conf,
 void
 conf_dump(const miniweb_conf_t *conf)
 {
-    fprintf(stderr,
-            "conf: active configuration:\n"
-            "  port            %d\n"
-            "  bind            %s\n"
-            "  threads         %d\n"
-            "  max_conns       %d\n"
-            "  conn_timeout    %d s\n"
-            "  max_req_size    %d bytes\n"
-            "  mandoc_timeout  %d s\n"
-            "  static_dir      %s\n"
-            "  templates_dir   %s\n"
-            "  mandoc_path     %s\n"
-            "  trusted_proxy   %s\n"
-            "  verbose         %s\n",
-            conf->port,
-            conf->bind_addr,
-            conf->threads,
-            conf->max_conns,
-            conf->conn_timeout,
-            conf->max_req_size,
-            conf->mandoc_timeout,
-            conf->static_dir,
-            conf->templates_dir,
-            conf->mandoc_path,
-            conf->trusted_proxy,
-            conf->verbose ? "yes" : "no");
+    log_info("conf: active configuration");
+    log_info("  port            %d", conf->port);
+    log_info("  bind            %s", conf->bind_addr);
+    log_info("  threads         %d", conf->threads);
+    log_info("  max_conns       %d", conf->max_conns);
+    log_info("  conn_timeout    %d s", conf->conn_timeout);
+    log_info("  max_req_size    %d bytes", conf->max_req_size);
+    log_info("  mandoc_timeout  %d s", conf->mandoc_timeout);
+    log_info("  static_dir      %s", conf->static_dir);
+    log_info("  templates_dir   %s", conf->templates_dir);
+    log_info("  mandoc_path     %s", conf->mandoc_path);
+    log_info("  trusted_proxy   %s", conf->trusted_proxy);
+    log_info("  verbose         %s", conf->verbose ? "yes" : "no");
+    log_info("  log_file        %s", conf->log_file[0] ? conf->log_file : "(stderr)");
 }

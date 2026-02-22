@@ -74,3 +74,5 @@ port 9001
 #Equivalent to the - v flag.
 #Accepted values : yes / no / true / false / 1 / 0
     verbose no
+
+log_file miniweb.log

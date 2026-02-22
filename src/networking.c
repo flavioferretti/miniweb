@@ -26,6 +26,7 @@
 #include "../include/template_engine.h"
 #include "../include/config.h"
 #include "../include/http_handler.h"
+#include "../include/log.h"
 
 #ifndef SA_SIZE
 #define SA_SIZE(sa)                                                   \
@@ -34,13 +35,11 @@
 
 /* Verbose logging */
 extern int config_verbose;
-#define LOG(...)                                            \
-do {                                                        \
-	if (config_verbose) {                                   \
-		fprintf(stderr, "[NETWORK] " __VA_ARGS__);          \
-		fprintf(stderr, "\n");                              \
-	}                                                       \
-} while (0)
+#define LOG(...)                            \
+ do {                                      \
+	if (config_verbose)                     \
+		log_debug("[NETWORK] " __VA_ARGS__); \
+ } while (0)
 
 
 /* ========================================================================

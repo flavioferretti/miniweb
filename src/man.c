@@ -14,6 +14,7 @@
 #include "../include/http_utils.h"
 #include "../include/man.h"
 #include "../include/routes.h"
+#include "../include/log.h"
 
 #define MAX_JSON_SIZE (256 * 1024)
 #define MAX_OUTPUT_SIZE (10 * 1024 * 1024) //10 MB!
@@ -800,8 +801,8 @@ man_render_page(const char *area, const char *section, const char *page,
 
 	/* Optional debug logging for PDF output verification. */
 	if (config_verbose && strcmp(format, "pdf") == 0 && output && *out_len > 0) {
-		fprintf(stderr, "[MAN] PDF generated: size=%zu bytes\n", *out_len);
-		fprintf(stderr, "[MAN] PDF signature: %02x %02x %02x %02x\n",
+		log_debug("[MAN] PDF generated: size=%zu bytes", *out_len);
+		log_debug("[MAN] PDF signature: %02x %02x %02x %02x",
 				(unsigned char)output[0], (unsigned char)output[1],
 				(unsigned char)output[2], (unsigned char)output[3]);
 		/* A valid PDF starts with %PDF (25 50 44 46). */
@@ -895,16 +896,16 @@ man_render_handler(http_request_t *req)
 		if (mkdir_p(cache_dir, config_static_dir) == 0) {
 			if (write_file_binary(cache_abs, output, out_len) != 0 &&
 				config_verbose) {
-				fprintf(stderr,
+				log_debug(
 					"[MAN] cache write failed: %s (errno=%d: %s)\n",
 					cache_abs, errno, strerror(errno));
 			} else if (config_verbose) {
-				fprintf(stderr,
+				log_debug(
 					"[MAN] cache write ok: %s (%zu bytes)\n",
 					cache_abs, out_len);
 			}
 		} else if (config_verbose) {
-			fprintf(stderr,
+			log_debug(
 				"[MAN] cache directory create failed: %s (errno=%d: %s)\n",
 				cache_dir, errno, strerror(errno));
 		}
