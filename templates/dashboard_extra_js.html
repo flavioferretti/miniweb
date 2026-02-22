@@ -14,8 +14,20 @@
   let memChart = null;
   let overviewMounted = false;
 
+  const REFRESH_INTERVAL_MS = 4000;
+  const SAMPLING_DELAY_SECONDS = 1;
+  const WINDOW_SECONDS = 3600;
+  const POINT_SECONDS = Math.max(REFRESH_INTERVAL_MS / 1000, SAMPLING_DELAY_SECONDS);
+  const MAX_WINDOW_POINTS = Math.max(2, Math.floor(WINDOW_SECONDS / POINT_SECONDS));
+
   const mbToGb = (mb) => (mb / 1024).toFixed(1);
   const pct = (n, d) => (d > 0 ? Math.round((n / d) * 100) : 0);
+  const timeLabel = (ts) => {
+    if (!ts) return '--:--';
+    const dt = new Date(Number(ts) * 1000);
+    if (Number.isNaN(dt.getTime())) return '--:--';
+    return dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  };
 
   const panel = (title, body, klass = '') =>
     `<article class="panel stat-card ${klass}"><h3>${title}</h3>${body}</article>`;
@@ -63,15 +75,16 @@
       cpuChart = new flvChart({
         canvas: 'cpuOverviewChart',
         title: 'CPU Usage Timeline',
-        xLabel: 'samples',
+        xLabel: 'time (hh:mm)',
         yLabel: '%',
         minY: 0,
         maxY: 100,
-        maxPoints: 120,
+        maxPoints: MAX_WINDOW_POINTS,
         color: '#2563eb',
         lineColor: '#1d4ed8',
-        xTicks: 6,
+        xTicks: 5,
         yTicks: 4,
+        fillOpacity: 0.3,
         padding: { top: 36, right: 20, bottom: 48, left: 52 },
       });
     }
@@ -80,22 +93,24 @@
       memChart = new flvChart({
         canvas: 'memOverviewChart',
         title: 'Memory Usage Timeline',
-        xLabel: 'samples',
+        xLabel: 'time (hh:mm)',
         yLabel: '%',
         minY: 0,
         maxY: 100,
-        maxPoints: 120,
+        maxPoints: MAX_WINDOW_POINTS,
         color: '#16a34a',
         lineColor: '#15803d',
-        xTicks: 6,
+        xTicks: 5,
         yTicks: 4,
+        fillOpacity: 0.3,
         padding: { top: 36, right: 20, bottom: 48, left: 52 },
       });
     }
 
-    const cpuSeries = history.map((s, idx) => ({ x: idx, y: s.cpu || 0 }));
-    const memSeries = history.map((s, idx) => ({
-      x: idx,
+    const boundedHistory = history.slice(-MAX_WINDOW_POINTS);
+    const cpuSeries = boundedHistory.map((s) => ({ x: timeLabel(s.ts), y: s.cpu || 0 }));
+    const memSeries = boundedHistory.map((s) => ({
+      x: timeLabel(s.ts),
       y: pct(s.mem_used_mb || 0, s.mem_total_mb || 1),
     }));
 
@@ -105,11 +120,6 @@
 
   const mountOverview = () => {
     dashboard.innerHTML = [
-      panel('CPU Usage', '<p class="stat-value" id="overviewCpuValue">-</p><div class="progress"><span id="overviewCpuBar" style="width:0%"></span></div><p class="muted" id="overviewCpuMeta">CPU data unavailable</p>'),
-      panel('Memory', '<p class="stat-value" id="overviewMemValue">-</p><div class="progress"><span id="overviewMemBar" style="width:0%"></span></div><p class="muted" id="overviewMemMeta">-</p>'),
-      panel('Load Average', '<p class="stat-value" id="overviewLoadValue">-</p><p class="muted" id="overviewLoadMeta">-</p>'),
-      panel('Swap', '<p class="stat-value" id="overviewSwapValue">-</p><div class="progress"><span id="overviewSwapBar" style="width:0%"></span></div>'),
-      panel('OS', '<p id="overviewOsValue">Unknown</p><p class="muted" id="overviewOsMeta"></p>'),
       panel('Overview Charts', `
         <div class="chart-grid">
           <div class="flvchart-card">
@@ -124,6 +134,11 @@
           </div>
         </div>
       `, 'chart-panel'),
+      panel('CPU Usage', '<p class="stat-value" id="overviewCpuValue">-</p><div class="progress"><span id="overviewCpuBar" style="width:0%"></span></div><p class="muted" id="overviewCpuMeta">CPU data unavailable</p>'),
+      panel('Memory', '<p class="stat-value" id="overviewMemValue">-</p><div class="progress"><span id="overviewMemBar" style="width:0%"></span></div><p class="muted" id="overviewMemMeta">-</p>'),
+      panel('Load Average', '<p class="stat-value" id="overviewLoadValue">-</p><p class="muted" id="overviewLoadMeta">-</p>'),
+      panel('Swap', '<p class="stat-value" id="overviewSwapValue">-</p><div class="progress"><span id="overviewSwapBar" style="width:0%"></span></div>'),
+      panel('OS', '<p id="overviewOsValue">Unknown</p><p class="muted" id="overviewOsMeta"></p>'),
     ].join('');
     cpuChart = null;
     memChart = null;
@@ -252,6 +267,6 @@
   };
 
   refresh();
-  setInterval(refresh, 4000);
+  setInterval(refresh, REFRESH_INTERVAL_MS);
 })();
 </script>

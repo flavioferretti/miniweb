@@ -84,7 +84,8 @@
         fontSize  : 12,
         dotRadius : 3,          // set 0 to disable dots
         dotThreshold: 150,      // dots drawn only when data.length < dotThreshold
-        padding   : { top: 44, right: 28, bottom: 52, left: 62 }
+        padding   : { top: 44, right: 28, bottom: 52, left: 62 },
+        fillOpacity: 0.35
     };
 
     /* ─────────────────────────────────────────
@@ -326,7 +327,7 @@
         /* ── grid lines ── */
         var yTicks = cfg.yTicks;
         ctx.save();
-        ctx.strokeStyle = 'rgba(100,116,139,0.12)';
+        ctx.strokeStyle = cssVar('--flvc-grid', 'rgba(100,116,139,0.12)');
         ctx.lineWidth   = 1;
         for (var gi = 0; gi <= yTicks; gi++) {
             var gyv = yMin + (gi / yTicks) * (yMax - yMin);
@@ -342,7 +343,9 @@
         /* ── area fill ── */
         ctx.save();
         var grad = ctx.createLinearGradient(0, T, 0, B);
-        grad.addColorStop(0,   hexToRgba(cfg.color, 0.35));
+        var fillOpacity = (cfg.fillOpacity !== undefined) ? cfg.fillOpacity : 0.35;
+        fillOpacity = Math.max(0, Math.min(1, fillOpacity));
+        grad.addColorStop(0,   hexToRgba(cfg.color, fillOpacity));
         grad.addColorStop(0.7, hexToRgba(cfg.color, 0.08));
         grad.addColorStop(1,   hexToRgba(cfg.color, 0.00));
         ctx.fillStyle = grad;
@@ -377,7 +380,7 @@
             for (var d = 0; d < data.length; d++) {
                 ctx.beginPath();
                 ctx.arc(xPx(d), yPx(data[d].y), dr, 0, 2 * Math.PI);
-                ctx.fillStyle   = '#ffffff';
+                ctx.fillStyle   = cssVar('--flvc-dot-fill', '#ffffff');
                 ctx.strokeStyle = cfg.lineColor;
                 ctx.lineWidth   = 1.8;
                 ctx.fill();
@@ -388,7 +391,7 @@
 
         /* ── axes ── */
         ctx.save();
-        ctx.strokeStyle = '#334155';
+        ctx.strokeStyle = cssVar('--flvc-axis', '#334155');
         ctx.lineWidth   = 1.5;
         // Y axis
         ctx.beginPath(); ctx.moveTo(L, T); ctx.lineTo(L, B); ctx.stroke();
@@ -398,11 +401,11 @@
 
         /* ── Y tick labels ── */
         ctx.save();
-        ctx.fillStyle    = '#64748b';
+        ctx.fillStyle    = cssVar('--flvc-label', '#64748b');
         ctx.font         = '500 ' + (cfg.fontSize - 1) + 'px monospace';
         ctx.textAlign    = 'right';
         ctx.textBaseline = 'middle';
-        ctx.strokeStyle  = '#334155';
+        ctx.strokeStyle  = cssVar('--flvc-axis', '#334155');
         ctx.lineWidth    = 1;
         for (var yi = 0; yi <= yTicks; yi++) {
             var yv  = yMin + (yi / yTicks) * (yMax - yMin);
@@ -416,11 +419,11 @@
         /* ── X tick labels ── */
         var xTicks = Math.min(cfg.xTicks, data.length);
         ctx.save();
-        ctx.fillStyle    = '#64748b';
+        ctx.fillStyle    = cssVar('--flvc-label', '#64748b');
         ctx.font         = '500 ' + (cfg.fontSize - 1) + 'px monospace';
         ctx.textAlign    = 'center';
         ctx.textBaseline = 'top';
-        ctx.strokeStyle  = '#334155';
+        ctx.strokeStyle  = cssVar('--flvc-axis', '#334155');
         ctx.lineWidth    = 1;
         for (var xi = 0; xi < xTicks; xi++) {
             var idx  = (xTicks <= 1) ? 0 : Math.round(xi * (data.length - 1) / (xTicks - 1));
@@ -434,7 +437,7 @@
         /* ── title ── */
         if (cfg.title) {
             ctx.save();
-            ctx.fillStyle    = '#0f172a';
+            ctx.fillStyle    = cssVar('--flvc-color-text', '#0f172a');
             ctx.font         = 'bold ' + (cfg.fontSize + 2) + 'px sans-serif';
             ctx.textAlign    = 'center';
             ctx.textBaseline = 'top';
@@ -445,7 +448,7 @@
         /* ── X axis label ── */
         if (cfg.xLabel) {
             ctx.save();
-            ctx.fillStyle    = '#64748b';
+            ctx.fillStyle    = cssVar('--flvc-label', '#64748b');
             ctx.font         = (cfg.fontSize) + 'px sans-serif';
             ctx.textAlign    = 'center';
             ctx.textBaseline = 'bottom';
@@ -456,7 +459,7 @@
         /* ── Y axis label (rotated) ── */
         if (cfg.yLabel) {
             ctx.save();
-            ctx.fillStyle    = '#64748b';
+            ctx.fillStyle    = cssVar('--flvc-label', '#64748b');
             ctx.font         = (cfg.fontSize) + 'px sans-serif';
             ctx.textAlign    = 'center';
             ctx.textBaseline = 'top';
@@ -470,6 +473,15 @@
     /* ─────────────────────────────────────────
      * Utilities
      * ───────────────────────────────────────── */
+
+    function cssVar(name, fallback) {
+        if (typeof window === 'undefined' || !window.getComputedStyle || !document)
+            return fallback;
+        var raw = window.getComputedStyle(document.documentElement).getPropertyValue(name);
+        var value = raw ? raw.trim() : '';
+        return value || fallback;
+    }
+
     function hexToRgba(hex, alpha) {
         // handles #rgb and #rrggbb
         var h = hex.replace('#', '');
