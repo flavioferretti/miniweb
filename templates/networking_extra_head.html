@@ -1,3 +1,4 @@
+  <link rel="stylesheet" type="text/css" href="/static/css/flvChart.css" />
 <style>
 /* Dashboard header */
 .dashboard-header { margin-bottom: 1rem; }
@@ -123,4 +124,19 @@
   overflow-x: auto;
   margin-top: 0.5rem;
 }
+
+.chart-panel { grid-column: 1 / -1; }
+.chart-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+}
+.chart-grid-two {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+}
+.flvchart-canvas {
+  width: 100% !important;
+  height: 220px !important;
+}
+
 </style>

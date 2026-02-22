@@ -1,3 +1,4 @@
+<script src="/static/js/flvChart.js"></script>
 <script>
 (() => {
   const dashboard = document.getElementById('dashboard');
@@ -7,143 +8,167 @@
 
   let currentTab = 'overview';
   let latest = null;
+  let previous = null;
+  const throughputCharts = new Map();
+  let overviewSignature = '';
 
-  const panel = (title, body) => `<article class="panel stat-card"><h3>${title}</h3>${body}</article>`;
+  const REFRESH_INTERVAL_MS = 4000;
+  const WINDOW_SECONDS = 3600;
+  const MAX_WINDOW_POINTS = Math.max(2, Math.floor(WINDOW_SECONDS / (REFRESH_INTERVAL_MS / 1000)));
+
+  const panel = (title, body, klass = '') => `<article class="panel stat-card ${klass}"><h3>${title}</h3>${body}</article>`;
 
   const formatBytes = (bytes) => {
-    if (bytes === 0) return '0 B';
+    if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
     const k = 1024;
     const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    const i = Math.min(sizes.length - 1, Math.floor(Math.log(bytes) / Math.log(k)));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const formatNumber = (num) => {
-    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  };
+  const formatRate = (bytesPerSecond) => `${formatBytes(bytesPerSecond)}/s`;
+
+  const formatNumber = (num) => String(num ?? 0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+  const hasIpv4 = (value) => value && value !== '-' && /^\d{1,3}(?:\.\d{1,3}){3}$/.test(value);
 
   const routeTable = (routes) => {
-    if (!routes || routes.length === 0) {
-      return '<p class="muted">No routes found.</p>';
-    }
-
+    if (!routes || routes.length === 0) return '<p class="muted">No routes found.</p>';
     const headers = `<tr><th>Destination</th><th>Gateway</th><th>Netmask</th><th>Interface</th><th>Flags</th></tr>`;
-    
-    const rows = routes.map(r => `<tr>
-      <td>${r.destination}</td>
-      <td>${r.gateway}</td>
-      <td>${r.netmask}</td>
-      <td><span class="badge badge-info">${r.interface}</span></td>
-      <td>${r.flags}</td>
-    </tr>`).join('');
-
+    const rows = routes.map(r => `<tr><td>${r.destination}</td><td>${r.gateway}</td><td>${r.netmask}</td><td><span class="badge badge-info">${r.interface}</span></td><td>${r.flags}</td></tr>`).join('');
     return `<div class="network-table-wrapper"><table class="network-table">${headers}${rows}</table></div>`;
   };
 
   const dnsInfo = (dns) => {
     if (!dns) return '<p class="muted">No DNS configuration found.</p>';
-
     let html = '<div class="code-block">';
-    
     if (dns.nameservers && dns.nameservers.length > 0) {
       html += '<strong>Nameservers:</strong><br>';
-      dns.nameservers.forEach(ns => {
-        html += `nameserver ${ns}<br>`;
-      });
+      dns.nameservers.forEach(ns => { html += `nameserver ${ns}<br>`; });
     }
-    
-    if (dns.domain) {
-      html += `<br><strong>Domain:</strong> ${dns.domain}<br>`;
-    }
-    
-    if (dns.search) {
-      html += `<strong>Search:</strong> ${dns.search}<br>`;
-    }
-    
+    if (dns.domain) html += `<br><strong>Domain:</strong> ${dns.domain}<br>`;
+    if (dns.search) html += `<strong>Search:</strong> ${dns.search}<br>`;
     html += '</div>';
     return html;
   };
 
   const interfaceStats = (interfaces) => {
-    if (!interfaces || interfaces.length === 0) {
-      return '<p class="muted">No interface statistics available.</p>';
+    if (!interfaces || interfaces.length === 0) return '<p class="muted">No interface statistics available.</p>';
+    const headers = `<tr><th>Interface</th><th>IPv4</th><th>RX Packets</th><th>RX Bytes</th><th>RX Errors</th><th>TX Packets</th><th>TX Bytes</th><th>TX Errors</th></tr>`;
+    const rows = interfaces.map(iface => `<tr><td><span class="badge badge-info">${iface.interface}</span></td><td>${iface.ipv4 || '-'}</td><td>${formatNumber(iface.rx_packets)}</td><td>${formatBytes(iface.rx_bytes)}</td><td>${iface.rx_errors > 0 ? '<span class="badge badge-warning">' + iface.rx_errors + '</span>' : iface.rx_errors}</td><td>${formatNumber(iface.tx_packets)}</td><td>${formatBytes(iface.tx_bytes)}</td><td>${iface.tx_errors > 0 ? '<span class="badge badge-warning">' + iface.tx_errors + '</span>' : iface.tx_errors}</td></tr>`).join('');
+    return `<div class="network-table-wrapper"><table class="network-table">${headers}${rows}</table></div>`;
+  };
+
+  const createThroughputChart = (canvasId, color, yLabel) => new flvChart({
+    canvas: canvasId,
+    title: '',
+    xLabel: 'sample',
+    yLabel,
+    minY: 0,
+    maxPoints: MAX_WINDOW_POINTS,
+    color,
+    xTicks: 4,
+    yTicks: 4,
+    fillOpacity: 0.45,
+    padding: { top: 36, right: 20, bottom: 48, left: 64 },
+  });
+
+  const mountOverview = () => {
+    const ipv4Ifaces = (latest?.interfaces || []).filter((i) => hasIpv4(i.ipv4));
+    const signature = ipv4Ifaces.map((i) => `${i.interface}:${i.ipv4}`).sort().join('|');
+    const summary = panel('Network Summary', `
+      <div class="stats-grid">
+        <div class="stat-box"><div class="label">Routes</div><div class="value">${latest?.routes?.length || 0}</div></div>
+        <div class="stat-box"><div class="label">DNS Servers</div><div class="value">${latest?.dns?.nameservers?.length || 0}</div></div>
+        <div class="stat-box"><div class="label">Interfaces (IPv4)</div><div class="value">${ipv4Ifaces.length}</div></div>
+      </div>`);
+
+    const charts = ipv4Ifaces.length === 0
+      ? panel('Throughput', '<p class="muted">No interfaces with IPv4 addresses found.</p>', 'chart-panel')
+      : panel('Throughput', `<div id="throughputChartGrid" class="chart-grid"></div>`, 'chart-panel');
+
+    if (overviewSignature === signature && dashboard.querySelector('#throughputChartGrid')) {
+      return;
     }
 
-    const headers = `<tr><th>Interface</th><th>IPv4</th><th>RX Packets</th><th>RX Bytes</th><th>RX Errors</th><th>TX Packets</th><th>TX Bytes</th><th>TX Errors</th></tr>`;
-    
-    const rows = interfaces.map(iface => `<tr>
-      <td><span class="badge badge-info">${iface.interface}</span></td>
-      <td>${iface.ipv4 || '-'}</td>
-      <td>${formatNumber(iface.rx_packets)}</td>
-      <td>${formatBytes(iface.rx_bytes)}</td>
-      <td>${iface.rx_errors > 0 ? '<span class="badge badge-warning">' + iface.rx_errors + '</span>' : iface.rx_errors}</td>
-      <td>${formatNumber(iface.tx_packets)}</td>
-      <td>${formatBytes(iface.tx_bytes)}</td>
-      <td>${iface.tx_errors > 0 ? '<span class="badge badge-warning">' + iface.tx_errors + '</span>' : iface.tx_errors}</td>
-    </tr>`).join('');
+    overviewSignature = signature;
+    dashboard.innerHTML = [summary, charts].join('');
 
-    return `<div class="network-table-wrapper"><table class="network-table">${headers}${rows}</table></div>`;
+    if (ipv4Ifaces.length === 0) {
+      throughputCharts.clear();
+      return;
+    }
+
+    const grid = document.getElementById('throughputChartGrid');
+    ipv4Ifaces.forEach((iface) => {
+      const idBase = iface.interface.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const rxCanvasId = `net_${idBase}_rx`;
+      const txCanvasId = `net_${idBase}_tx`;
+
+      const card = document.createElement('div');
+      card.className = 'flvchart-card';
+      card.innerHTML = `<p class="flvchart-title">${iface.interface} (${iface.ipv4})</p>
+        <div class="chart-grid chart-grid-two"><div class="flvchart-wrap"><canvas id="${rxCanvasId}" class="flvchart-canvas" width="700" height="220"></canvas></div><div class="flvchart-wrap"><canvas id="${txCanvasId}" class="flvchart-canvas" width="700" height="220"></canvas></div></div>`;
+      grid.appendChild(card);
+
+      throughputCharts.set(iface.interface, {
+        rx: createThroughputChart(rxCanvasId, '#2563eb', 'RX B/s'),
+        tx: createThroughputChart(txCanvasId, '#dc2626', 'TX B/s'),
+        rxSeries: [],
+        txSeries: [],
+      });
+    });
+  };
+
+  const updateThroughput = () => {
+    if (currentTab !== 'overview' || !latest) return;
+    const now = Number(latest.timestamp_unix || 0);
+    if (!previous || !now) {
+      previous = latest;
+      return;
+    }
+
+    const prevByName = new Map((previous.interfaces || []).map((i) => [i.interface, i]));
+    (latest.interfaces || []).filter((i) => hasIpv4(i.ipv4)).forEach((iface) => {
+      const chart = throughputCharts.get(iface.interface);
+      const prev = prevByName.get(iface.interface);
+      if (!chart || !prev) return;
+
+      const prevTs = Number(previous.timestamp_unix || 0);
+      const dt = Math.max(1, now - prevTs);
+      const rxDelta = Math.max(0, Number(iface.rx_bytes || 0) - Number(prev.rx_bytes || 0));
+      const txDelta = Math.max(0, Number(iface.tx_bytes || 0) - Number(prev.tx_bytes || 0));
+      const rxRate = rxDelta / dt;
+      const txRate = txDelta / dt;
+
+      chart.rxSeries.push({ x: now, y: rxRate });
+      chart.txSeries.push({ x: now, y: txRate });
+      chart.rxSeries = chart.rxSeries.slice(-MAX_WINDOW_POINTS);
+      chart.txSeries = chart.txSeries.slice(-MAX_WINDOW_POINTS);
+      chart.rx.plot(chart.rxSeries);
+      chart.tx.plot(chart.txSeries);
+    });
+
+    previous = latest;
   };
 
   const render = () => {
     if (!latest) return;
-
     if (currentTab === 'overview') {
-      const routeCount = latest.routes ? latest.routes.length : 0;
-      const dnsCount = latest.dns && latest.dns.nameservers ? latest.dns.nameservers.length : 0;
-      const ifaceCount = latest.interfaces ? latest.interfaces.length : 0;
-      
-      // Calculate total traffic
-      let totalRx = 0, totalTx = 0;
-      if (latest.interfaces) {
-        latest.interfaces.forEach(iface => {
-          totalRx += iface.rx_bytes || 0;
-          totalTx += iface.tx_bytes || 0;
-        });
-      }
-
-      dashboard.innerHTML = [
-        panel('Network Summary', `
-          <div class="stats-grid">
-            <div class="stat-box">
-              <div class="label">Routes</div>
-              <div class="value">${routeCount}</div>
-            </div>
-            <div class="stat-box">
-              <div class="label">DNS Servers</div>
-              <div class="value">${dnsCount}</div>
-            </div>
-            <div class="stat-box">
-              <div class="label">Interfaces</div>
-              <div class="value">${ifaceCount}</div>
-            </div>
-            <div class="stat-box">
-              <div class="label">Total RX</div>
-              <div class="value" style="font-size:1.2rem">${formatBytes(totalRx)}</div>
-            </div>
-            <div class="stat-box">
-              <div class="label">Total TX</div>
-              <div class="value" style="font-size:1.2rem">${formatBytes(totalTx)}</div>
-            </div>
-          </div>
-        `),
-      ].join('');
+      mountOverview();
+      updateThroughput();
       return;
     }
-
     if (currentTab === 'routes') {
       dashboard.innerHTML = panel('Routing Table', routeTable(latest.routes));
       return;
     }
-
     if (currentTab === 'dns') {
       dashboard.innerHTML = panel('DNS Configuration', dnsInfo(latest.dns));
       return;
     }
-
     if (currentTab === 'interfaces') {
       dashboard.innerHTML = panel('Interface Statistics', interfaceStats(latest.interfaces));
-      return;
     }
   };
 
@@ -160,11 +185,11 @@
       const response = await fetch('/api/networking', { cache: 'no-store' });
       if (!response.ok) throw new Error('request failed');
       latest = await response.json();
-      
+
       const routeCount = latest.routes ? latest.routes.length : 0;
-      const ifaceCount = latest.interfaces ? latest.interfaces.length : 0;
-      netInfo.textContent = `${routeCount} routes · ${ifaceCount} interfaces`;
-      
+      const ifaceCount = (latest.interfaces || []).filter((i) => hasIpv4(i.ipv4)).length;
+      netInfo.textContent = `${routeCount} routes · ${ifaceCount} ipv4 interfaces`;
+
       lastUpdate.textContent = latest.timestamp || new Date().toLocaleTimeString();
       render();
     } catch (err) {
@@ -174,6 +199,6 @@
   };
 
   refresh();
-  setInterval(refresh, 10000); // Update every 10 seconds
+  setInterval(refresh, REFRESH_INTERVAL_MS);
 })();
 </script>
