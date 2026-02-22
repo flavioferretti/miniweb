@@ -438,54 +438,10 @@ add_content_disposition_for_format(http_response_t *resp,
  * @return HTTP send result code or -1 on read/build failures.
  */
 static int
-send_cached_man_response(http_request_t *req, const char *cache_abs,
-			 const char *format, const char *page)
+is_static_cache_format(const char *format)
 {
-	struct stat st;
-	if (stat(cache_abs, &st) != 0 || st.st_size < 0)
-		return -1;
-
-	size_t len = (size_t)st.st_size;
-	char *buf = NULL;
-	if (len > 0) {
-		buf = malloc(len);
-		if (!buf)
-			return -1;
-
-		int fd = open(cache_abs, O_RDONLY);
-		if (fd < 0) {
-			free(buf);
-			return -1;
-		}
-
-		size_t off = 0;
-		while (off < len) {
-			ssize_t n = read(fd, buf + off, len - off);
-			if (n <= 0) {
-				close(fd);
-				free(buf);
-				return -1;
-			}
-			off += (size_t)n;
-		}
-		close(fd);
-	}
-
-	http_response_t *resp = http_response_create();
-	resp->content_type = mime_for_format(format);
-
-	char clen[32];
-	snprintf(clen, sizeof(clen), "%zu", len);
-	http_response_add_header(resp, "Content-Length", clen);
-	http_response_add_header(resp, "Cache-Control", "no-cache, no-store, must-revalidate");
-	http_response_add_header(resp, "Pragma", "no-cache");
-	http_response_add_header(resp, "Expires", "0");
-	add_content_disposition_for_format(resp, format, page);
-
-	http_response_set_body(resp, buf, len, 1);
-	int ret = http_response_send(req, resp);
-	http_response_free(resp);
-	return ret;
+	return strcmp(format, "txt") == 0 || strcmp(format, "md") == 0 ||
+		strcmp(format, "ps") == 0 || strcmp(format, "pdf") == 0;
 }
 
 /**
@@ -913,9 +869,12 @@ man_render_handler(http_request_t *req)
 	if (build_cache_paths(area, section, page, format, cache_rel,
 				  sizeof(cache_rel), cache_abs,
 				  sizeof(cache_abs)) == 0 &&
-		access(cache_abs, R_OK) == 0) {
-		if (send_cached_man_response(req, cache_abs, format, page) == 0)
-			return 0;
+		is_static_cache_format(format) && access(cache_abs, R_OK) == 0) {
+		const char *old_url = req->url;
+		req->url = cache_rel;
+		int ret = static_handler(req);
+		req->url = old_url;
+		return ret;
 	}
 
 	/* 3. Render content. */
@@ -925,22 +884,6 @@ man_render_handler(http_request_t *req)
 	if (!output) {
 		return http_send_error(req, 404, "Manual page not found");
 	}
-
-	/* 4. Build response. */
-	http_response_t *resp = http_response_create();
-
-	/* Set the appropriate Content-Type. */
-	resp->content_type = mime_for_format(format);
-
-	/* 5. Add Content-Length (essential for binary formats like PDF). */
-	char clen[32];
-	snprintf(clen, sizeof(clen), "%zu", out_len);
-	http_response_add_header(resp, "Content-Length", clen);
-	http_response_add_header(resp, "Cache-Control", "no-cache, no-store, must-revalidate");
-	http_response_add_header(resp, "Pragma", "no-cache");
-	http_response_add_header(resp, "Expires", "0");
-
-	add_content_disposition_for_format(resp, format, page);
 
 	char cache_dir[512];
 	strlcpy(cache_dir, cache_abs, sizeof(cache_dir));
@@ -965,6 +908,31 @@ man_render_handler(http_request_t *req)
 				cache_dir, errno, strerror(errno));
 		}
 	}
+
+	if (is_static_cache_format(format) && access(cache_abs, R_OK) == 0) {
+		free(output);
+		const char *old_url = req->url;
+		req->url = cache_rel;
+		int ret = static_handler(req);
+		req->url = old_url;
+		return ret;
+	}
+
+	/* 4. Build response. */
+	http_response_t *resp = http_response_create();
+
+	/* Set the appropriate Content-Type. */
+	resp->content_type = mime_for_format(format);
+
+	/* 5. Add Content-Length (essential for binary formats like PDF). */
+	char clen[32];
+	snprintf(clen, sizeof(clen), "%zu", out_len);
+	http_response_add_header(resp, "Content-Length", clen);
+	http_response_add_header(resp, "Cache-Control", "no-cache, no-store, must-revalidate");
+	http_response_add_header(resp, "Pragma", "no-cache");
+	http_response_add_header(resp, "Expires", "0");
+
+	add_content_disposition_for_format(resp, format, page);
 
 	/* 6. Set body (http_response_set_body frees 'output' automatically). */
 	http_response_set_body(resp, output, out_len, 1);
