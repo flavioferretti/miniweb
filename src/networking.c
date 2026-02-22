@@ -276,6 +276,7 @@ int
 networking_get_if_stats(NetStats *stats, int max_interfaces)
 {
 	struct ifaddrs *ifap, *ifa;
+	struct sockaddr_in *sin;
 	int count = 0;
 
 	LOG("Getting interface statistics...");
@@ -291,9 +292,13 @@ networking_get_if_stats(NetStats *stats, int max_interfaces)
 
 		if (ifa->ifa_addr->sa_family == AF_LINK) {
 			struct if_data *ifd = (struct if_data *)ifa->ifa_data;
+			if (ifd == NULL)
+				continue;
 
+			memset(&stats[count], 0, sizeof(NetStats));
 			strlcpy(stats[count].interface, ifa->ifa_name,
 					sizeof(stats[count].interface));
+			strlcpy(stats[count].ipv4, "-", sizeof(stats[count].ipv4));
 
 			stats[count].rx_packets = ifd->ifi_ipackets;
 			stats[count].rx_bytes = ifd->ifi_ibytes;
@@ -307,6 +312,24 @@ networking_get_if_stats(NetStats *stats, int max_interfaces)
 			0; /* Not tracked by OpenBSD */
 
 			count++;
+		}
+	}
+
+	for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
+		if (ifa->ifa_addr == NULL || ifa->ifa_addr->sa_family != AF_INET)
+			continue;
+
+		sin = (struct sockaddr_in *)ifa->ifa_addr;
+		for (int i = 0; i < count; i++) {
+			if (strcmp(stats[i].interface, ifa->ifa_name) != 0)
+				continue;
+			if (strcmp(stats[i].ipv4, "-") != 0)
+				break;
+			if (!inet_ntop(AF_INET, &sin->sin_addr, stats[i].ipv4,
+					       sizeof(stats[i].ipv4))) {
+				strlcpy(stats[i].ipv4, "-", sizeof(stats[i].ipv4));
+			}
+			break;
 		}
 	}
 
@@ -418,11 +441,11 @@ networking_get_json(void)
 	for (int i = 0; i < if_count && offset < json_size - 1000; i++) {
 		offset +=
 		snprintf(json + offset, json_size - offset,
-				 "%s{\"interface\":\"%s\",\"rx_packets\":%llu,"
+				 "%s{\"interface\":\"%s\",\"ipv4\":\"%s\",\"rx_packets\":%llu,"
 				 "\"rx_bytes\":%llu,\"rx_errors\":%llu,"
 				 "\"tx_packets\":%llu,\"tx_bytes\":%llu,"
 				 "\"tx_errors\":%llu}",
-		   i > 0 ? "," : "", if_stats[i].interface,
+		   i > 0 ? "," : "", if_stats[i].interface, if_stats[i].ipv4,
 		   if_stats[i].rx_packets, if_stats[i].rx_bytes,
 		   if_stats[i].rx_errors, if_stats[i].tx_packets,
 		   if_stats[i].tx_bytes, if_stats[i].tx_errors);

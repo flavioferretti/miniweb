@@ -173,6 +173,13 @@ file_cache_admit_locked(const char *path, time_t now)
 	return 0;
 }
 
+/**
+ * @brief Store a static file payload in the in-memory cache.
+ * @param path Cache key path.
+ * @param st File metadata used for validation.
+ * @param data File contents.
+ * @param len File size in bytes.
+ */
 static void
 file_cache_store(const char *path, const struct stat *st, const char *data,
 		 size_t len)
@@ -228,6 +235,14 @@ file_cache_store(const char *path, const struct stat *st, const char *data,
 	pthread_mutex_unlock(&file_cache_lock);
 }
 
+/**
+ * @brief Lookup and duplicate a cached static file payload.
+ * @param path Cache key path.
+ * @param st Current file metadata.
+ * @param out Receives duplicated payload on hit.
+ * @param out_len Receives payload length on hit.
+ * @return 1 if cache hit, 0 otherwise.
+ */
 static int
 file_cache_lookup(const char *path, const struct stat *st, char **out,
 		  size_t *out_len)
@@ -303,6 +318,13 @@ http_response_set_status(http_response_t *resp, int code)
 }
 
 /* Set response body */
+/**
+ * @brief Set body pointer and ownership metadata for a response.
+ * @param resp Response object to mutate.
+ * @param body Response body pointer.
+ * @param len Response body size in bytes.
+ * @param must_free Non-zero if body must be freed with the response.
+ */
 void
 http_response_set_body(http_response_t *resp, char *body, size_t len,
 		       int must_free)
@@ -313,9 +335,15 @@ http_response_set_body(http_response_t *resp, char *body, size_t len,
 }
 
 /* Add response header */
+/**
+ * @brief Append a header line to a response object.
+ * @param resp Response object to mutate.
+ * @param name Header name.
+ * @param value Header value.
+ */
 void
 http_response_add_header(http_response_t *resp, const char *name,
-			 const char *value)
+		 const char *value)
 {
 	int len = snprintf(resp->headers + resp->headers_len,
 			   sizeof(resp->headers) - resp->headers_len,
@@ -769,9 +797,16 @@ http_send_file(http_request_t *req, const char *path, const char *mime)
 }
 
 /* In http_handler.c */
+/**
+ * @brief Render an HTML template and send it as HTTP response.
+ * @param req Request context.
+ * @param data Template descriptor for the page.
+ * @param fallback_template Error string when rendering fails.
+ * @return HTTP send status code.
+ */
 int
 http_render_template(http_request_t *req, struct template_data *data,
-		     const char *fallback_template)
+	     const char *fallback_template)
 {
 	char *output = NULL;
 

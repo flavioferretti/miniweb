@@ -74,6 +74,15 @@ sanitize_string(char *s)
  * Enforces a wall-clock timeout (seconds).  Returns malloc'd buffer
  * NUL-terminated, or NULL on error / timeout / empty output.
  * Caller must free(). */
+/**
+ * @brief Execute a command and capture stdout with size/time limits.
+ * @param path Executable path.
+ * @param argv Argument vector including program name.
+ * @param max_size Maximum bytes captured before truncation.
+ * @param timeout_seconds Process timeout in seconds.
+ * @param out_len Optional captured length output.
+ * @return Malloc'd NUL-terminated output buffer, or NULL on failure.
+ */
 /* src/http_utils.c */
 char *
 safe_popen_read_argv(const char *path, char *const argv[],

@@ -26,6 +26,7 @@ typedef struct {
 
 typedef struct {
     char interface[IFNAMSIZ];
+    char ipv4[INET_ADDRSTRLEN];
     unsigned long long rx_packets;
     unsigned long long rx_bytes;
     unsigned long long rx_errors;
