@@ -11,7 +11,7 @@
 ## Synopsis
 
 ```sh
-./build/miniweb [-h] [-v] [-b address] [-c connections] [-f file] [-p port] [-t threads]
+./build/miniweb [-h] [-v] [-b address] [-c connections] [-f file] [-p port] [-t threads] [-l file]
 ```
 
 ## Description
