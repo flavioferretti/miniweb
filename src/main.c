@@ -702,7 +702,6 @@ apply_openbsd_security(void)
 	unveil(config.mandoc_path,  "x");
 	unveil("/usr/bin/man",      "x");
 	unveil("/usr/bin/apropos",  "x");
-	unveil("/bin/ps",           "x");
 	unveil("/usr/bin/netstat",  "x");
 	unveil("/bin/sh",           "x");
 	unveil("/etc/man.conf",     "r");
@@ -728,7 +727,7 @@ apply_openbsd_security(void)
 	unveil(NULL, NULL);
 
 	const char *promises =
-	"stdio rpath wpath cpath inet route proc exec vminfo ps getpw";
+	"stdio rpath wpath cpath inet route proc exec vminfo getpw";
 	if (pledge(promises, NULL) == -1) {
 		perror("pledge");
 		fprintf(stderr, "Continuing without pledge...\n");

@@ -9,10 +9,6 @@
 #include <sys/proc.h>
 #include <sys/swap.h>
 #include <sys/utsname.h>  /* Required for uname() and struct utsname. */
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <net/if.h>
-#include <ifaddrs.h>      /* Required for getifaddrs() and struct ifaddrs. */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -43,6 +39,12 @@ do {                                                        \
 
 
 static struct kinfo_proc *get_procs_snapshot(size_t *nprocs);
+static void append_process_json_sections(char *top_cpu_json,
+	size_t top_cpu_json_size,
+	char *top_mem_json,
+	size_t top_mem_json_size,
+	char *proc_stats_json,
+	size_t proc_stats_json_size);
 
 /* qsort comparator: sort by descending RSS. */
 /**
@@ -396,52 +398,172 @@ metrics_get_top_ports(PortInfo *ports, int max_ports)
 int
 metrics_get_network_interfaces(NetworkInterface *interfaces, int max_interfaces)
 {
-	struct ifaddrs *ifaddr, *ifa;
-	int count = 0;
+	(void)interfaces;
+	(void)max_interfaces;
+	/* Network interfaces are intentionally excluded from /api/metrics.
+	 * Networking data is served by the dedicated networking API. */
+	return 0;
+}
 
-	if (getifaddrs(&ifaddr) == -1)
-		return 0;
+static void
+append_process_json_sections(char *top_cpu_json,
+	size_t top_cpu_json_size,
+	char *top_mem_json,
+	size_t top_mem_json_size,
+	char *proc_stats_json,
+	size_t proc_stats_json_size)
+{
+	size_t nprocs = 0;
+	struct kinfo_proc *kp = get_procs_snapshot(&nprocs);
+	if (!kp) {
+		snprintf(top_cpu_json, top_cpu_json_size,
+				 "\"top_cpu_processes\": []");
+		snprintf(top_mem_json, top_mem_json_size,
+				 "\"top_memory_processes\": []");
+		snprintf(proc_stats_json, proc_stats_json_size,
+				 "\"process_stats\": null");
+		return;
+	}
 
-	for (ifa = ifaddr; ifa != NULL && count < max_interfaces;
-		 ifa = ifa->ifa_next) {
-		if (ifa->ifa_addr == NULL)
+	/* Build process_stats from the same sysctl snapshot to avoid
+	 * extra process-list queries. */
+	int total = (int)nprocs;
+	int running = 0, sleeping = 0, zombie = 0;
+	for (size_t i = 0; i < nprocs; i++) {
+		if (kp[i].p_stat == SRUN || kp[i].p_stat == SONPROC)
+			running++;
+		else if (kp[i].p_stat == SSLEEP)
+			sleeping++;
+		else if (kp[i].p_stat == SZOMB)
+			zombie++;
+	}
+	snprintf(proc_stats_json, proc_stats_json_size,
+			 "\"process_stats\": {\"total\": %d, \"running\": %d, "
+			 "\"sleeping\": %d, \"zombie\": %d}",
+		 total, running, sleeping, zombie);
+
+	/* Top CPU. */
+	ProcessInfo top_cpu[10];
+	int top_cpu_count = 0;
+	for (size_t i = 0; i < nprocs && top_cpu_count < 10; i++) {
+		if (kp[i].p_stat == SZOMB)
 			continue;
+		top_cpu[top_cpu_count].pid = kp[i].p_pid;
+		top_cpu[top_cpu_count].cpu_percent =
+			(100.0f * kp[i].p_pctcpu) / FSCALE;
+		strlcpy(top_cpu[top_cpu_count].command, kp[i].p_comm,
+			sizeof(top_cpu[top_cpu_count].command));
 
-		if (ifa->ifa_addr->sa_family != AF_INET)
-			continue;
+		struct passwd pwd;
+		struct passwd *result = NULL;
+		char pwbuf[1024];
+		if (getpwuid_r(kp[i].p_uid, &pwd, pwbuf, sizeof(pwbuf),
+			&result) == 0 && result != NULL) {
+			strlcpy(top_cpu[top_cpu_count].user, pwd.pw_name,
+				sizeof(top_cpu[top_cpu_count].user));
+		} else {
+			snprintf(top_cpu[top_cpu_count].user,
+				sizeof(top_cpu[top_cpu_count].user), "%d",
+				kp[i].p_uid);
+		}
+		top_cpu_count++;
+	}
 
-		int duplicate = 0;
-	for (int i = 0; i < count; i++) {
-		if (strcmp(interfaces[i].name, ifa->ifa_name) == 0) {
-			duplicate = 1;
-			break;
+	for (int i = 0; i < top_cpu_count - 1; i++) {
+		for (int j = 0; j < top_cpu_count - i - 1; j++) {
+			if (top_cpu[j].cpu_percent < top_cpu[j + 1].cpu_percent) {
+				ProcessInfo tmp = top_cpu[j];
+				top_cpu[j] = top_cpu[j + 1];
+				top_cpu[j + 1] = tmp;
+			}
 		}
 	}
-	if (duplicate) {
-		continue;
+
+	char *cpu_ptr = top_cpu_json;
+	size_t cpu_left = top_cpu_json_size;
+	int w = snprintf(cpu_ptr, cpu_left, "\"top_cpu_processes\": [");
+	cpu_ptr += w;
+	cpu_left -= (size_t)w;
+	for (int i = 0; i < top_cpu_count && cpu_left > 100; i++) {
+		if (i > 0) {
+			w = snprintf(cpu_ptr, cpu_left, ", ");
+			cpu_ptr += w;
+			cpu_left -= (size_t)w;
+		}
+		w = snprintf(cpu_ptr, cpu_left,
+			"{\"user\": \"%s\", \"pid\": %d, \"cpu_percent\": %.1f, "
+			"\"command\": \"%s\"}",
+			top_cpu[i].user, top_cpu[i].pid, top_cpu[i].cpu_percent,
+			top_cpu[i].command);
+		cpu_ptr += w;
+		cpu_left -= (size_t)w;
 	}
+	snprintf(cpu_ptr, cpu_left, "]");
 
-	strlcpy(interfaces[count].name, ifa->ifa_name,
-			sizeof(interfaces[count].name));
-
-	struct sockaddr_in *addr = (struct sockaddr_in *)ifa->ifa_addr;
-	inet_ntop(AF_INET, &addr->sin_addr,
-			  interfaces[count].ip_address,
-		   sizeof(interfaces[count].ip_address));
-
-	if (ifa->ifa_flags & IFF_UP) {
-		strlcpy(interfaces[count].status, "up",
-				sizeof(interfaces[count].status));
-	} else {
-		strlcpy(interfaces[count].status, "down",
-				sizeof(interfaces[count].status));
+	/* Top memory requires a sorted copy, still from same snapshot. */
+	struct kinfo_proc *kmem = malloc(nprocs * sizeof(struct kinfo_proc));
+	if (!kmem) {
+		snprintf(top_mem_json, top_mem_json_size,
+				 "\"top_memory_processes\": []");
+		free(kp);
+		return;
 	}
+	memcpy(kmem, kp, nprocs * sizeof(struct kinfo_proc));
+	qsort(kmem, nprocs, sizeof(struct kinfo_proc), compare_memory);
 
-	count++;
-		 }
+	MemoryStats mem_stats;
+	long total_memory_kb = 0;
+	if (metrics_get_memory_stats(&mem_stats) == 0)
+		total_memory_kb = mem_stats.total_mb * 1024;
+	long page_size = sysconf(_SC_PAGESIZE);
 
-		 freeifaddrs(ifaddr);
-		 return count;
+	char *mem_ptr = top_mem_json;
+	size_t mem_left = top_mem_json_size;
+	w = snprintf(mem_ptr, mem_left, "\"top_memory_processes\": [");
+	mem_ptr += w;
+	mem_left -= (size_t)w;
+
+	int mem_count = 0;
+	for (size_t i = 0; i < nprocs && mem_count < 10 && mem_left > 100; i++) {
+		if (kmem[i].p_stat == SZOMB)
+			continue;
+		ProcessInfo proc;
+		proc.pid = kmem[i].p_pid;
+		proc.memory_mb = (kmem[i].p_vm_rssize * page_size) / (1024 * 1024);
+		if (total_memory_kb > 0) {
+			long mem_kb = (kmem[i].p_vm_rssize * page_size) / 1024;
+			proc.memory_percent = (100.0f * mem_kb) / total_memory_kb;
+		} else {
+			proc.memory_percent = 0.0f;
+		}
+		strlcpy(proc.command, kmem[i].p_comm, sizeof(proc.command));
+		struct passwd pwd;
+		struct passwd *result = NULL;
+		char pwbuf[1024];
+		if (getpwuid_r(kmem[i].p_uid, &pwd, pwbuf, sizeof(pwbuf),
+			&result) == 0 && result != NULL) {
+			strlcpy(proc.user, pwd.pw_name, sizeof(proc.user));
+		} else {
+			snprintf(proc.user, sizeof(proc.user), "%d", kmem[i].p_uid);
+		}
+		if (mem_count > 0) {
+			w = snprintf(mem_ptr, mem_left, ", ");
+			mem_ptr += w;
+			mem_left -= (size_t)w;
+		}
+		w = snprintf(mem_ptr, mem_left,
+			"{\"user\": \"%s\", \"pid\": %d, \"memory_percent\": %.1f, "
+			"\"memory_mb\": %d, \"command\": \"%s\"}",
+			proc.user, proc.pid, proc.memory_percent,
+			proc.memory_mb, proc.command);
+		mem_ptr += w;
+		mem_left -= (size_t)w;
+		mem_count++;
+	}
+	snprintf(mem_ptr, mem_left, "]");
+
+	free(kmem);
+	free(kp);
 }
 
 /**
@@ -822,135 +944,6 @@ append_top_ports_json(char *buffer, size_t size)
  * @param buffer Parameter used by this function.
  * @param size Parameter used by this function.
  */
-static void
-append_network_interfaces_json(char *buffer, size_t size)
-{
-	NetworkInterface interfaces[10];
-	int count = metrics_get_network_interfaces(interfaces, 10);
-
-	char *ptr = buffer;
-	int written = 0;
-
-	written = snprintf(ptr, size, "\"network\": [");
-	ptr += written;
-	size -= written;
-
-	for (int i = 0; i < count && size > 0; i++) {
-		if (i > 0) {
-			written = snprintf(ptr, size, ", ");
-			ptr += written;
-			size -= written;
-		}
-
-		written = snprintf(
-			ptr, size,
-			"{\"name\": \"%s\", \"ip\": \"%s\", \"status\": \"%s\"}",
-			interfaces[i].name, interfaces[i].ip_address,
-			interfaces[i].status);
-		ptr += written;
-		size -= written;
-	}
-
-	snprintf(ptr, size, "]");
-}
-
-/**
- * @brief Append top cpu processes json.
- * @param buffer Parameter used by this function.
- * @param size Parameter used by this function.
- */
-static void
-append_top_cpu_processes_json(char *buffer, size_t size)
-{
-	ProcessInfo processes[10];
-	int count = metrics_get_top_cpu_processes(processes, 10);
-
-	char *ptr = buffer;
-	int written = 0;
-
-	written = snprintf(ptr, size, "\"top_cpu_processes\": [");
-	ptr += written;
-	size -= written;
-
-	for (int i = 0; i < count && size > 100; i++) {
-		if (i > 0) {
-			written = snprintf(ptr, size, ", ");
-			ptr += written;
-			size -= written;
-		}
-
-		written =
-		snprintf(ptr, size,
-				 "{\"user\": \"%s\", \"pid\": %d, \"cpu_percent\": "
-				 "%.1f, \"command\": \"%s\"}",
-		   processes[i].user, processes[i].pid,
-		   processes[i].cpu_percent, processes[i].command);
-		ptr += written;
-		size -= written;
-	}
-
-	snprintf(ptr, size, "]");
-}
-
-/**
- * @brief Append top memory processes json.
- * @param buffer Parameter used by this function.
- * @param size Parameter used by this function.
- */
-static void
-append_top_memory_processes_json(char *buffer, size_t size)
-{
-	ProcessInfo processes[10];
-	int count = metrics_get_top_memory_processes(processes, 10);
-
-	char *ptr = buffer;
-	int written = 0;
-
-	written = snprintf(ptr, size, "\"top_memory_processes\": [");
-	ptr += written;
-	size -= written;
-
-	for (int i = 0; i < count && size > 100; i++) {
-		if (i > 0) {
-			written = snprintf(ptr, size, ", ");
-			ptr += written;
-			size -= written;
-		}
-
-		written = snprintf(
-			ptr, size,
-			"{\"user\": \"%s\", \"pid\": %d, \"memory_percent\": %.1f, "
-			"\"memory_mb\": %d, \"command\": \"%s\"}",
-			processes[i].user, processes[i].pid,
-			processes[i].memory_percent, processes[i].memory_mb,
-			processes[i].command);
-		ptr += written;
-		size -= written;
-	}
-
-	snprintf(ptr, size, "]");
-}
-
-/* This helper is intended for get_system_metrics_json(). */
-/**
- * @brief Append process stats json.
- * @param json Parameter used by this function.
- * @param size Parameter used by this function.
- */
-static void
-append_process_stats_json(char *json, size_t size)
-{
-	int t, r, s, z;
-	if (metrics_get_process_stats(&t, &r, &s, &z) == 0) {
-		snprintf(json, size,
-				 "\"process_stats\": {\"total\": %d, \"running\": %d, "
-				 "\"sleeping\": %d, \"zombie\": %d}",
-		   t, r, s, z);
-	} else {
-		snprintf(json, size, "\"process_stats\": null");
-	}
-}
-
 /**
  * @brief Get system metrics json.
  * @return Returns 0 on success or a negative value on failure unless documented otherwise.
@@ -976,7 +969,6 @@ get_system_metrics_json(void)
 	char uptime_json[256];
 	char disks_json[2048];
 	char ports_json[2048];
-	char network_json[1024];
 	char top_cpu_json[2048];
 	char top_mem_json[2048];
 	char proc_stats_json[256];
@@ -1002,10 +994,9 @@ get_system_metrics_json(void)
 	append_uptime_json(uptime_json, sizeof(uptime_json));
 	append_disk_info_json(disks_json, sizeof(disks_json));
 	append_top_ports_json(ports_json, sizeof(ports_json));
-	append_network_interfaces_json(network_json, sizeof(network_json));
-	append_top_cpu_processes_json(top_cpu_json, sizeof(top_cpu_json));
-	append_top_memory_processes_json(top_mem_json, sizeof(top_mem_json));
-	append_process_stats_json(proc_stats_json, sizeof(proc_stats_json));
+	append_process_json_sections(top_cpu_json, sizeof(top_cpu_json),
+		top_mem_json, sizeof(top_mem_json),
+		proc_stats_json, sizeof(proc_stats_json));
 
 	snprintf(json, JSON_BUFFER_SIZE,
 			 "{"
@@ -1020,11 +1011,10 @@ get_system_metrics_json(void)
 			 "%s,"
 			 "%s,"
 			 "%s,"
-			 "%s,"
 			 "%s"
 			 "}",
 		  timestamp, hostname, cpu_json, memory_json, load_json, os_json,
-		  uptime_json, disks_json, ports_json, network_json,
+		  uptime_json, disks_json, ports_json,
 		  top_cpu_json, top_mem_json, proc_stats_json);
 
 	return json;
