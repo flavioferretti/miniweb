@@ -1,4 +1,3 @@
-<script src="/static/js/flvChart.js"></script>
 <script>
 (() => {
   const dashboard = document.getElementById('dashboard');
@@ -8,12 +7,7 @@
 
   let currentTab = 'overview';
   let latest = null;
-  const interfaceCharts = new Map();
-  let overviewSignature = '';
-
   const REFRESH_INTERVAL_MS = 4000;
-  const WINDOW_SECONDS = 3600;
-  const MAX_WINDOW_POINTS = Math.max(2, Math.floor(WINDOW_SECONDS / (REFRESH_INTERVAL_MS / 1000)));
 
   const panel = (title, body, klass = '') => `<article class="panel stat-card ${klass}"><h3>${title}</h3>${body}</article>`;
 
@@ -56,23 +50,20 @@
     return `<div class="network-table-wrapper"><table class="network-table">${headers}${rows}</table></div>`;
   };
 
-  const createBytesChart = (canvasId, color, yLabel) => new flvChart({
-    canvas: canvasId,
-    title: '',
-    xLabel: 'sample',
-    yLabel,
-    minY: 0,
-    maxPoints: MAX_WINDOW_POINTS,
-    color,
-    xTicks: 4,
-    yTicks: 4,
-    fillOpacity: 0.45,
-    padding: { top: 36, right: 20, bottom: 48, left: 64 },
-  });
+  const overviewInterfaceBytes = (interfaces) => {
+    const ipv4Ifaces = (interfaces || []).filter((iface) => hasIpv4(iface.ipv4));
+    if (ipv4Ifaces.length === 0) return '<p class="muted">No interfaces with IPv4 addresses found.</p>';
+
+    const headers = '<tr><th>Interface</th><th>IPv4</th><th>RX Bytes</th><th>TX Bytes</th></tr>';
+    const rows = ipv4Ifaces.map((iface) =>
+      `<tr><td><span class="badge badge-info">${iface.interface}</span></td><td>${iface.ipv4}</td><td>${formatBytes(iface.rx_bytes)}</td><td>${formatBytes(iface.tx_bytes)}</td></tr>`
+    ).join('');
+
+    return `<div class="network-table-wrapper"><table class="network-table">${headers}${rows}</table></div>`;
+  };
 
   const mountOverview = () => {
     const ipv4Ifaces = (latest?.interfaces || []).filter((i) => hasIpv4(i.ipv4));
-    const signature = ipv4Ifaces.map((i) => `${i.interface}:${i.ipv4}`).sort().join('|');
     const summary = panel('Network Summary', `
       <div class="stats-grid">
         <div class="stat-box"><div class="label">Routes</div><div class="value">${latest?.routes?.length || 0}</div></div>
@@ -80,72 +71,13 @@
         <div class="stat-box"><div class="label">Interfaces (IPv4)</div><div class="value">${ipv4Ifaces.length}</div></div>
       </div>`,`chart-panel`);
 
-    const charts = ipv4Ifaces.length === 0
-      ? panel('Interface RX/TX Bytes', '<p class="muted">No interfaces with IPv4 addresses found.</p>', 'chart-panel')
-      : panel('Interface RX/TX Bytes', `<div id="interfaceChartGrid" class="chart-grid"></div>`, 'chart-panel');
-
-    if (overviewSignature === signature && dashboard.querySelector('#interfaceChartGrid')) {
-      return;
-    }
-
-    overviewSignature = signature;
-    dashboard.innerHTML = [summary, charts].join('');
-
-    if (ipv4Ifaces.length === 0) {
-      interfaceCharts.clear();
-      return;
-    }
-
-    const grid = document.getElementById('interfaceChartGrid');
-    ipv4Ifaces.forEach((iface) => {
-      const idBase = iface.interface.replace(/[^a-zA-Z0-9_-]/g, '_');
-      const rxCanvasId = `net_${idBase}_rx`;
-      const txCanvasId = `net_${idBase}_tx`;
-
-      const card = document.createElement('div');
-      card.className = 'flvchart-card';
-      card.innerHTML = `<p class="flvchart-title">${iface.interface} (${iface.ipv4})</p>
-        <div class="chart-grid chart-grid-two"><div class="flvchart-wrap"><canvas id="${rxCanvasId}" class="flvchart-canvas" width="700" height="220"></canvas></div><div class="flvchart-wrap"><canvas id="${txCanvasId}" class="flvchart-canvas" width="700" height="220"></canvas></div></div>`;
-      grid.appendChild(card);
-
-      interfaceCharts.set(iface.interface, {
-        rx: createBytesChart(rxCanvasId, '#2563eb', 'RX bytes'),
-        tx: createBytesChart(txCanvasId, '#dc2626', 'TX bytes'),
-      });
-    });
-  };
-
-  const updateInterfaceCharts = () => {
-    if (currentTab !== 'overview' || !latest) return;
-
-    const history = latest.history || [];
-    if (!history.length) return;
-
-    const boundedHistory = history.slice(-MAX_WINDOW_POINTS);
-    (latest.interfaces || []).filter((i) => hasIpv4(i.ipv4)).forEach((iface) => {
-      const chart = interfaceCharts.get(iface.interface);
-      if (!chart) return;
-
-      const rxSeries = [];
-      const txSeries = [];
-      boundedHistory.forEach((sample) => {
-        const point = (sample.interfaces || []).find((s) => s.interface === iface.interface);
-        if (!point) return;
-        const ts = Number(sample.ts || 0);
-        rxSeries.push({ x: ts, y: Number(point.rx_bytes || 0) });
-        txSeries.push({ x: ts, y: Number(point.tx_bytes || 0) });
-      });
-
-      chart.rx.plot(rxSeries);
-      chart.tx.plot(txSeries);
-    });
+    dashboard.innerHTML = [summary, panel('Interface RX/TX Bytes', overviewInterfaceBytes(latest?.interfaces), 'chart-panel')].join('');
   };
 
   const render = () => {
     if (!latest) return;
     if (currentTab === 'overview') {
       mountOverview();
-      updateInterfaceCharts();
       return;
     }
     if (currentTab === 'routes') {
