@@ -81,7 +81,7 @@
         <div class="stat-box"><div class="label">Routes</div><div class="value">${latest?.routes?.length || 0}</div></div>
         <div class="stat-box"><div class="label">DNS Servers</div><div class="value">${latest?.dns?.nameservers?.length || 0}</div></div>
         <div class="stat-box"><div class="label">Interfaces (IPv4)</div><div class="value">${ipv4Ifaces.length}</div></div>
-      </div>`);
+      </div>`,`chart-panel`);
 
     const charts = ipv4Ifaces.length === 0
       ? panel('Throughput', '<p class="muted">No interfaces with IPv4 addresses found.</p>', 'chart-panel')

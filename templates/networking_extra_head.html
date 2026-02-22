@@ -60,10 +60,25 @@
 /* Stats grid */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1rem;
   margin-top: 1rem;
 }
+
+@media (max-width: 640px) {
+  .stats-grid {
+    gap: 0.6rem;
+  }
+
+  .stat-box {
+    padding: 0.75rem;
+  }
+
+  .stat-box .value {
+    font-size: 1.3rem;
+  }
+}
+
 
 .stat-box {
   background: var(--surface-2);
