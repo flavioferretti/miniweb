@@ -20,6 +20,8 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <pthread.h>
+#include <time.h>
 
 /* Include del progetto */
 #include "../include/networking.h"
@@ -40,6 +42,40 @@ extern int config_verbose;
 	if (config_verbose)                     \
 		log_debug("[NETWORK] " __VA_ARGS__); \
  } while (0)
+
+#define NETWORK_JSON_BUFFER_SIZE 65536
+#define NETWORK_RING_BYTES (1024 * 1024)
+
+typedef struct {
+	time_t ts;
+	RouteEntry routes[50];
+	int route_count;
+	DnsConfig dns;
+	NetStats interfaces[10];
+	int interface_count;
+} NetworkingSample;
+
+#define NETWORK_RING_CAPACITY ((size_t)(NETWORK_RING_BYTES / sizeof(NetworkingSample)))
+
+typedef struct {
+	NetworkingSample *buf;
+	size_t head;
+	size_t count;
+	pthread_mutex_t lock;
+} NetworkingRing;
+
+static NetworkingRing g_networking_ring;
+static pthread_t g_networking_thread;
+static pthread_once_t g_networking_once = PTHREAD_ONCE_INIT;
+static int g_networking_ring_ready = 0;
+
+static int networking_ring_init(NetworkingRing *r);
+static void networking_ring_push(NetworkingRing *r,
+	const NetworkingSample *s);
+static int networking_ring_last(NetworkingRing *r, NetworkingSample *out);
+static void networking_collect_sample(NetworkingSample *sample);
+static void *networking_sampler_thread(void *arg);
+static void networking_ring_bootstrap(void);
 
 
 /* ========================================================================
@@ -360,6 +396,97 @@ networking_get_connections(NetworkConnection *conns, int max_conns)
 	return 0;
 }
 
+static int
+networking_ring_init(NetworkingRing *r)
+{
+	r->buf = malloc(NETWORK_RING_CAPACITY * sizeof(NetworkingSample));
+	if (!r->buf)
+		return -1;
+	r->head = 0;
+	r->count = 0;
+	pthread_mutex_init(&r->lock, NULL);
+	return 0;
+}
+
+static void
+networking_ring_push(NetworkingRing *r, const NetworkingSample *s)
+{
+	pthread_mutex_lock(&r->lock);
+	r->buf[r->head] = *s;
+	r->head = (r->head + 1) % NETWORK_RING_CAPACITY;
+	if (r->count < NETWORK_RING_CAPACITY)
+		r->count++;
+	pthread_mutex_unlock(&r->lock);
+}
+
+static int
+networking_ring_last(NetworkingRing *r, NetworkingSample *out)
+{
+	if (!g_networking_ring_ready || r->buf == NULL)
+		return 0;
+
+	pthread_mutex_lock(&r->lock);
+	if (r->count == 0) {
+		pthread_mutex_unlock(&r->lock);
+		return 0;
+	}
+
+	size_t idx = (r->head + NETWORK_RING_CAPACITY - 1) % NETWORK_RING_CAPACITY;
+	*out = r->buf[idx];
+	pthread_mutex_unlock(&r->lock);
+	return 1;
+}
+
+static void
+networking_collect_sample(NetworkingSample *sample)
+{
+	memset(sample, 0, sizeof(*sample));
+	time(&sample->ts);
+	sample->route_count = networking_get_routes(sample->routes, 50);
+	if (sample->route_count < 0)
+		sample->route_count = 0;
+	if (networking_get_dns_config(&sample->dns) != 0)
+		memset(&sample->dns, 0, sizeof(sample->dns));
+	sample->interface_count = networking_get_if_stats(sample->interfaces, 10);
+	if (sample->interface_count < 0)
+		sample->interface_count = 0;
+}
+
+static void *
+networking_sampler_thread(void *arg)
+{
+	(void)arg;
+	for (;;) {
+		NetworkingSample sample;
+
+		networking_collect_sample(&sample);
+		networking_ring_push(&g_networking_ring, &sample);
+		sleep(1);
+	}
+
+	return NULL;
+}
+
+static void
+networking_ring_bootstrap(void)
+{
+	if (networking_ring_init(&g_networking_ring) != 0) {
+		LOG("Failed to allocate 1MB networking ring");
+		return;
+	}
+
+	if (pthread_create(&g_networking_thread, NULL,
+		networking_sampler_thread, NULL) != 0) {
+		LOG("Failed to start networking sampler thread");
+		free(g_networking_ring.buf);
+		g_networking_ring.buf = NULL;
+		return;
+	}
+
+	g_networking_ring_ready = 1;
+	pthread_detach(g_networking_thread);
+}
+
 /* ========================================================================
  * JSON GENERATION
  * ======================================================================== */
@@ -371,16 +498,17 @@ networking_get_connections(NetworkConnection *conns, int max_conns)
 char *
 networking_get_json(void)
 {
+	NetworkingSample sample;
 	char *json = NULL;
-	RouteEntry routes[50];
-	DnsConfig dns;
-	NetStats if_stats[10];
-	int route_count, if_count;
-	size_t json_size = 65536; /* 64KB */
+	size_t json_size = NETWORK_JSON_BUFFER_SIZE;
 	size_t offset = 0;
-	time_t now;
 	struct tm tm_buf;
 	char timestamp[64];
+	struct tm *tm_ptr;
+
+	(void)pthread_once(&g_networking_once, networking_ring_bootstrap);
+	if (!networking_ring_last(&g_networking_ring, &sample))
+		networking_collect_sample(&sample);
 
 	/* Allocate JSON buffer */
 	json = malloc(json_size);
@@ -390,8 +518,7 @@ networking_get_json(void)
 	}
 
 	/* Timestamp */
-	time(&now);
-	struct tm *tm_ptr = localtime_r(&now, &tm_buf);
+	tm_ptr = localtime_r(&sample.ts, &tm_buf);
 	if (tm_ptr) {
 		strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S",
 				 tm_ptr);
@@ -399,55 +526,52 @@ networking_get_json(void)
 		strlcpy(timestamp, "unknown", sizeof(timestamp));
 	}
 
-	/* Collect data */
-	route_count = networking_get_routes(routes, 50);
-	networking_get_dns_config(&dns);
-	if_count = networking_get_if_stats(if_stats, 10);
-
 	/* Build JSON */
 	offset += snprintf(json + offset, json_size - offset,
-					   "{\"timestamp\":\"%s\",", timestamp);
+					   "{\"timestamp\":\"%s\",\"timestamp_unix\":%lld,",
+					   timestamp, (long long)sample.ts);
 
 	/* Routes */
 	offset += snprintf(json + offset, json_size - offset, "\"routes\":[");
-	for (int i = 0; i < route_count && offset < json_size - 1000; i++) {
+	for (int i = 0; i < sample.route_count && offset < json_size - 1000; i++) {
 		offset +=
 		snprintf(json + offset, json_size - offset,
 				 "%s{\"destination\":\"%s\",\"gateway\":\"%s\","
 				 "\"netmask\":\"%s\",\"interface\":\"%s\","
 				 "\"flags\":\"%s\"}",
-		   i > 0 ? "," : "", routes[i].destination,
-		   routes[i].gateway, routes[i].netmask,
-		   routes[i].interface, routes[i].flags_str);
+		   i > 0 ? "," : "", sample.routes[i].destination,
+		   sample.routes[i].gateway, sample.routes[i].netmask,
+		   sample.routes[i].interface, sample.routes[i].flags_str);
 	}
 	offset += snprintf(json + offset, json_size - offset, "],");
 
 	/* DNS */
 	offset += snprintf(json + offset, json_size - offset,
 					   "\"dns\":{\"nameservers\":[");
-	for (int i = 0; i < dns.nameserver_count; i++) {
+	for (int i = 0; i < sample.dns.nameserver_count; i++) {
 		offset +=
 		snprintf(json + offset, json_size - offset, "%s\"%s\"",
-				 i > 0 ? "," : "", dns.nameservers[i]);
+				 i > 0 ? "," : "", sample.dns.nameservers[i]);
 	}
 	offset += snprintf(json + offset, json_size - offset,
 					   "],\"domain\":\"%s\",\"search\":\"%s\"},",
-					dns.domain, dns.search);
+					sample.dns.domain, sample.dns.search);
 
 	/* Interface Stats */
 	offset +=
 	snprintf(json + offset, json_size - offset, "\"interfaces\":[");
-	for (int i = 0; i < if_count && offset < json_size - 1000; i++) {
+	for (int i = 0; i < sample.interface_count && offset < json_size - 1000; i++) {
 		offset +=
 		snprintf(json + offset, json_size - offset,
 				 "%s{\"interface\":\"%s\",\"ipv4\":\"%s\",\"rx_packets\":%llu,"
 				 "\"rx_bytes\":%llu,\"rx_errors\":%llu,"
 				 "\"tx_packets\":%llu,\"tx_bytes\":%llu,"
 				 "\"tx_errors\":%llu}",
-		   i > 0 ? "," : "", if_stats[i].interface, if_stats[i].ipv4,
-		   if_stats[i].rx_packets, if_stats[i].rx_bytes,
-		   if_stats[i].rx_errors, if_stats[i].tx_packets,
-		   if_stats[i].tx_bytes, if_stats[i].tx_errors);
+		   i > 0 ? "," : "", sample.interfaces[i].interface,
+		   sample.interfaces[i].ipv4, sample.interfaces[i].rx_packets,
+		   sample.interfaces[i].rx_bytes, sample.interfaces[i].rx_errors,
+		   sample.interfaces[i].tx_packets, sample.interfaces[i].tx_bytes,
+		   sample.interfaces[i].tx_errors);
 	}
 	offset += snprintf(json + offset, json_size - offset, "]");
 
