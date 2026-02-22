@@ -73,8 +73,6 @@ static int networking_ring_init(NetworkingRing *r);
 static void networking_ring_push(NetworkingRing *r,
 		const NetworkingSample *s);
 static int networking_ring_last(NetworkingRing *r, NetworkingSample *out);
-static size_t networking_ring_last_n(NetworkingRing *r, size_t n,
-	NetworkingSample *out);
 static void networking_collect_sample(NetworkingSample *sample);
 static void *networking_sampler_thread(void *arg);
 static void networking_ring_bootstrap(void);
@@ -439,29 +437,6 @@ networking_ring_last(NetworkingRing *r, NetworkingSample *out)
 	return 1;
 }
 
-static size_t
-networking_ring_last_n(NetworkingRing *r, size_t n, NetworkingSample *out)
-{
-	if (!g_networking_ring_ready || r->buf == NULL || out == NULL || n == 0)
-		return 0;
-
-	pthread_mutex_lock(&r->lock);
-	size_t available = r->count;
-	size_t to_copy = n < available ? n : available;
-	if (to_copy == 0) {
-		pthread_mutex_unlock(&r->lock);
-		return 0;
-	}
-
-	size_t start = (r->head + NETWORK_RING_CAPACITY - to_copy) % NETWORK_RING_CAPACITY;
-	for (size_t i = 0; i < to_copy; i++) {
-		size_t idx = (start + i) % NETWORK_RING_CAPACITY;
-		out[i] = r->buf[idx];
-	}
-	pthread_mutex_unlock(&r->lock);
-	return to_copy;
-}
-
 static void
 networking_collect_sample(NetworkingSample *sample)
 {
@@ -524,8 +499,6 @@ char *
 networking_get_json(void)
 {
 	NetworkingSample sample;
-	NetworkingSample *history = NULL;
-	size_t history_count = 0;
 	char *json = NULL;
 	size_t json_size = NETWORK_JSON_BUFFER_SIZE;
 	size_t offset = 0;
@@ -533,23 +506,14 @@ networking_get_json(void)
 	char timestamp[64];
 	struct tm *tm_ptr;
 
-	history = calloc(120, sizeof(*history));
-	if (!history) {
-		LOG("Failed to allocate networking history buffer");
-		return NULL;
-	}
-
 	(void)pthread_once(&g_networking_once, networking_ring_bootstrap);
 	if (!networking_ring_last(&g_networking_ring, &sample))
 		networking_collect_sample(&sample);
-	history_count = networking_ring_last_n(&g_networking_ring,
-		120, history);
 
 	/* Allocate JSON buffer */
 	json = malloc(json_size);
 	if (!json) {
 		LOG("Failed to allocate JSON buffer");
-		free(history);
 		return NULL;
 	}
 
@@ -609,31 +573,9 @@ networking_get_json(void)
 		   sample.interfaces[i].tx_packets, sample.interfaces[i].tx_bytes,
 		   sample.interfaces[i].tx_errors);
 	}
-	offset += snprintf(json + offset, json_size - offset, "],");
-
-	/* Ring history */
-	offset += snprintf(json + offset, json_size - offset, "\"history\":[");
-	for (size_t i = 0; i < history_count && offset < json_size - 2000; i++) {
-		offset += snprintf(json + offset, json_size - offset,
-			"%s{\"ts\":%lld,\"interfaces\":[",
-			i > 0 ? "," : "", (long long)history[i].ts);
-
-		for (int j = 0; j < history[i].interface_count && offset < json_size - 1000; j++) {
-			offset += snprintf(json + offset, json_size - offset,
-				"%s{\"interface\":\"%s\",\"ipv4\":\"%s\",\"rx_bytes\":%llu,\"tx_bytes\":%llu}",
-				j > 0 ? "," : "", history[i].interfaces[j].interface,
-				history[i].interfaces[j].ipv4,
-				history[i].interfaces[j].rx_bytes,
-				history[i].interfaces[j].tx_bytes);
-		}
-
-		offset += snprintf(json + offset, json_size - offset, "]}");
-	}
 	offset += snprintf(json + offset, json_size - offset, "]");
 
 	offset += snprintf(json + offset, json_size - offset, "}");
-
-	free(history);
 	return json;
 }
 
