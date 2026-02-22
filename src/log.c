@@ -11,6 +11,9 @@ static FILE *g_log_file;
 static int g_verbose;
 static pthread_mutex_t g_log_lock = PTHREAD_MUTEX_INITIALIZER;
 
+/**
+ * @brief log_vwrite.
+ */
 static void
 log_vwrite(const char *level, int debug_only, const char *fmt, va_list ap)
 {
@@ -33,6 +36,9 @@ log_vwrite(const char *level, int debug_only, const char *fmt, va_list ap)
 	pthread_mutex_unlock(&g_log_lock);
 }
 
+/**
+ * @brief log_init.
+ */
 int
 log_init(const char *path, int verbose)
 {
@@ -49,12 +55,18 @@ log_init(const char *path, int verbose)
 	return 0;
 }
 
+/**
+ * @brief log_set_verbose.
+ */
 void
 log_set_verbose(int verbose)
 {
 	g_verbose = verbose;
 }
 
+/**
+ * @brief log_close.
+ */
 void
 log_close(void)
 {
@@ -66,6 +78,9 @@ log_close(void)
 	pthread_mutex_unlock(&g_log_lock);
 }
 
+/**
+ * @brief log_info.
+ */
 void
 log_info(const char *fmt, ...)
 {
@@ -75,6 +90,9 @@ log_info(const char *fmt, ...)
 	va_end(ap);
 }
 
+/**
+ * @brief log_debug.
+ */
 void
 log_debug(const char *fmt, ...)
 {
@@ -84,6 +102,9 @@ log_debug(const char *fmt, ...)
 	va_end(ap);
 }
 
+/**
+ * @brief log_error.
+ */
 void
 log_error(const char *fmt, ...)
 {
@@ -93,6 +114,9 @@ log_error(const char *fmt, ...)
 	va_end(ap);
 }
 
+/**
+ * @brief log_errno.
+ */
 void
 log_errno(const char *context)
 {

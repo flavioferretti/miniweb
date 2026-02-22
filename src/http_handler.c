@@ -26,6 +26,9 @@
 #define FILE_CACHE_INSERTS_PER_SEC 8
 #define FILE_CACHE_MAX_AGE_SEC 120
 
+/**
+ * @brief Internal data structure.
+ */
 typedef struct {
 	http_response_t items[1024];
 	int free_stack[1024];
@@ -63,6 +66,9 @@ wait_fd_writable(int fd)
 	}
 }
 
+/**
+ * @brief Internal data structure.
+ */
 typedef struct file_cache_entry {
 	char path[512];
 	char *data;
@@ -71,6 +77,9 @@ typedef struct file_cache_entry {
 	time_t atime;
 } file_cache_entry_t;
 
+/**
+ * @brief Internal data structure.
+ */
 typedef struct file_cache_candidate {
 	char path[512];
 	unsigned int hits;
@@ -449,6 +458,9 @@ writev_all(int fd, struct iovec *iov, int iovcnt)
 
 /* Send HTTP response */
 /* Temporary debug note for http_response_send. */
+/**
+ * @brief http_response_send.
+ */
 int http_response_send(http_request_t *req, http_response_t *resp)
 {
 	char header[4096];

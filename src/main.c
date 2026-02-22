@@ -61,6 +61,9 @@ static int listen_fd = -1;
 static int spare_fd  = -1;
 
 /* -- Connection pool -------------------------------------------------------- */
+/**
+ * @brief Internal data structure.
+ */
 typedef struct connection {
 	int              fd;
 	struct sockaddr_in addr;
@@ -93,6 +96,9 @@ init_connection_pool(void)
 }
 
 /* -- Work queue ------------------------------------------------------------- */
+/**
+ * @brief Internal data structure.
+ */
 typedef struct {
 	connection_t *items[QUEUE_CAPACITY];
 	int           head;
@@ -369,6 +375,9 @@ send_error_response(int fd, int code, const char *msg)
 }
 
 
+/**
+ * @brief close_connection.
+ */
 static void
 close_connection(int fd)
 {

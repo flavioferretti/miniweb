@@ -10,6 +10,9 @@
 #include "../include/template_engine.h"
 #include "../include/config.h"
 
+/**
+ * @brief Internal data structure.
+ */
 typedef struct template_entry {
 	char *filename;
 	char *content;
