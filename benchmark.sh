@@ -8,9 +8,9 @@ set -eu
 
 SERVER_PORT="${SERVER_PORT:-3000}"
 BASE_URL="http://localhost:${SERVER_PORT}"
-TEST_DURATION="${TEST_DURATION:-15}"
+TEST_DURATION="${TEST_DURATION:-10}"
 THREADS="${THREADS:-4}"
-CONNECTIONS="${CONNECTIONS:-8 16 32 64}"
+CONNECTIONS="${CONNECTIONS:-5 100}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-static}"
 ASSETS_DIR="${OUTPUT_ROOT}/benchmark_assets"
 TIMESTAMP="$(date '+%Y-%m-%d %H:%M:%S')"
@@ -33,7 +33,7 @@ set -A ENDPOINT_URLS -- \
     "/"                                    "/docs"                             "/networking"                  "/packages"                  "/apiroot" \
     "/api/metrics"                         "/api/networking" \
     "/api/packages/search?q=curl"          "/api/packages/info?name=curl"      "/api/packages/files?name=curl" \
-    "/api/man/search?q=pledge"             "/man/1/1/ls"                       "/man/1/1/ls.html"             "/man/1/1/ls.md"
+    "/api/man/search?q=pledge"             "/man/system/1/ls"             "/man/system/1/ls.html"             "/man/system/1/ls.md"
 
 set -A ENDPOINT_NAMES -- \
     "Static HTML"         "Static CSS"           "Static JS"             "Static Image" \

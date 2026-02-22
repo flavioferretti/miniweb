@@ -167,14 +167,19 @@
       const memInUse = (m.active_mb || 0) + (m.wired_mb || 0);
       const memTotal = m.total_mb || 1;
       const cpu = latest.cpu || null;
-      const cpuUsed = cpu ? (cpu.used_pct ?? 0) : null;
       const memUsedPct = pct(memInUse, memTotal);
       const swapUsedPct = pct(swap.used_mb || 0, swap.total_mb || 1);
 
+      // Use the last point from the history ring buffer as the canonical CPU value
+      // so the progress bar always matches what the chart plots.
+      const history = latest?.history || [];
+      const lastSample = history.length ? history[history.length - 1] : null;
+      const cpuUsed = lastSample ? (lastSample.cpu ?? 0) : (cpu ? (cpu.used_pct ?? 0) : null);
+
       if (!overviewMounted || !document.getElementById('cpuOverviewChart')) mountOverview();
 
-      document.getElementById('overviewCpuValue').textContent = cpu ? `${cpuUsed}%` : '-';
-      document.getElementById('overviewCpuBar').style.width = `${cpu ? cpuUsed : 0}%`;
+      document.getElementById('overviewCpuValue').textContent = cpuUsed !== null ? `${cpuUsed}%` : '-';
+      document.getElementById('overviewCpuBar').style.width = `${cpuUsed ?? 0}%`;
       document.getElementById('overviewCpuMeta').textContent = cpu
         ? `user ${cpu.user_pct}% · sys ${cpu.system_pct}% · intr ${cpu.interrupt_pct}% · idle ${cpu.idle_pct}%`
         : 'CPU data unavailable';
