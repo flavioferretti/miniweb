@@ -81,7 +81,7 @@
     if (!cpuChart) {
       cpuChart = new flvChart({
         canvas: 'cpuOverviewChart',
-        title: '🖥️',
+        title: '',
         xLabel: 'time (hh:mm)',
         yLabel: '%',
         minY: 0,
@@ -100,7 +100,7 @@
     if (!memChart) {
       memChart = new flvChart({
         canvas: 'memOverviewChart',
-        title: '🔗',
+        title: '',
         xLabel: 'time (hh:mm)',
         yLabel: '%',
         minY: 0,
@@ -132,16 +132,16 @@
   const mountOverview = () => {
     dashboard.innerHTML = [
 
-      panel('Overview Charts',`
+      panel('',`
         <div class="chart-grid">
           <div class="flvchart-card">
-            <p class="flvchart-title">CPU usage (history)</p>
-            <p class="flvchart-subtitle">filled area from /api/metrics ring buffer</p>
+            <p class="flvchart-title">🔳 CPU </p>
+            <!-- <p class="flvchart-subtitle">filled area from /api/metrics ring buffer</p> -->
             <div class="flvchart-wrap"><canvas id="cpuOverviewChart" class="flvchart-canvas" width="700" height="260"></canvas></div>
           </div>
           <div class="flvchart-card">
-            <p class="flvchart-title">Memory usage (history)</p>
-            <p class="flvchart-subtitle">filled area with the same 0-100% scale as overview</p>
+            <p class="flvchart-title">⛁ RAM </p>
+            <!-- <p class="flvchart-subtitle">filled area with the same 0-100% scale as overview</p> -->
             <div class="flvchart-wrap"><canvas id="memOverviewChart" class="flvchart-canvas" width="700" height="260"></canvas></div>
           </div>
         </div>
