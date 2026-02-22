@@ -3,10 +3,21 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <dirent.h>
+#include <limits.h>
 #include <sys/stat.h>
 
 #include "../include/template_engine.h"
 #include "../include/config.h"
+
+typedef struct template_entry {
+	char *filename;
+	char *content;
+	size_t len;
+} template_entry_t;
+
+static template_entry_t *template_cache = NULL;
+static size_t template_cache_count = 0;
 
 /**
  * @brief Read an entire file into a newly allocated NUL-terminated buffer.
@@ -22,24 +33,37 @@ read_file_content(const char *path, char **content)
 		return -1;
 
 	/* Determine file size to allocate exact buffer size */
-	fseek(f, 0, SEEK_END);
+	if (fseek(f, 0, SEEK_END) != 0) {
+		fclose(f);
+		return -1;
+	}
 	long file_size = ftell(f);
-	fseek(f, 0, SEEK_SET);
-
-	if (file_size <= 0) {
+	if (file_size < 0) {
+		fclose(f);
+		return -1;
+	}
+	if (fseek(f, 0, SEEK_SET) != 0) {
 		fclose(f);
 		return -1;
 	}
 
+	/* Allow empty files too. */
+
 	/* Allocate memory; +1 for the null terminator */
-	*content = malloc(file_size + 1);
+	*content = malloc((size_t)file_size + 1);
 	if (!*content) {
 		fclose(f);
 		return -1;
 	}
 
 	/* Read file content into the allocated buffer */
-	size_t n = fread(*content, 1, file_size, f);
+	size_t n = fread(*content, 1, (size_t)file_size, f);
+	if (n != (size_t)file_size && ferror(f)) {
+		free(*content);
+		*content = NULL;
+		fclose(f);
+		return -1;
+	}
 	(*content)[n] = '\0';
 	fclose(f);
 
@@ -47,7 +71,108 @@ read_file_content(const char *path, char **content)
 }
 
 /**
- * @brief Load a template file from the configured templates directory.
+ * @brief Free all cached templates.
+ */
+void
+template_cache_cleanup(void)
+{
+	for (size_t i = 0; i < template_cache_count; i++) {
+		free(template_cache[i].filename);
+		free(template_cache[i].content);
+	}
+	free(template_cache);
+	template_cache = NULL;
+	template_cache_count = 0;
+}
+
+/**
+ * @brief Add one file to the in-memory template cache.
+ * @param filename Basename of the template file.
+ * @param path Absolute/relative filesystem path to read.
+ * @return Returns 0 on success or -1 on failure.
+ */
+static int
+add_template_to_cache(const char *filename, const char *path)
+{
+	char *content = NULL;
+	template_entry_t *new_cache;
+
+	if (read_file_content(path, &content) != 0)
+		return -1;
+
+	new_cache = realloc(template_cache,
+				   sizeof(*template_cache) * (template_cache_count + 1));
+	if (!new_cache) {
+		free(content);
+		return -1;
+	}
+	template_cache = new_cache;
+
+	template_cache[template_cache_count].filename = strdup(filename);
+	if (!template_cache[template_cache_count].filename) {
+		free(content);
+		return -1;
+	}
+	template_cache[template_cache_count].content = content;
+	template_cache[template_cache_count].len = strlen(content);
+	template_cache_count++;
+
+	return 0;
+}
+
+/**
+ * @brief Preload template files from configured directory into memory.
+ * @return Returns 0 on success or -1 on failure.
+ */
+int
+template_cache_init(void)
+{
+	DIR *dir;
+	struct dirent *entry;
+	int loaded = 0;
+
+	template_cache_cleanup();
+
+	dir = opendir(config_templates_dir);
+	if (!dir)
+		return -1;
+
+	while ((entry = readdir(dir)) != NULL) {
+		char path[PATH_MAX];
+		struct stat st;
+		int n;
+
+		if (strcmp(entry->d_name, ".") == 0 ||
+		    strcmp(entry->d_name, "..") == 0)
+			continue;
+
+		n = snprintf(path, sizeof(path), "%s/%s", config_templates_dir,
+			     entry->d_name);
+		if (n < 0 || (size_t)n >= sizeof(path)) {
+			closedir(dir);
+			template_cache_cleanup();
+			return -1;
+		}
+
+		if (stat(path, &st) != 0)
+			continue;
+		if (!S_ISREG(st.st_mode))
+			continue;
+
+		if (add_template_to_cache(entry->d_name, path) != 0) {
+			closedir(dir);
+			template_cache_cleanup();
+			return -1;
+		}
+		loaded = 1;
+	}
+
+	closedir(dir);
+	return loaded ? 0 : -1;
+}
+
+/**
+ * @brief Load a template file from the in-memory cache.
  * @param filename Template filename relative to the templates directory.
  * @param content Output pointer that receives the allocated template content.
  * @return Returns 0 on success or -1 on failure.
@@ -55,10 +180,13 @@ read_file_content(const char *path, char **content)
 static int
 read_template_file(const char *filename, char **content)
 {
-	char path[512];
-	/* Sanitize or validate filename in production to prevent traversal */
-	snprintf(path, sizeof(path), "%s/%s", config_templates_dir, filename);
-	return read_file_content(path, content);
+	for (size_t i = 0; i < template_cache_count; i++) {
+		if (strcmp(template_cache[i].filename, filename) == 0) {
+			*content = strdup(template_cache[i].content);
+			return *content ? 0 : -1;
+		}
+	}
+	return -1;
 }
 
 /* Forward declaration for the single placeholder replacement logic */
@@ -144,7 +272,7 @@ replace_single(const char *str, const char *needle, const char *value)
 		return strdup(str);
 	}
 
-	size_t before_len = pos - str;
+	size_t before_len = (size_t)(pos - str);
 	size_t needle_len = strlen(needle);
 	size_t value_len = strlen(value);
 	size_t after_len = strlen(pos + needle_len);
@@ -158,7 +286,7 @@ replace_single(const char *str, const char *needle, const char *value)
 	memcpy(result, str, before_len);
 	memcpy(result + before_len, value, value_len);
 	memcpy(result + before_len + value_len, pos + needle_len,
-		   after_len + 1);
+	   after_len + 1);
 
 	return result;
 }
@@ -200,7 +328,7 @@ template_render_with_data(struct template_data *data, char **output)
 			0) {
 			/* Fail silently if file is missing, keeping it empty */
 			extra_head = NULL;
-			}
+		}
 	}
 
 	/* Load optional JS file if specified in template_data */
@@ -213,7 +341,7 @@ template_render_with_data(struct template_data *data, char **output)
 	/* Execute placeholder replacements */
 	result =
 	replace_all(base_template, data->title, page_content,
-				extra_head ? extra_head : "", extra_js ? extra_js : "");
+			extra_head ? extra_head : "", extra_js ? extra_js : "");
 	if (!result) {
 		goto cleanup;
 	}
@@ -221,7 +349,7 @@ template_render_with_data(struct template_data *data, char **output)
 	*output = result;
 	ret = 0;
 
-	cleanup:
+cleanup:
 	/* Ensure all intermediate buffers are freed */
 	if (base_template)
 		free(base_template);
@@ -252,5 +380,5 @@ template_render(const char *page, char **output)
 		.extra_head_file = NULL,
 		.extra_js_file = NULL};
 
-		return template_render_with_data(&data, output);
+	return template_render_with_data(&data, output);
 }

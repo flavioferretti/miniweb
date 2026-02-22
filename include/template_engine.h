@@ -28,4 +28,16 @@ int template_render_with_data(struct template_data *data, char **output);
  */
 int template_render(const char *page, char **output);
 
+/**
+ * Preload all regular files from the templates directory into memory.
+ *
+ * @return 0 on success, -1 on failure.
+ */
+int template_cache_init(void);
+
+/**
+ * Free all in-memory template cache entries.
+ */
+void template_cache_cleanup(void);
+
 #endif

@@ -35,6 +35,7 @@
 #include "../include/config.h"
 #include "../include/http_handler.h"
 #include "../include/http_utils.h"
+#include "../include/template_engine.h"
 #include "../include/routes.h"
 #include "../include/urls.h"
 
@@ -751,6 +752,8 @@ int
 main(int argc, char *argv[])
 {
 	parse_args(argc, argv);
+	if (template_cache_init() != 0)
+		err(1, "template_cache_init");
 	init_routes();
 
 	signal(SIGINT,  handle_signal);
@@ -896,6 +899,7 @@ main(int argc, char *argv[])
 
 	close(listen_fd);
 	close(kq_fd);
+	template_cache_cleanup();
 
 	printf("Server stopped.\n");
 	return 0;
