@@ -440,8 +440,9 @@ add_content_disposition_for_format(http_response_t *resp,
 static int
 is_static_cache_format(const char *format)
 {
-	return strcmp(format, "txt") == 0 || strcmp(format, "md") == 0 ||
-		strcmp(format, "ps") == 0 || strcmp(format, "pdf") == 0;
+	return strcmp(format, "html") == 0 || strcmp(format, "txt") == 0 ||
+		strcmp(format, "md") == 0 || strcmp(format, "ps") == 0 ||
+		strcmp(format, "pdf") == 0;
 }
 
 /**
