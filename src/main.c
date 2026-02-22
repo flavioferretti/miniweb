@@ -487,6 +487,12 @@ worker_thread(void *arg)
 			if (parse_request_line(conn->buffer,
 				method, path, version) == 0) {
 				int keep_alive = request_keep_alive(conn->buffer, version);
+
+				/* We must advertise "Connection: close" on the final request
+				 * we are willing to serve on this socket, otherwise clients can
+				 * wait a long time before retrying follow-up static assets. */
+				if (conn->requests_served >= MAX_KEEPALIVE_REQUESTS)
+					keep_alive = 0;
 			http_handler_t handler = route_match(method, path);
 			if (handler) {
 				http_request_t req = {
