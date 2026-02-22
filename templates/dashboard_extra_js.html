@@ -74,7 +74,7 @@
     if (!cpuChart) {
       cpuChart = new flvChart({
         canvas: 'cpuOverviewChart',
-        title: 'CPU Usage Timeline',
+        title: 'CPU Usage Area',
         xLabel: 'time (hh:mm)',
         yLabel: '%',
         minY: 0,
@@ -84,7 +84,7 @@
         lineColor: '#1d4ed8',
         xTicks: 5,
         yTicks: 4,
-        fillOpacity: 0.3,
+        fillOpacity: 0.55,
         padding: { top: 36, right: 20, bottom: 48, left: 52 },
       });
     }
@@ -92,7 +92,7 @@
     if (!memChart) {
       memChart = new flvChart({
         canvas: 'memOverviewChart',
-        title: 'Memory Usage Timeline',
+        title: 'Memory Usage Area',
         xLabel: 'time (hh:mm)',
         yLabel: '%',
         minY: 0,
@@ -102,7 +102,7 @@
         lineColor: '#15803d',
         xTicks: 5,
         yTicks: 4,
-        fillOpacity: 0.3,
+        fillOpacity: 0.55,
         padding: { top: 36, right: 20, bottom: 48, left: 52 },
       });
     }
@@ -124,12 +124,12 @@
         <div class="chart-grid">
           <div class="flvchart-card">
             <p class="flvchart-title">CPU usage (history)</p>
-            <p class="flvchart-subtitle">last values from /api/metrics ring buffer</p>
+            <p class="flvchart-subtitle">filled area from /api/metrics ring buffer</p>
             <div class="flvchart-wrap"><canvas id="cpuOverviewChart" class="flvchart-canvas" width="700" height="260"></canvas></div>
           </div>
           <div class="flvchart-card">
             <p class="flvchart-title">Memory usage (history)</p>
-            <p class="flvchart-subtitle">same max/current scale as overview progress bar</p>
+            <p class="flvchart-subtitle">filled area with the same 0-100% scale as overview</p>
             <div class="flvchart-wrap"><canvas id="memOverviewChart" class="flvchart-canvas" width="700" height="260"></canvas></div>
           </div>
         </div>
