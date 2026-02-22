@@ -66,7 +66,7 @@
             panel('Memory', `<p class="stat-value">${mbToGb(memInUse)} / ${mbToGb(memTotal)} GB</p><div class="progress"><span style="width:${pct(memInUse, memTotal)}%"></span></div><p class="muted">active + wired · inactive ${mbToGb(m.inactive_mb||0)} GB (cache) · free ${mbToGb(m.free_mb||0)} GB</p>`),
             panel('Swap', `<p class="stat-value">${mbToGb(swap.used_mb || 0)} / ${mbToGb(swap.total_mb || 0)} GB</p><div class="progress"><span style="width:${pct(swap.used_mb || 0, swap.total_mb || 0)}%"></span></div>`),
             panel('OS', `<p>${latest.os?.type || 'Unknown'} ${latest.os?.release || ''}</p><p class="muted">${latest.os?.machine || ''}</p>`),
-            panel('Top Ports', `<p class="stat-value">${(latest.top_ports || []).length}</p><p class="muted">Open/listening ports reported</p>`),
+
           ].join('');
           return;
         }
@@ -150,11 +150,6 @@
 
           dashboard.innerHTML = [
             panel('Process Summary', `<div class="kv"><span>Total</span><strong>${ps.total ?? 0}</strong></div><div class="kv"><span>Running</span><strong>${ps.running ?? 0}</strong></div><div class="kv"><span>Sleeping</span><strong>${ps.sleeping ?? 0}</strong></div><div class="kv"><span>Zombie</span><strong>${ps.zombie ?? 0}</strong></div>`),
-            panel('Top Ports', (() => {
-              const ports = latest.top_ports || [];
-              if (!ports.length) return '<p class="muted">No busy ports reported.</p>';
-              return ports.map((port) => `<div class="kv"><span>${port.port}/${port.protocol || 'tcp'}</span><strong>${port.connections ?? 0}</strong></div>`).join('');
-            })()),
             panel('Top CPU Processes', processTable(cpuProcs, 'cpu')),
             panel('Top Memory Processes', processTable(memProcs, 'memory')),
           ].join('');

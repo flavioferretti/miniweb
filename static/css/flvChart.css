@@ -1,0 +1,190 @@
+/**
+ * flvChart.css — companion stylesheet for flvChart.js
+ * Version: 2.0.0
+ *
+ * Provides:
+ *  - .flvchart-wrap        wrapper div (optional but recommended)
+ *  - .flvchart-title       optional heading above canvas
+ *  - .flvchart-canvas      canvas element style
+ *  - .flvchart-card        card container with shadow
+ *  - .flvchart-grid        CSS grid for multi-chart dashboards
+ *  - .flvchart-badge       small metric badge (value + label)
+ *  - .flvchart-badge--up   green accent (value rising)
+ *  - .flvchart-badge--down red accent   (value falling)
+ *
+ * Minimal reset is scoped to .flvchart-* — no global side effects.
+ */
+
+/* ─────────────────────────────────────────────
+   Custom properties (override to theme)
+   ───────────────────────────────────────────── */
+:root {
+    --flvc-bg          : #ffffff;
+    --flvc-bg-card     : #f8fafc;
+    --flvc-border      : #e2e8f0;
+    --flvc-shadow      : 0 2px 12px rgba(15, 23, 42, 0.08),
+                         0 1px 3px  rgba(15, 23, 42, 0.06);
+    --flvc-shadow-hover: 0 8px 24px rgba(15, 23, 42, 0.12),
+                         0 2px 6px  rgba(15, 23, 42, 0.08);
+    --flvc-radius      : 14px;
+    --flvc-radius-sm   : 8px;
+    --flvc-font        : 'DM Mono', 'Fira Mono', 'Consolas', monospace;
+    --flvc-font-ui     : 'DM Sans', 'Outfit', system-ui, sans-serif;
+    --flvc-color-text  : #0f172a;
+    --flvc-color-muted : #64748b;
+    --flvc-color-accent: #2563eb;
+    --flvc-color-up    : #16a34a;
+    --flvc-color-down  : #dc2626;
+    --flvc-pad         : 20px;
+    --flvc-transition  : 0.2s ease;
+}
+
+/* ─────────────────────────────────────────────
+   Card container
+   ───────────────────────────────────────────── */
+.flvchart-card {
+    box-sizing        : border-box;
+    background        : var(--flvc-bg-card);
+    border            : 1px solid var(--flvc-border);
+    border-radius     : var(--flvc-radius);
+    box-shadow        : var(--flvc-shadow);
+    padding           : var(--flvc-pad);
+    transition        : box-shadow var(--flvc-transition);
+}
+
+.flvchart-card:hover {
+    box-shadow: var(--flvc-shadow-hover);
+}
+
+/* ─────────────────────────────────────────────
+   Chart wrapper (inside a card or standalone)
+   ───────────────────────────────────────────── */
+.flvchart-wrap {
+    box-sizing : border-box;
+    width      : 100%;
+    position   : relative;
+}
+
+/* ─────────────────────────────────────────────
+   Canvas element
+   ───────────────────────────────────────────── */
+.flvchart-canvas {
+    display      : block;
+    width        : 100%;
+    height       : auto;
+    border-radius: var(--flvc-radius-sm);
+    background   : var(--flvc-bg);
+}
+
+/* ─────────────────────────────────────────────
+   Optional title above canvas
+   ───────────────────────────────────────────── */
+.flvchart-title {
+    font-family  : var(--flvc-font-ui);
+    font-size    : 0.9rem;
+    font-weight  : 600;
+    color        : var(--flvc-color-text);
+    letter-spacing: 0.01em;
+    margin       : 0 0 10px 0;
+}
+
+.flvchart-subtitle {
+    font-family  : var(--flvc-font-ui);
+    font-size    : 0.78rem;
+    color        : var(--flvc-color-muted);
+    margin       : -6px 0 10px 0;
+}
+
+/* ─────────────────────────────────────────────
+   Metric badge  (current value + label)
+   ───────────────────────────────────────────── */
+.flvchart-badge {
+    display       : inline-flex;
+    flex-direction: column;
+    align-items   : flex-start;
+    gap           : 2px;
+    font-family   : var(--flvc-font);
+}
+
+.flvchart-badge__value {
+    font-size  : 1.6rem;
+    font-weight: 700;
+    line-height: 1;
+    color      : var(--flvc-color-text);
+    letter-spacing: -0.03em;
+    transition : color var(--flvc-transition);
+}
+
+.flvchart-badge__label {
+    font-size  : 0.7rem;
+    font-weight: 500;
+    color      : var(--flvc-color-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+/* ── colour variants ── */
+.flvchart-badge--up   .flvchart-badge__value { color: var(--flvc-color-up);   }
+.flvchart-badge--down .flvchart-badge__value { color: var(--flvc-color-down); }
+
+/* ─────────────────────────────────────────────
+   Multi-chart CSS grid
+   ───────────────────────────────────────────── */
+.flvchart-grid {
+    display              : grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap                  : 16px;
+    box-sizing           : border-box;
+}
+
+/* ─────────────────────────────────────────────
+   Loading / empty overlay
+   ───────────────────────────────────────────── */
+.flvchart-wrap[data-loading]::after {
+    content       : 'loading…';
+    position      : absolute;
+    inset         : 0;
+    display       : flex;
+    align-items   : center;
+    justify-content: center;
+    font-family   : var(--flvc-font);
+    font-size     : 0.8rem;
+    color         : var(--flvc-color-muted);
+    background    : rgba(255,255,255,0.7);
+    border-radius : var(--flvc-radius-sm);
+    letter-spacing: 0.04em;
+}
+
+/* ─────────────────────────────────────────────
+   Dark theme  (prefers-color-scheme)
+   ───────────────────────────────────────────── */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --flvc-bg          : #0f172a;
+        --flvc-bg-card     : #1e293b;
+        --flvc-border      : #334155;
+        --flvc-shadow      : 0 2px 12px rgba(0, 0, 0, 0.4);
+        --flvc-shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.5);
+        --flvc-color-text  : #f1f5f9;
+        --flvc-color-muted : #94a3b8;
+    }
+}
+
+/* ─────────────────────────────────────────────
+   Force dark theme via class  .flvchart-dark
+   ───────────────────────────────────────────── */
+.flvchart-dark,
+.flvchart-dark .flvchart-card,
+.flvchart-dark .flvchart-wrap {
+    --flvc-bg          : #0f172a;
+    --flvc-bg-card     : #1e293b;
+    --flvc-border      : #334155;
+    --flvc-shadow      : 0 2px 12px rgba(0,0,0,0.4);
+    --flvc-shadow-hover: 0 8px 24px rgba(0,0,0,0.5);
+    --flvc-color-text  : #f1f5f9;
+    --flvc-color-muted : #94a3b8;
+}
+
+.flvchart-dark .flvchart-canvas {
+    background: #0f172a;
+}

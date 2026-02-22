@@ -1,10 +1,10 @@
-<!DOCTYPE html>
-<!-- saved from url=(0055)https://toughbook/static/benchmark.html#ep-api_pkg_info -->
-<html lang="en" data-theme="light"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-  
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>MiniWeb Benchmark Report</title>
-  <link rel="stylesheet" href="https://toughbook/static/css/custom.css">
+  <link rel="stylesheet" href="/static/css/custom.css" />
   <style>
     /* ---- Benchmark-specific styles ---- */
     .benchmark-grid {
@@ -47,14 +47,106 @@
     .ep-nav-link:hover { background: var(--surface-3, #e2e8f0); }
     .ep-section   { margin-top: 1.5rem; scroll-margin-top: 4rem; }
     .overall-section { margin-top: .5rem; }
+    /* ---- Graph card: clickable ---- */
+    .graph {
+      cursor: zoom-in;
+      position: relative;
+      transition: opacity .15s;
+    }
+    .graph:hover { opacity: .88; }
+    .graph::after {
+      content: '⤢';
+      position: absolute; top: .5rem; right: .65rem;
+      font-size: .85rem; color: var(--text-muted); opacity: .5;
+      pointer-events: none;
+    }
+    .graph:hover::after { opacity: 1; }
+    /* ---- Fullscreen image modal ---- */
+    #img-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: rgba(0,0,0,.84);
+      backdrop-filter: blur(5px);
+      -webkit-backdrop-filter: blur(5px);
+      padding: 20px;
+      box-sizing: border-box;
+      align-items: stretch;
+      justify-content: stretch;
+    }
+    #img-modal.open { display: flex; }
+    #img-modal .modal-inner {
+      width: 100%;
+      height: 100%;
+      background: var(--surface, #ffffff);
+      border-radius: .9rem;
+      box-shadow: 0 40px 120px rgba(0,0,0,.6);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-sizing: border-box;
+    }
+    #img-modal .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: .7rem 1rem .6rem;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      min-height: 48px;
+    }
+    #img-modal .modal-title {
+      font-size: .95rem;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #img-modal .modal-close {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 1.5rem;
+      line-height: 1;
+      color: var(--text-muted);
+      padding: .1rem .45rem;
+      border-radius: .4rem;
+      flex-shrink: 0;
+      margin-left: 1rem;
+      transition: background .12s, color .12s;
+    }
+    #img-modal .modal-close:hover {
+      background: var(--surface-2);
+      color: var(--text);
+    }
+    #img-modal .modal-body {
+      flex: 1 1 0;
+      min-height: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+    #img-modal .modal-body img {
+      display: block;
+      max-width: 100%;
+      max-height: 100%;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      border-radius: .5rem;
+    }
   </style>
 </head>
 <body>
   <header class="site-header">
     <div class="container header-row">
-      <a class="brand" href="https://toughbook/">MiniWeb</a>
-      <nav class="navbar-menu"><a class="nav-link active" href="https://toughbook/static/benchmark.html">Benchmark</a></nav>
-      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle theme">◐</button>
+      <a class="brand" href="/">MiniWeb</a>
+      <nav class="navbar-menu"><a class="nav-link active" href="/static/benchmark.html">Benchmark</a></nav>
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle theme">&#9680;</button>
     </div>
   </header>
 
@@ -64,30 +156,23 @@
       <!-- ===== SUMMARY ===== -->
       <section class="panel overall-section">
         <h1>Benchmark Report</h1>
-        <p class="meta">Generated: 2026-02-21 19:23:33 &nbsp;·&nbsp; Base URL: <code>http://localhost:3000</code> &nbsp;·&nbsp; Duration: 20s &nbsp;·&nbsp; Threads: 4</p>
+        <p class="meta">Generated: 2026-02-21 21:18:12 &nbsp;·&nbsp; Base URL: <code>http://localhost:3000</code> &nbsp;·&nbsp; Duration: 10s &nbsp;·&nbsp; Threads: 4</p>
 
         <div class="benchmark-grid">
-          <article class="panel stat-card"><h3>Peak throughput</h3><p>28539.13 req/s</p></article>
-          <article class="panel stat-card"><h3>Avg throughput</h3><p>7427.9 req/s</p></article>
-          <article class="panel stat-card"><h3>Best avg latency</h3><p>0.180 ms</p></article>
+          <article class="panel stat-card"><h3>Peak throughput</h3><p>36488.07 req/s</p></article>
+          <article class="panel stat-card"><h3>Avg throughput</h3><p>5917.7 req/s</p></article>
+          <article class="panel stat-card"><h3>Best avg latency</h3><p>0.283 ms</p></article>
           <article class="panel stat-card"><h3>Worst max latency</h3><p>2000.000 ms</p></article>
-          <article class="panel stat-card"><h3>Grand avg latency</h3><p>211.46 ms</p></article>
+          <article class="panel stat-card"><h3>Grand avg latency</h3><p>223.33 ms</p></article>
         </div>
 
-        <div class="graphs">
-          <article class="graph"><h3>Throughput (all)</h3><img src="https://toughbook/static/benchmark_assets/throughput.svg" alt="Throughput"></article>
-          <article class="graph"><h3>Latency avg vs max (all)</h3><img src="https://toughbook/static/benchmark_assets/latency.svg" alt="Latency"></article>
-          <article class="graph"><h3>Latency std dev (all)</h3><img src="https://toughbook/static/benchmark_assets/latency_stdev.svg" alt="Latency stdev"></article>
-          <article class="graph"><h3>Transfer rate (all)</h3><img src="https://toughbook/static/benchmark_assets/transfer.svg" alt="Transfer"></article>
-          <article class="graph"><h3>Efficiency (all)</h3><img src="https://toughbook/static/benchmark_assets/efficiency.svg" alt="Efficiency"></article>
-        </div>
       </section>
 
       <!-- ===== ENDPOINT NAV ===== -->
       <section class="panel" style="margin-top:1rem;">
         <h2>Jump to endpoint</h2>
         <nav class="ep-nav">
-<a href="https://toughbook/static/benchmark.html#ep-static_html" class="ep-nav-link">Static HTML</a><a href="https://toughbook/static/benchmark.html#ep-static_css" class="ep-nav-link">Static CSS</a><a href="https://toughbook/static/benchmark.html#ep-static_js" class="ep-nav-link">Static JS</a><a href="https://toughbook/static/benchmark.html#ep-static_img" class="ep-nav-link">Static Image</a><a href="https://toughbook/static/benchmark.html#ep-page_home" class="ep-nav-link">Home Dashboard</a><a href="https://toughbook/static/benchmark.html#ep-page_docs" class="ep-nav-link">Documentation</a><a href="https://toughbook/static/benchmark.html#ep-page_networking" class="ep-nav-link">Networking</a><a href="https://toughbook/static/benchmark.html#ep-packages_ui" class="ep-nav-link">Packages UI</a><a href="https://toughbook/static/benchmark.html#ep-api_root" class="ep-nav-link">API Index</a><a href="https://toughbook/static/benchmark.html#ep-api_metrics" class="ep-nav-link">System Metrics API</a><a href="https://toughbook/static/benchmark.html#ep-api_networking" class="ep-nav-link">Network Info API</a><a href="https://toughbook/static/benchmark.html#ep-api_pkg_search" class="ep-nav-link">Package Search</a><a href="https://toughbook/static/benchmark.html#ep-api_pkg_info" class="ep-nav-link">Package Info</a><a href="https://toughbook/static/benchmark.html#ep-api_pkg_files" class="ep-nav-link">Package Files</a><a href="https://toughbook/static/benchmark.html#ep-man_search" class="ep-nav-link">Man Search</a><a href="https://toughbook/static/benchmark.html#ep-man_html" class="ep-nav-link">Man Page (HTML)</a><a href="https://toughbook/static/benchmark.html#ep-man_html_ext" class="ep-nav-link">Man Page (.html)</a><a href="https://toughbook/static/benchmark.html#ep-man_md" class="ep-nav-link">Man Page (Markdown)</a>
+<a href="#ep-static_html" class="ep-nav-link">Static HTML</a><a href="#ep-static_css" class="ep-nav-link">Static CSS</a><a href="#ep-static_js" class="ep-nav-link">Static JS</a><a href="#ep-static_img" class="ep-nav-link">Static Image</a><a href="#ep-page_home" class="ep-nav-link">Home Dashboard</a><a href="#ep-page_docs" class="ep-nav-link">Documentation</a><a href="#ep-page_networking" class="ep-nav-link">Networking</a><a href="#ep-packages_ui" class="ep-nav-link">Packages UI</a><a href="#ep-api_root" class="ep-nav-link">API Index</a><a href="#ep-api_metrics" class="ep-nav-link">System Metrics API</a><a href="#ep-api_networking" class="ep-nav-link">Network Info API</a><a href="#ep-api_pkg_search" class="ep-nav-link">Package Search</a><a href="#ep-api_pkg_info" class="ep-nav-link">Package Info</a><a href="#ep-api_pkg_files" class="ep-nav-link">Package Files</a><a href="#ep-man_search" class="ep-nav-link">Man Search</a><a href="#ep-man_html" class="ep-nav-link">Man Page (HTML)</a><a href="#ep-man_html_ext" class="ep-nav-link">Man Page (.html)</a><a href="#ep-man_md" class="ep-nav-link">Man Page (Markdown)</a>
         </nav>
       </section>
 
@@ -97,8 +182,12 @@
         <h2>Static HTML</h2>
         <p class="meta ep-url"><code>/static/test.html</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/static_html_throughput.svg" alt="Throughput Static HTML"></div>
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/static_html_latency.svg" alt="Latency Static HTML"></div>
+              <div class="graph" data-src="/static/benchmark_assets/static_html_throughput.svg" data-title="Static HTML — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/static_html_throughput.svg" alt="Throughput Static HTML">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/static_html_latency.svg" data-title="Static HTML — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/static_html_latency.svg" alt="Latency Static HTML">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -110,12 +199,11 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>22189.6</td><td>0.18</td><td>12.31</td><td>219.260</td><td>446002</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>11248.6</td><td>0.74</td><td>46.08</td><td>111.150</td><td>225229</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>14673.4</td><td>0.98</td><td>29.12</td><td>144.990</td><td>294106</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>11496.6</td><td>2.34</td><td>36.54</td><td>113.600</td><td>230723</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>64</td><td>16297.1</td><td>3.21</td><td>41.68</td><td>161.040</td><td>327533</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>128</td><td>18016.0</td><td>7.45</td><td>340.87</td><td>92.800</td><td>361495</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>8</td><td>14185.1</td><td>0.51</td><td>12.48</td><td>140.170</td><td>143287</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>12432.8</td><td>1.09</td><td>16.97</td><td>122.850</td><td>124559</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>23201.2</td><td>1.47</td><td>58.29</td><td>229.250</td><td>233398</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>64</td><td>9204.6</td><td>7.19</td><td>230.55</td><td>90.950</td><td>92819</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>128</td><td>17003.6</td><td>7.48</td><td>161.74</td><td>88.980</td><td>171480</td><td class="http-ok">200</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
@@ -124,8 +212,12 @@
         <h2>Static CSS</h2>
         <p class="meta ep-url"><code>/static/css/custom.css</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/static_css_throughput.svg" alt="Throughput Static CSS"></div>
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/static_css_latency.svg" alt="Latency Static CSS"></div>
+              <div class="graph" data-src="/static/benchmark_assets/static_css_throughput.svg" data-title="Static CSS — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/static_css_throughput.svg" alt="Throughput Static CSS">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/static_css_latency.svg" data-title="Static CSS — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/static_css_latency.svg" alt="Latency Static CSS">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -137,12 +229,11 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>11661.5</td><td>0.34</td><td>12.67</td><td>65.220</td><td>234395</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>25403.3</td><td>0.30</td><td>16.67</td><td>142.080</td><td>510612</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>12114.3</td><td>1.25</td><td>29.98</td><td>67.750</td><td>243521</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>15316.1</td><td>1.94</td><td>42.01</td><td>85.660</td><td>307057</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>64</td><td>16151.1</td><td>3.92</td><td>135.99</td><td>90.330</td><td>324705</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>128</td><td>20173.0</td><td>6.06</td><td>349.84</td><td>64.020</td><td>405561</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>8</td><td>12854.3</td><td>0.67</td><td>40.33</td><td>71.890</td><td>129910</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>12026.9</td><td>1.81</td><td>83.81</td><td>67.260</td><td>120990</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>18334.5</td><td>1.62</td><td>22.58</td><td>102.540</td><td>183635</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>64</td><td>17412.4</td><td>8.18</td><td>350.63</td><td>97.380</td><td>175428</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>128</td><td>21412.5</td><td>5.82</td><td>187.07</td><td>64.020</td><td>216136</td><td class="http-ok">200</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
@@ -151,8 +242,12 @@
         <h2>Static JS</h2>
         <p class="meta ep-url"><code>/static/js/theme_toggler.js</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/static_js_throughput.svg" alt="Throughput Static JS"></div>
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/static_js_latency.svg" alt="Latency Static JS"></div>
+              <div class="graph" data-src="/static/benchmark_assets/static_js_throughput.svg" data-title="Static JS — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/static_js_throughput.svg" alt="Throughput Static JS">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/static_js_latency.svg" data-title="Static JS — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/static_js_latency.svg" alt="Latency Static JS">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -164,12 +259,11 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>22716.5</td><td>0.18</td><td>16.49</td><td>32.450</td><td>454582</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>10844.9</td><td>0.71</td><td>30.38</td><td>15.490</td><td>217995</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>14057.6</td><td>1.09</td><td>36.67</td><td>20.080</td><td>281778</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>15339.3</td><td>1.93</td><td>31.35</td><td>21.910</td><td>307650</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>64</td><td>12293.9</td><td>4.83</td><td>53.69</td><td>17.560</td><td>246872</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>128</td><td>19413.2</td><td>6.48</td><td>169.77</td><td>18.310</td><td>389912</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>8</td><td>26866.0</td><td>0.28</td><td>16.52</td><td>38.380</td><td>271391</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>12421.8</td><td>1.18</td><td>25.91</td><td>17.740</td><td>125460</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>17964.7</td><td>1.68</td><td>36.67</td><td>25.660</td><td>179979</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>64</td><td>18110.7</td><td>3.22</td><td>34.10</td><td>25.870</td><td>182231</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>128</td><td>36108.4</td><td>3.48</td><td>219.25</td><td>32.770</td><td>362800</td><td class="http-ok">200</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
@@ -178,8 +272,12 @@
         <h2>Static Image</h2>
         <p class="meta ep-url"><code>/static/assets/favicon.svg</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/static_img_throughput.svg" alt="Throughput Static Image"></div>
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/static_img_latency.svg" alt="Latency Static Image"></div>
+              <div class="graph" data-src="/static/benchmark_assets/static_img_throughput.svg" data-title="Static Image — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/static_img_throughput.svg" alt="Throughput Static Image">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/static_img_latency.svg" data-title="Static Image — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/static_img_latency.svg" alt="Latency Static Image">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -191,12 +289,11 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>12892.5</td><td>0.30</td><td>14.57</td><td>5.430</td><td>257951</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>15217.5</td><td>0.49</td><td>17.26</td><td>6.410</td><td>305913</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>27924.7</td><td>0.54</td><td>17.07</td><td>11.770</td><td>561389</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>12984.5</td><td>2.24</td><td>34.84</td><td>5.470</td><td>260218</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>64</td><td>28539.1</td><td>2.06</td><td>33.71</td><td>12.030</td><td>572201</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>128</td><td>14703.3</td><td>8.51</td><td>349.78</td><td>5.920</td><td>295262</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>8</td><td>11702.0</td><td>0.65</td><td>17.95</td><td>4.930</td><td>118209</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>17629.1</td><td>0.87</td><td>29.25</td><td>7.430</td><td>178100</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>17556.6</td><td>1.72</td><td>34.84</td><td>7.400</td><td>176135</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>64</td><td>14806.1</td><td>3.86</td><td>33.93</td><td>6.240</td><td>148948</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>128</td><td>36488.1</td><td>3.31</td><td>177.44</td><td>14.700</td><td>366394</td><td class="http-ok">200</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
@@ -205,8 +302,12 @@
         <h2>Home Dashboard</h2>
         <p class="meta ep-url"><code>/</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/page_home_throughput.svg" alt="Throughput Home Dashboard"></div>
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/page_home_latency.svg" alt="Latency Home Dashboard"></div>
+              <div class="graph" data-src="/static/benchmark_assets/page_home_throughput.svg" data-title="Home Dashboard — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/page_home_throughput.svg" alt="Throughput Home Dashboard">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/page_home_latency.svg" data-title="Home Dashboard — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/page_home_latency.svg" alt="Latency Home Dashboard">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -218,12 +319,11 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>4227.4</td><td>0.96</td><td>26.26</td><td>72.890</td><td>84979</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>5621.7</td><td>1.47</td><td>75.00</td><td>96.930</td><td>112577</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>9012.8</td><td>1.77</td><td>27.45</td><td>155.400</td><td>180434</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>4068.0</td><td>7.71</td><td>37.65</td><td>70.150</td><td>81645</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>64</td><td>4870.5</td><td>12.92</td><td>42.32</td><td>83.980</td><td>97856</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>128</td><td>7199.3</td><td>26.00</td><td>856.62</td><td>38.370</td><td>144306</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>8</td><td>3546.7</td><td>2.40</td><td>55.42</td><td>61.150</td><td>35599</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>5653.5</td><td>3.02</td><td>82.46</td><td>97.480</td><td>56953</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>5046.1</td><td>6.82</td><td>145.20</td><td>87.010</td><td>50868</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>64</td><td>7850.9</td><td>8.89</td><td>154.27</td><td>135.370</td><td>79167</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>128</td><td>6416.6</td><td>43.77</td><td>1680.00</td><td>33.670</td><td>64820</td><td class="http-ok">200</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
@@ -232,8 +332,12 @@
         <h2>Documentation</h2>
         <p class="meta ep-url"><code>/docs</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/page_docs_throughput.svg" alt="Throughput Documentation"></div>
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/page_docs_latency.svg" alt="Latency Documentation"></div>
+              <div class="graph" data-src="/static/benchmark_assets/page_docs_throughput.svg" data-title="Documentation — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/page_docs_throughput.svg" alt="Throughput Documentation">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/page_docs_latency.svg" data-title="Documentation — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/page_docs_latency.svg" alt="Latency Documentation">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -245,12 +349,11 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>3284.0</td><td>3.48</td><td>350.06</td><td>48.170</td><td>65978</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>3739.4</td><td>2.67</td><td>161.37</td><td>54.880</td><td>75018</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>4609.4</td><td>3.52</td><td>41.24</td><td>67.660</td><td>92350</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>9733.6</td><td>3.73</td><td>147.50</td><td>142.880</td><td>195338</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>64</td><td>4400.6</td><td>14.43</td><td>49.48</td><td>64.590</td><td>88458</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>128</td><td>9849.5</td><td>16.43</td><td>486.47</td><td>42.250</td><td>197950</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>8</td><td>3500.2</td><td>5.92</td><td>382.24</td><td>51.370</td><td>35306</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>3790.2</td><td>4.52</td><td>65.50</td><td>55.640</td><td>38282</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>9614.9</td><td>3.46</td><td>87.44</td><td>141.140</td><td>97176</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>64</td><td>3311.2</td><td>21.86</td><td>260.34</td><td>48.590</td><td>33463</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>128</td><td>15598.3</td><td>9.42</td><td>273.90</td><td>71.040</td><td>157246</td><td class="http-ok">200</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
@@ -259,8 +362,12 @@
         <h2>Networking</h2>
         <p class="meta ep-url"><code>/networking</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/page_networking_throughput.svg" alt="Throughput Networking"></div>
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/page_networking_latency.svg" alt="Latency Networking"></div>
+              <div class="graph" data-src="/static/benchmark_assets/page_networking_throughput.svg" data-title="Networking — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/page_networking_throughput.svg" alt="Throughput Networking">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/page_networking_latency.svg" data-title="Networking — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/page_networking_latency.svg" alt="Latency Networking">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -272,12 +379,11 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>4869.7</td><td>0.83</td><td>17.18</td><td>62.320</td><td>97508</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>9926.1</td><td>0.81</td><td>17.36</td><td>127.010</td><td>199521</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>4212.9</td><td>3.84</td><td>87.90</td><td>53.900</td><td>84561</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>5232.6</td><td>6.09</td><td>32.82</td><td>66.960</td><td>105089</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>64</td><td>5081.8</td><td>12.55</td><td>46.29</td><td>65.020</td><td>101896</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>128</td><td>9646.6</td><td>15.62</td><td>509.30</td><td>37.530</td><td>193402</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>8</td><td>2722.8</td><td>4.92</td><td>226.44</td><td>34.830</td><td>27470</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>2877.6</td><td>8.77</td><td>388.65</td><td>36.800</td><td>29070</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>2030.1</td><td>19.34</td><td>389.27</td><td>25.960</td><td>20507</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>64</td><td>2676.0</td><td>27.70</td><td>419.10</td><td>34.000</td><td>27001</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>128</td><td>8980.9</td><td>17.72</td><td>546.68</td><td>32.070</td><td>90028</td><td class="http-ok">200</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
@@ -286,8 +392,12 @@
         <h2>Packages UI</h2>
         <p class="meta ep-url"><code>/packages</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/packages_ui_throughput.svg" alt="Throughput Packages UI"></div>
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/packages_ui_latency.svg" alt="Latency Packages UI"></div>
+              <div class="graph" data-src="/static/benchmark_assets/packages_ui_throughput.svg" data-title="Packages UI — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/packages_ui_throughput.svg" alt="Throughput Packages UI">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/packages_ui_latency.svg" data-title="Packages UI — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/packages_ui_latency.svg" alt="Latency Packages UI">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -299,12 +409,11 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>8949.3</td><td>0.50</td><td>30.47</td><td>123.270</td><td>179931</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>3940.0</td><td>2.10</td><td>36.45</td><td>54.260</td><td>79013</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>4350.4</td><td>3.89</td><td>98.76</td><td>59.920</td><td>87442</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>4952.4</td><td>6.46</td><td>52.65</td><td>68.210</td><td>99459</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>64</td><td>8976.2</td><td>7.64</td><td>149.43</td><td>123.630</td><td>180018</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>128</td><td>8285.3</td><td>18.20</td><td>992.34</td><td>32.260</td><td>166006</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>8</td><td>3270.3</td><td>3.04</td><td>153.12</td><td>45.040</td><td>32880</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>6225.3</td><td>2.58</td><td>22.10</td><td>85.750</td><td>62905</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>6109.4</td><td>5.36</td><td>67.63</td><td>84.140</td><td>61291</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>64</td><td>5972.7</td><td>10.67</td><td>43.69</td><td>82.260</td><td>60078</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>128</td><td>19349.4</td><td>7.68</td><td>170.15</td><td>80.490</td><td>195005</td><td class="http-ok">200</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
@@ -313,8 +422,12 @@
         <h2>API Index</h2>
         <p class="meta ep-url"><code>/apiroot</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/api_root_throughput.svg" alt="Throughput API Index"></div>
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/api_root_latency.svg" alt="Latency API Index"></div>
+              <div class="graph" data-src="/static/benchmark_assets/api_root_throughput.svg" data-title="API Index — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/api_root_throughput.svg" alt="Throughput API Index">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/api_root_latency.svg" data-title="API Index — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/api_root_latency.svg" alt="Latency API Index">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -326,12 +439,11 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>9800.5</td><td>0.41</td><td>12.64</td><td>75.330</td><td>196988</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>4498.9</td><td>1.77</td><td>32.31</td><td>34.570</td><td>90165</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>4510.7</td><td>3.52</td><td>24.45</td><td>34.670</td><td>90486</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>5996.9</td><td>5.33</td><td>39.21</td><td>46.090</td><td>120215</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>64</td><td>5749.6</td><td>11.10</td><td>43.26</td><td>44.180</td><td>115387</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>128</td><td>10607.7</td><td>14.15</td><td>482.26</td><td>32.120</td><td>213081</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>8</td><td>4173.1</td><td>2.07</td><td>96.80</td><td>32.070</td><td>41928</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>4745.4</td><td>3.50</td><td>61.43</td><td>36.470</td><td>47661</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>5324.0</td><td>6.03</td><td>43.45</td><td>40.910</td><td>53551</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>64</td><td>4009.4</td><td>17.33</td><td>387.45</td><td>30.810</td><td>40452</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>128</td><td>8168.8</td><td>19.76</td><td>652.11</td><td>22.400</td><td>82311</td><td class="http-ok">200</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
@@ -340,8 +452,12 @@
         <h2>System Metrics API</h2>
         <p class="meta ep-url"><code>/api/metrics</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/api_metrics_throughput.svg" alt="Throughput System Metrics API"></div>
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/api_metrics_latency.svg" alt="Latency System Metrics API"></div>
+              <div class="graph" data-src="/static/benchmark_assets/api_metrics_throughput.svg" data-title="System Metrics API — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/api_metrics_throughput.svg" alt="Throughput System Metrics API">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/api_metrics_latency.svg" data-title="System Metrics API — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/api_metrics_latency.svg" alt="Latency System Metrics API">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -353,12 +469,11 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>92.7</td><td>48.25</td><td>440.48</td><td>0.342</td><td>1863</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>93.0</td><td>85.81</td><td>196.95</td><td>0.343</td><td>1865</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>90.3</td><td>175.97</td><td>303.41</td><td>0.333</td><td>1810</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>105.9</td><td>299.26</td><td>556.53</td><td>0.390</td><td>2123</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>64</td><td>90.7</td><td>691.26</td><td>835.99</td><td>0.334</td><td>1823</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>128</td><td>440.4</td><td>375.21</td><td>1510.00</td><td>1.610</td><td>8849</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>8</td><td>82.2</td><td>96.88</td><td>258.05</td><td>0.304</td><td>830</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>104.6</td><td>150.89</td><td>276.20</td><td>0.387</td><td>1057</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>91.0</td><td>344.94</td><td>529.89</td><td>0.336</td><td>919</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>64</td><td>101.2</td><td>604.94</td><td>935.89</td><td>0.374</td><td>1023</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>128</td><td>829.0</td><td>243.99</td><td>1470.00</td><td>3.030</td><td>8368</td><td class="http-ok">200</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
@@ -367,8 +482,12 @@
         <h2>Network Info API</h2>
         <p class="meta ep-url"><code>/api/networking</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/api_networking_throughput.svg" alt="Throughput Network Info API"></div>
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/api_networking_latency.svg" alt="Latency Network Info API"></div>
+              <div class="graph" data-src="/static/benchmark_assets/api_networking_throughput.svg" data-title="Network Info API — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/api_networking_throughput.svg" alt="Throughput Network Info API">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/api_networking_latency.svg" data-title="Network Info API — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/api_networking_latency.svg" alt="Latency Network Info API">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -380,12 +499,11 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>2835.8</td><td>1.44</td><td>39.61</td><td>11.600</td><td>56908</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>1336.1</td><td>5.99</td><td>27.27</td><td>5.440</td><td>26834</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>2799.4</td><td>5.71</td><td>26.19</td><td>11.400</td><td>56063</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>1224.2</td><td>26.06</td><td>54.96</td><td>5.010</td><td>24586</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>64</td><td>1619.4</td><td>39.38</td><td>72.68</td><td>6.600</td><td>32525</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>128</td><td>2871.6</td><td>42.67</td><td>91.10</td><td>11.570</td><td>57649</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>8</td><td>1602.7</td><td>4.98</td><td>17.03</td><td>6.560</td><td>16123</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>2871.3</td><td>5.58</td><td>26.01</td><td>11.740</td><td>28945</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>1240.7</td><td>25.73</td><td>55.45</td><td>5.080</td><td>12471</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>64</td><td>1789.5</td><td>35.53</td><td>75.32</td><td>7.340</td><td>18069</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>128</td><td>1760.3</td><td>69.18</td><td>138.06</td><td>7.120</td><td>17751</td><td class="http-ok">200</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
@@ -394,8 +512,12 @@
         <h2>Package Search</h2>
         <p class="meta ep-url"><code>/api/packages/search?q=curl</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/api_pkg_search_throughput.svg" alt="Throughput Package Search"></div>
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/api_pkg_search_latency.svg" alt="Latency Package Search"></div>
+              <div class="graph" data-src="/static/benchmark_assets/api_pkg_search_throughput.svg" data-title="Package Search — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/api_pkg_search_throughput.svg" alt="Throughput Package Search">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/api_pkg_search_latency.svg" data-title="Package Search — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/api_pkg_search_latency.svg" alt="Latency Package Search">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -407,12 +529,11 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>11.1</td><td>356.28</td><td>404.88</td><td>0.006</td><td>222</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>5.5</td><td>1410.00</td><td>1600.00</td><td>0.003</td><td>110</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>6.1</td><td>1300.00</td><td>1980.00</td><td>0.003</td><td>122</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>10.9</td><td>1190.00</td><td>1910.00</td><td>0.006</td><td>220</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>64</td><td>5.4</td><td>1200.00</td><td>1590.00</td><td>0.003</td><td>108</td><td class="http-ok">000000</td><td>OK</td></tr>
-<tr><td>128</td><td>3.8</td><td>0.00</td><td>0.00</td><td>0.002</td><td>76</td><td class="http-ok">000000</td><td>OK</td></tr>
+<tr><td>8</td><td>11.3</td><td>685.80</td><td>812.12</td><td>0.006</td><td>114</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>5.2</td><td>1180.00</td><td>1580.00</td><td>0.003</td><td>52</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>6.3</td><td>1100.00</td><td>1930.00</td><td>0.003</td><td>64</td><td class="http-ok">000000</td><td>OK</td></tr>
+<tr><td>64</td><td>5.2</td><td>1130.00</td><td>1640.00</td><td>0.003</td><td>52</td><td class="http-ok">000000</td><td>OK</td></tr>
+<tr><td>128</td><td>3.5</td><td>0.00</td><td>0.00</td><td>0.002</td><td>35</td><td class="http-ok">000000</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
@@ -421,8 +542,12 @@
         <h2>Package Info</h2>
         <p class="meta ep-url"><code>/api/packages/info?name=curl</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/api_pkg_info_throughput.svg" alt="Throughput Package Info"></div>
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/api_pkg_info_latency.svg" alt="Latency Package Info"></div>
+              <div class="graph" data-src="/static/benchmark_assets/api_pkg_info_throughput.svg" data-title="Package Info — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/api_pkg_info_throughput.svg" alt="Throughput Package Info">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/api_pkg_info_latency.svg" data-title="Package Info — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/api_pkg_info_latency.svg" alt="Latency Package Info">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -434,12 +559,11 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>12.5</td><td>315.89</td><td>591.49</td><td>0.014</td><td>252</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>14.0</td><td>561.36</td><td>663.37</td><td>0.015</td><td>281</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>24.9</td><td>630.52</td><td>672.48</td><td>0.028</td><td>500</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>11.1</td><td>1140.00</td><td>1900.00</td><td>0.012</td><td>224</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>64</td><td>11.8</td><td>1100.00</td><td>1820.00</td><td>0.013</td><td>236</td><td class="http-ok">000000</td><td>OK</td></tr>
-<tr><td>128</td><td>813.2</td><td>183.38</td><td>2000.00</td><td>0.123</td><td>16346</td><td class="http-ok">000000</td><td>OK</td></tr>
+<tr><td>8</td><td>13.9</td><td>556.35</td><td>660.95</td><td>0.015</td><td>140</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>15.0</td><td>1000.00</td><td>1160.00</td><td>0.017</td><td>152</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>12.3</td><td>900.88</td><td>1890.00</td><td>0.014</td><td>124</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>64</td><td>15.8</td><td>1040.00</td><td>1880.00</td><td>0.017</td><td>160</td><td class="http-ok">000000</td><td>OK</td></tr>
+<tr><td>128</td><td>1553.4</td><td>247.08</td><td>1990.00</td><td>0.224</td><td>15642</td><td class="http-ok">000000</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
@@ -448,8 +572,12 @@
         <h2>Package Files</h2>
         <p class="meta ep-url"><code>/api/packages/files?name=curl</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/api_pkg_files_throughput.svg" alt="Throughput Package Files"></div>
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/api_pkg_files_latency.svg" alt="Latency Package Files"></div>
+              <div class="graph" data-src="/static/benchmark_assets/api_pkg_files_throughput.svg" data-title="Package Files — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/api_pkg_files_throughput.svg" alt="Throughput Package Files">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/api_pkg_files_latency.svg" data-title="Package Files — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/api_pkg_files_latency.svg" alt="Latency Package Files">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -461,12 +589,11 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>6.6</td><td>595.97</td><td>1080.00</td><td>0.153</td><td>132</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>7.7</td><td>1010.00</td><td>1620.00</td><td>0.180</td><td>155</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>15.6</td><td>994.64</td><td>1430.00</td><td>0.365</td><td>314</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>6.6</td><td>1190.00</td><td>1810.00</td><td>0.156</td><td>133</td><td class="http-ok">000000</td><td>OK</td></tr>
-<tr><td>64</td><td>7.4</td><td>1160.00</td><td>1740.00</td><td>0.172</td><td>148</td><td class="http-ok">000000</td><td>OK</td></tr>
-<tr><td>128</td><td>7.4</td><td>1980.00</td><td>1980.00</td><td>0.173</td><td>149</td><td class="http-ok">000000</td><td>OK</td></tr>
+<tr><td>8</td><td>9.2</td><td>823.14</td><td>888.80</td><td>0.216</td><td>93</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>8.7</td><td>1620.00</td><td>1950.00</td><td>0.204</td><td>88</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>8.3</td><td>1140.00</td><td>1720.00</td><td>0.195</td><td>84</td><td class="http-ok">000000</td><td>OK</td></tr>
+<tr><td>64</td><td>7.2</td><td>1170.00</td><td>1760.00</td><td>0.169</td><td>73</td><td class="http-ok">000000</td><td>OK</td></tr>
+<tr><td>128</td><td>6.7</td><td>1850.00</td><td>1960.00</td><td>0.157</td><td>68</td><td class="http-ok">000000</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
@@ -475,8 +602,12 @@
         <h2>Man Search</h2>
         <p class="meta ep-url"><code>/api/man/search?q=pledge</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/man_search_throughput.svg" alt="Throughput Man Search"></div>
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/man_search_latency.svg" alt="Latency Man Search"></div>
+              <div class="graph" data-src="/static/benchmark_assets/man_search_throughput.svg" data-title="Man Search — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/man_search_throughput.svg" alt="Throughput Man Search">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/man_search_latency.svg" data-title="Man Search — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/man_search_latency.svg" alt="Latency Man Search">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -488,12 +619,11 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>21.8</td><td>183.02</td><td>382.18</td><td>0.005</td><td>438</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>21.9</td><td>361.86</td><td>453.37</td><td>0.005</td><td>440</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>25.6</td><td>613.53</td><td>1220.00</td><td>0.006</td><td>514</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>14.3</td><td>1700.00</td><td>2000.00</td><td>0.003</td><td>287</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>64</td><td>16.9</td><td>1150.00</td><td>1980.00</td><td>0.004</td><td>339</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>128</td><td>459.4</td><td>161.68</td><td>2000.00</td><td>0.072</td><td>9227</td><td class="http-ok">000000</td><td>OK</td></tr>
+<tr><td>8</td><td>25.1</td><td>313.80</td><td>463.42</td><td>0.006</td><td>253</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>22.9</td><td>667.01</td><td>921.80</td><td>0.006</td><td>232</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>21.7</td><td>1370.00</td><td>1770.00</td><td>0.005</td><td>219</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>64</td><td>26.1</td><td>1020.00</td><td>2000.00</td><td>0.006</td><td>264</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>128</td><td>1584.6</td><td>112.49</td><td>1970.00</td><td>0.244</td><td>15958</td><td class="http-ok">000000</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
@@ -502,8 +632,12 @@
         <h2>Man Page (HTML)</h2>
         <p class="meta ep-url"><code>/man/1/1/ls</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/man_html_throughput.svg" alt="Throughput Man Page (HTML)"></div>
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/man_html_latency.svg" alt="Latency Man Page (HTML)"></div>
+              <div class="graph" data-src="/static/benchmark_assets/man_html_throughput.svg" data-title="Man Page (HTML) — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/man_html_throughput.svg" alt="Throughput Man Page (HTML)">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/man_html_latency.svg" data-title="Man Page (HTML) — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/man_html_latency.svg" alt="Latency Man Page (HTML)">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -515,12 +649,11 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>7703.5</td><td>1.39</td><td>33.66</td><td>160.910</td><td>154746</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>15805.8</td><td>1.03</td><td>173.72</td><td>332.380</td><td>317073</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>7083.0</td><td>2.49</td><td>80.87</td><td>148.350</td><td>142034</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>8384.5</td><td>3.89</td><td>104.14</td><td>175.330</td><td>168376</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>64</td><td>7990.8</td><td>7.17</td><td>92.21</td><td>166.260</td><td>160591</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>128</td><td>10070.0</td><td>13.19</td><td>261.80</td><td>103.330</td><td>202442</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>8</td><td>3.8</td><td>3.42</td><td>47.90</td><td>0.001</td><td>38</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>3.1</td><td>1.01</td><td>18.96</td><td>0.001</td><td>31</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>3.9</td><td>1.69</td><td>23.69</td><td>0.002</td><td>39</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>64</td><td>7.2</td><td>4.62</td><td>31.28</td><td>0.003</td><td>73</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>128</td><td>7.9</td><td>3.55</td><td>30.47</td><td>0.003</td><td>80</td><td class="http-ok">200</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
@@ -529,8 +662,12 @@
         <h2>Man Page (.html)</h2>
         <p class="meta ep-url"><code>/man/1/1/ls.html</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/man_html_ext_throughput.svg" alt="Throughput Man Page (.html)"></div>
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/man_html_ext_latency.svg" alt="Latency Man Page (.html)"></div>
+              <div class="graph" data-src="/static/benchmark_assets/man_html_ext_throughput.svg" data-title="Man Page (.html) — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/man_html_ext_throughput.svg" alt="Throughput Man Page (.html)">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/man_html_ext_latency.svg" data-title="Man Page (.html) — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/man_html_ext_latency.svg" alt="Latency Man Page (.html)">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -542,12 +679,11 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>7563.5</td><td>1.15</td><td>77.19</td><td>158.240</td><td>152075</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>10118.8</td><td>1.04</td><td>47.51</td><td>212.640</td><td>203473</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>10524.5</td><td>1.61</td><td>77.79</td><td>220.180</td><td>211135</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>9418.2</td><td>3.23</td><td>62.49</td><td>196.520</td><td>189189</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>64</td><td>16554.4</td><td>3.63</td><td>161.61</td><td>345.130</td><td>331993</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>128</td><td>9753.0</td><td>13.34</td><td>526.09</td><td>100.600</td><td>196015</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>8</td><td>0.5</td><td>0.59</td><td>0.96</td><td>0.000</td><td>5</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>0.6</td><td>4.68</td><td>26.11</td><td>0.000</td><td>6</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>2.0</td><td>1.88</td><td>7.10</td><td>0.001</td><td>20</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>64</td><td>6.4</td><td>4.26</td><td>35.66</td><td>0.003</td><td>65</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>128</td><td>8.9</td><td>4.68</td><td>40.13</td><td>0.004</td><td>90</td><td class="http-ok">200</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
@@ -556,8 +692,12 @@
         <h2>Man Page (Markdown)</h2>
         <p class="meta ep-url"><code>/man/1/1/ls.md</code></p>
         <div class="ep-graphs">
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/man_md_throughput.svg" alt="Throughput Man Page (Markdown)"></div>
-              <div class="graph"><img src="https://toughbook/static/benchmark_assets/man_md_latency.svg" alt="Latency Man Page (Markdown)"></div>
+              <div class="graph" data-src="/static/benchmark_assets/man_md_throughput.svg" data-title="Man Page (Markdown) — Throughput" title="Click to expand">
+                <img src="/static/benchmark_assets/man_md_throughput.svg" alt="Throughput Man Page (Markdown)">
+              </div>
+              <div class="graph" data-src="/static/benchmark_assets/man_md_latency.svg" data-title="Man Page (Markdown) — Latency" title="Click to expand">
+                <img src="/static/benchmark_assets/man_md_latency.svg" alt="Latency Man Page (Markdown)">
+              </div>
             </div>
         <div class="details">
           <table>
@@ -569,19 +709,75 @@
               </tr>
             </thead>
             <tbody>
-<tr><td>4</td><td>7437.5</td><td>1.30</td><td>74.50</td><td>74.030</td><td>149424</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>8</td><td>8749.2</td><td>1.28</td><td>44.37</td><td>87.420</td><td>175259</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>16</td><td>17467.0</td><td>0.97</td><td>31.82</td><td>173.890</td><td>351106</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>32</td><td>7469.4</td><td>4.17</td><td>75.54</td><td>74.220</td><td>150087</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>64</td><td>9107.3</td><td>6.58</td><td>73.52</td><td>90.250</td><td>183092</td><td class="http-ok">200</td><td>OK</td></tr>
-<tr><td>128</td><td>23996.9</td><td>5.31</td><td>228.93</td><td>117.640</td><td>482162</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>8</td><td>0.8</td><td>0.34</td><td>0.56</td><td>0.000</td><td>8</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>16</td><td>1.3</td><td>5.12</td><td>29.09</td><td>0.001</td><td>13</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>32</td><td>3.8</td><td>2.64</td><td>32.69</td><td>0.001</td><td>38</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>64</td><td>5.7</td><td>2.89</td><td>15.47</td><td>0.002</td><td>57</td><td class="http-ok">200</td><td>OK</td></tr>
+<tr><td>128</td><td>16.2</td><td>3.17</td><td>25.60</td><td>0.006</td><td>163</td><td class="http-ok">200</td><td>OK</td></tr>
             </tbody>
           </table>
         </div>
       </section>
     </div>
   </main>
-  <script src="https://toughbook/static/js/theme_toggler.js"></script>
+  <script src="/static/js/theme_toggler.js"></script>
 
+  <!-- ===== FULLSCREEN IMAGE MODAL ===== -->
+  <div id="img-modal" role="dialog" aria-modal="true" aria-label="Graph fullscreen view">
+    <div class="modal-inner">
+      <div class="modal-header">
+        <span class="modal-title" id="modal-title"></span>
+        <button class="modal-close" id="modal-close" aria-label="Close">&#x2715;</button>
+      </div>
+      <div class="modal-body">
+        <img id="modal-img" src="" alt="" />
+      </div>
+    </div>
+  </div>
 
-</body></html>
+  <script>
+    (function () {
+      var modal    = document.getElementById('img-modal');
+      var modalImg = document.getElementById('modal-img');
+      var modalTtl = document.getElementById('modal-title');
+
+      function openModal(src, title) {
+        modalImg.src = src;
+        modalImg.alt = title || '';
+        modalTtl.textContent = title || '';
+        modal.classList.add('open');
+        document.body.style.overflow = 'hidden';
+      }
+
+      function closeModal() {
+        modal.classList.remove('open');
+        document.body.style.overflow = '';
+        /* defer clearing src so close animation is smooth */
+        setTimeout(function () { modalImg.src = ''; }, 200);
+      }
+
+      /* click on any graph card that carries data-src */
+      document.querySelectorAll('.graph[data-src]').forEach(function (card) {
+        card.addEventListener('click', function () {
+          openModal(card.dataset.src, card.dataset.title || '');
+        });
+      });
+
+      /* × button */
+      document.getElementById('modal-close').addEventListener('click', closeModal);
+
+      /* click on the dark backdrop (not the inner panel) */
+      modal.addEventListener('click', function (e) {
+        if (e.target === modal) closeModal();
+      });
+
+      /* Escape key */
+      document.addEventListener('keydown', function (e) {
+        if ((e.key === 'Escape' || e.keyCode === 27) && modal.classList.contains('open')) {
+          closeModal();
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

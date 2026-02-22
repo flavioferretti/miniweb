@@ -1,5 +1,5 @@
 # Compiled binaries
-m_plus_server
+miniweb
 *.o
 *.out
 *.exe
@@ -83,6 +83,7 @@ config.local
 # Static files cache (if generated)
 static/.cache/
 static/man
+static/doxygen
 
 # Coverage reports
 *.gcov

@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>flvChart.js — demo</title>
+
+<!-- 1. Load the stylesheet -->
+<link rel="stylesheet" href="/static/css/flvChart.css">
+
+<style>
+  body {
+    margin: 0;
+    padding: 24px;
+    background: #f1f5f9;
+    font-family: 'DM Sans', system-ui, sans-serif;
+    min-height: 100vh;
+  }
+  h1 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0 0 20px;
+    letter-spacing: -0.01em;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 14px;
+    align-items: center;
+  }
+  button {
+    background: #0f172a;
+    color: #f8fafc;
+    border: none;
+    padding: 8px 20px;
+    border-radius: 99px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    letter-spacing: 0.02em;
+    transition: background 0.15s;
+  }
+  button:hover { background: #1e293b; }
+  button.danger { background: #991b1b; }
+  button.danger:hover { background: #7f1d1d; }
+  .note {
+    font-size: 0.78rem;
+    color: #64748b;
+    font-family: 'DM Mono', monospace;
+    background: #e2e8f0;
+    padding: 6px 14px;
+    border-radius: 99px;
+  }
+  canvas { aspect-ratio: 700 / 280; }
+</style>
+</head>
+<body>
+
+<h1>flvChart.js — standalone usage demo</h1>
+
+<!-- ──────────────────────────────────────────
+     Example 1: streaming (push) — metrics
+     ────────────────────────────────────────── -->
+<div class="flvchart-grid" style="margin-bottom:20px;">
+
+  <!-- CPU chart -->
+  <div class="flvchart-card">
+    <p class="flvchart-title">CPU Usage</p>
+    <p class="flvchart-subtitle">push() — new points enter from the right</p>
+    <div class="flvchart-wrap">
+      <canvas id="cpuChart" class="flvchart-canvas" width="700" height="280"></canvas>
+    </div>
+    <div class="flvchart-badge flvchart-badge--up" style="margin-top:12px;">
+      <span class="flvchart-badge__value" id="cpuVal">—</span>
+      <span class="flvchart-badge__label">latest sample %</span>
+    </div>
+    <div class="controls">
+      <button id="btnStart">▶ Start stream</button>
+      <button id="btnStop" disabled>⏸ Pause</button>
+      <button class="danger" id="btnClear">✕ Clear</button>
+      <span class="note" id="pushCount">0 points pushed</span>
+    </div>
+  </div>
+
+  <!-- Memory chart -->
+  <div class="flvchart-card">
+    <p class="flvchart-title">Memory Free</p>
+    <p class="flvchart-subtitle">Independent chart, same push() API</p>
+    <div class="flvchart-wrap">
+      <canvas id="memChart" class="flvchart-canvas" width="700" height="280"></canvas>
+    </div>
+    <div class="flvchart-badge">
+      <span class="flvchart-badge__value" id="memVal">—</span>
+      <span class="flvchart-badge__label">MB free</span>
+    </div>
+  </div>
+</div>
+
+<!-- ──────────────────────────────────────────
+     Example 2: plot() — static data
+     ────────────────────────────────────────── -->
+<div class="flvchart-card" style="max-width:700px;">
+  <p class="flvchart-title">Static plot — chart.plot(dataArray)</p>
+  <p class="flvchart-subtitle">Replace all data at once</p>
+  <div class="flvchart-wrap">
+    <canvas id="staticChart" class="flvchart-canvas" width="700" height="260"></canvas>
+  </div>
+  <div class="controls">
+    <button id="btnReplot">⟳ New random dataset</button>
+    <button id="btnJson">🌐 Simulate loadJson()</button>
+  </div>
+</div>
+
+<!-- 2. Load the library -->
+<script src="/static/js/flvChart.js"></script>
+
+<script>
+/* ═══════════════════════════════════════════
+   Instantiate charts
+   ═══════════════════════════════════════════ */
+
+// CPU — streaming
+const cpu = new flvChart({
+  canvas   : 'cpuChart',
+  title    : 'CPU %',
+  xLabel   : 'time (s)',
+  yLabel   : '%',
+  minY     : 0,
+  maxY     : 100,
+  maxPoints: 60,            // sliding window: last 60 samples
+  color    : '#2563eb',
+  lineColor: '#1d4ed8',
+  xTicks   : 6,
+  yTicks   : 4,
+  padding  : { top: 36, right: 20, bottom: 48, left: 52 }
+});
+
+// Memory — streaming, different palette
+const mem = new flvChart({
+  canvas   : 'memChart',
+  title    : 'Memory Free',
+  xLabel   : 'time (s)',
+  yLabel   : 'MB',
+  minY     : 0,
+  maxY     : 8192,
+  maxPoints: 60,
+  color    : '#16a34a',
+  lineColor: '#15803d',
+  xTicks   : 6,
+  yTicks   : 4,
+  padding  : { top: 36, right: 20, bottom: 48, left: 60 }
+});
+
+// Static
+const staticChart = new flvChart({
+  canvas   : 'staticChart',
+  title    : 'Static dataset',
+  xLabel   : 'index',
+  yLabel   : 'value',
+  color    : '#9333ea',
+  lineColor: '#7e22ce',
+  xTicks   : 8,
+  yTicks   : 5,
+  dotRadius: 4,
+  padding  : { top: 36, right: 20, bottom: 48, left: 56 }
+});
+
+
+/* ═══════════════════════════════════════════
+   Streaming simulation
+   ═══════════════════════════════════════════ */
+let timer    = null;
+let pushed   = 0;
+let cpuBase  = 40;
+let memBase  = 4096;
+
+function tick() {
+  // synthetic CPU walk
+  cpuBase += (Math.random() - 0.48) * 8;
+  cpuBase  = Math.max(2, Math.min(98, cpuBase));
+
+  // synthetic memory walk
+  memBase += (Math.random() - 0.5) * 200;
+  memBase  = Math.max(512, Math.min(7800, memBase));
+
+  // push ONE point — enters from the RIGHT, oldest drops from the LEFT
+  cpu.push(parseFloat(cpuBase.toFixed(1)));
+  mem.push(parseFloat(memBase.toFixed(0)));
+
+  pushed++;
+  document.getElementById('cpuVal').textContent   = cpuBase.toFixed(1) + ' %';
+  document.getElementById('memVal').textContent   = memBase.toFixed(0) + ' MB';
+  document.getElementById('pushCount').textContent = pushed + ' points pushed';
+}
+
+document.getElementById('btnStart').addEventListener('click', function () {
+  if (timer) return;
+  timer = setInterval(tick, 800);
+  this.disabled = true;
+  document.getElementById('btnStop').disabled = false;
+});
+
+document.getElementById('btnStop').addEventListener('click', function () {
+  clearInterval(timer);
+  timer = null;
+  this.disabled = true;
+  document.getElementById('btnStart').disabled = false;
+});
+
+document.getElementById('btnClear').addEventListener('click', function () {
+  cpu.clear();
+  mem.clear();
+  pushed = 0;
+  document.getElementById('pushCount').textContent = '0 points pushed';
+  document.getElementById('cpuVal').textContent    = '—';
+  document.getElementById('memVal').textContent    = '—';
+});
+
+
+/* ═══════════════════════════════════════════
+   Static chart
+   ═══════════════════════════════════════════ */
+function randomDataset(n) {
+  const out = [];
+  let v = 50;
+  for (let i = 0; i < n; i++) {
+    v += (Math.random() - 0.5) * 15;
+    v  = Math.max(10, Math.min(90, v));
+    out.push({ x: i, y: parseFloat(v.toFixed(2)) });
+  }
+  return out;
+}
+
+staticChart.plot(randomDataset(40));   // initial plot
+
+document.getElementById('btnReplot').addEventListener('click', function () {
+  staticChart.plot(randomDataset(Math.floor(Math.random() * 60) + 20));
+});
+
+// Simulate loadJson() with a local Promise
+document.getElementById('btnJson').addEventListener('click', function () {
+  const fakeEndpoint = (() => {
+    const data = Array.from({ length: 30 }, (_, i) => ({
+      ts  : i,
+      load: parseFloat((Math.sin(i * 0.4) * 30 + 50).toFixed(2))
+    }));
+    return Promise.resolve(new Response(JSON.stringify(data)));
+  })();
+
+  // loadJson() expects a real URL — simulate by plotting directly
+  fakeEndpoint.then(r => r.json()).then(json => {
+    const series = json.map(d => ({ x: d.ts, y: d.load }));
+    staticChart.plot(series);
+  });
+});
+</script>
+
+</body>
+</html>
