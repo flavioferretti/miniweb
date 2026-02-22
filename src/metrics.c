@@ -82,6 +82,11 @@ static void metrics_take_sample(MetricSample *sample);
 static void append_metrics_history_json(char *buffer, size_t size,
 							MetricSample *history, size_t count);
 
+/**
+ * @brief Initialize the in-memory metrics ring buffer.
+ * @param r Ring structure to initialize.
+ * @return 0 on success, -1 on allocation failure.
+ */
 static int
 ring_init(MetricRing *r)
 {
@@ -94,6 +99,11 @@ ring_init(MetricRing *r)
 	return 0;
 }
 
+/**
+ * @brief Push one metric sample into the ring.
+ * @param r Ring buffer instance.
+ * @param s Sample to append.
+ */
 static void
 ring_push(MetricRing *r, const MetricSample *s)
 {
@@ -105,6 +115,13 @@ ring_push(MetricRing *r, const MetricSample *s)
 	pthread_mutex_unlock(&r->lock);
 }
 
+/**
+ * @brief Copy the last N samples from the ring in chronological order.
+ * @param r Ring buffer instance.
+ * @param n Requested sample count.
+ * @param out Destination array for copied samples.
+ * @return Number of samples copied.
+ */
 static size_t
 ring_last(MetricRing *r, size_t n, MetricSample *out)
 {
@@ -124,6 +141,10 @@ ring_last(MetricRing *r, size_t n, MetricSample *out)
 	return n;
 }
 
+/**
+ * @brief Release resources associated with a metrics ring.
+ * @param r Ring buffer instance to reset.
+ */
 static void
 ring_free(MetricRing *r)
 {
@@ -134,6 +155,10 @@ ring_free(MetricRing *r)
 	r->head = 0;
 }
 
+/**
+ * @brief Collect one composite metrics sample.
+ * @param sample Destination sample object.
+ */
 static void
 metrics_take_sample(MetricSample *sample)
 {
@@ -156,6 +181,11 @@ metrics_take_sample(MetricSample *sample)
 	}
 }
 
+/**
+ * @brief Background thread entrypoint that samples metrics every second.
+ * @param arg Unused thread argument.
+ * @return Always returns NULL.
+ */
 static void *
 metrics_sampler_thread(void *arg)
 {
@@ -169,6 +199,9 @@ metrics_sampler_thread(void *arg)
 	return NULL;
 }
 
+/**
+ * @brief Initialize and start the background metrics sampler.
+ */
 static void
 metrics_ring_bootstrap(void)
 {
@@ -186,6 +219,13 @@ metrics_ring_bootstrap(void)
 	pthread_detach(g_metrics_thread);
 }
 
+/**
+ * @brief Append historical metrics samples JSON to a destination buffer.
+ * @param buffer Destination JSON buffer.
+ * @param size Destination buffer size.
+ * @param history Sample history array.
+ * @param count Number of history entries.
+ */
 static void
 append_metrics_history_json(char *buffer, size_t size,
 	MetricSample *history, size_t count)
@@ -578,6 +618,15 @@ metrics_get_network_interfaces(NetworkInterface *interfaces, int max_interfaces)
 	return 0;
 }
 
+/**
+ * @brief Build top-process and process-stats JSON sections.
+ * @param top_cpu_json Output buffer for top CPU processes section.
+ * @param top_cpu_json_size Size of top_cpu_json.
+ * @param top_mem_json Output buffer for top memory processes section.
+ * @param top_mem_json_size Size of top_mem_json.
+ * @param proc_stats_json Output buffer for process stats section.
+ * @param proc_stats_json_size Size of proc_stats_json.
+ */
 static void
 append_process_json_sections(char *top_cpu_json,
 	size_t top_cpu_json_size,

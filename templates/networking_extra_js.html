@@ -69,10 +69,11 @@
       return '<p class="muted">No interface statistics available.</p>';
     }
 
-    const headers = `<tr><th>Interface</th><th>RX Packets</th><th>RX Bytes</th><th>RX Errors</th><th>TX Packets</th><th>TX Bytes</th><th>TX Errors</th></tr>`;
+    const headers = `<tr><th>Interface</th><th>IPv4</th><th>RX Packets</th><th>RX Bytes</th><th>RX Errors</th><th>TX Packets</th><th>TX Bytes</th><th>TX Errors</th></tr>`;
     
     const rows = interfaces.map(iface => `<tr>
       <td><span class="badge badge-info">${iface.interface}</span></td>
+      <td>${iface.ipv4 || '-'}</td>
       <td>${formatNumber(iface.rx_packets)}</td>
       <td>${formatBytes(iface.rx_bytes)}</td>
       <td>${iface.rx_errors > 0 ? '<span class="badge badge-warning">' + iface.rx_errors + '</span>' : iface.rx_errors}</td>

@@ -245,9 +245,16 @@ man_get_section_pages_json(const char *area, const char *section)
 	return json;
 }
 
+/**
+ * @brief Build metadata JSON for a resolved manual page.
+ * @param area Manual area identifier.
+ * @param section Manual section identifier.
+ * @param name Manual page name.
+ * @return Allocated JSON string with metadata or error object.
+ */
 char *
 man_get_page_metadata_json(const char *area, const char *section,
-						   const char *name)
+					   const char *name)
 {
 	char *filepath = resolve_man_path(name, section);
 	if (!filepath)
@@ -396,6 +403,12 @@ mime_for_format(const char *format)
 	return "text/html; charset=utf-8";
 }
 
+/**
+ * @brief Add content disposition header based on requested format.
+ * @param resp Response object to mutate.
+ * @param format Requested output format.
+ * @param page Manual page name used for filename.
+ */
 static void
 add_content_disposition_for_format(http_response_t *resp,
 				   const char *format,
@@ -416,6 +429,14 @@ add_content_disposition_for_format(http_response_t *resp,
 	}
 }
 
+/**
+ * @brief Send a previously rendered manpage from cache storage.
+ * @param req Request context.
+ * @param cache_abs Absolute cache file path.
+ * @param format Output format.
+ * @param page Manual page name.
+ * @return HTTP send result code or -1 on read/build failures.
+ */
 static int
 send_cached_man_response(http_request_t *req, const char *cache_abs,
 			 const char *format, const char *page)
@@ -467,6 +488,18 @@ send_cached_man_response(http_request_t *req, const char *cache_abs,
 	return ret;
 }
 
+/**
+ * @brief Compute relative and absolute paths for manpage cache files.
+ * @param area Manual area identifier.
+ * @param section Manual section identifier.
+ * @param page Manual page name.
+ * @param format Output format extension.
+ * @param rel Output buffer for the relative URL path.
+ * @param rel_len Size of rel buffer.
+ * @param abs Output buffer for the absolute filesystem path.
+ * @param abs_len Size of abs buffer.
+ * @return 0 on success, -1 if input is invalid or buffers are too small.
+ */
 static int
 build_cache_paths(const char *area, const char *section, const char *page,
 				  const char *format, char *rel, size_t rel_len,

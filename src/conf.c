@@ -297,6 +297,15 @@ conf_load(const char *explicit_path, miniweb_conf_t *conf)
     return rc;
 }
 
+/**
+ * @brief Apply CLI overrides to loaded configuration values.
+ * @param conf Configuration object to mutate.
+ * @param cli_port Port override value.
+ * @param cli_bind Bind address override value.
+ * @param cli_threads Worker thread count override value.
+ * @param cli_max_conns Maximum concurrent connections override value.
+ * @param cli_verbose Non-zero to force verbose logging.
+ */
 void
 conf_apply_cli(miniweb_conf_t *conf,
                int cli_port, const char *cli_bind,
