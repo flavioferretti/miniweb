@@ -228,6 +228,7 @@ parse_file(FILE *f, const char *path, miniweb_conf_t *conf)
             KSTR ("trusted_proxy",   trusted_proxy)
 
             /* Logging */
+            KSTR ("log_file",        log_file)
             KBOOL("verbose",         verbose)
             KSTR ("log_file",        log_file)
 
@@ -340,4 +341,5 @@ conf_dump(const miniweb_conf_t *conf)
     log_info("  trusted_proxy   %s", conf->trusted_proxy);
     log_info("  verbose         %s", conf->verbose ? "yes" : "no");
     log_info("  log_file        %s", conf->log_file[0] ? conf->log_file : "(stderr)");
+
 }
