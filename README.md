@@ -299,7 +299,7 @@ Takeaways: static and template routes remain fast at high concurrency; `/api/met
 
 ### PR-63 static HTML benchmark snapshot
 
-From `benchmark.sh` (4 threads, 20s duration, `/static/test.html`):
+From `benchmark.sh` (4 threads, 20s duration, `/static/benchmark.html`):
 
 | Connections | Req/s |
 |---:|---:|
