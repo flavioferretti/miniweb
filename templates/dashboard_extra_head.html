@@ -51,19 +51,16 @@
 
     /* Process table styles */
     .process-table-wrapper {
-      /* CRITICO: Questi stili permettono lo scroll orizzontale su mobile */
       overflow-x: auto;
       overflow-y: hidden;
       margin-top: 0.75rem;
-      /* Assicura che il wrapper non esca dal container */
       max-width: 100%;
-      /* Per iOS Safari smooth scrolling */
       -webkit-overflow-scrolling: touch;
     }
 
     .process-table {
       width: 100%;
-      min-width: 500px; /* Larghezza minima per evitare che le colonne si schiaccino troppo */
+      min-width: 500px;
       border-collapse: collapse;
       font-size: 0.9rem;
     }
@@ -77,7 +74,7 @@
       font-size: 0.85rem;
       text-transform: uppercase;
       letter-spacing: 0.025em;
-      white-space: nowrap; /* Previene wrap degli header */
+      white-space: nowrap;
     }
 
     .process-table td {
@@ -97,32 +94,27 @@
       font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
       color: var(--text-muted);
       font-size: 0.85rem;
-      /* Permetti wrap del comando se troppo lungo */
       word-break: break-all;
       max-width: 200px;
     }
 
-    /* Assicura che i pannelli dei processi siano full-width */
     .dashboard-grid:has(.process-table) {
       grid-template-columns: 1fr;
     }
 
-    /* Forza ogni articolo con tabella a essere full-width */
     .dashboard-grid:has(.process-table) > article {
       grid-column: 1;
-      /* CRITICO: Previene overflow del panel stesso */
       max-width: 100%;
       overflow: hidden;
     }
 
-    /* Media query per desktop */
     @media (min-width: 768px) {
       .process-table {
-        min-width: 600px; /* Leggermente più largo su desktop */
+        min-width: 600px;
       }
 
       .process-cmd {
-        max-width: 300px; /* Più spazio per i comandi su desktop */
+        max-width: 300px;
       }
     }
   </style>
