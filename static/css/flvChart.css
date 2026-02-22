@@ -37,6 +37,24 @@
     --flvc-color-down  : #dc2626;
     --flvc-pad         : 20px;
     --flvc-transition  : 0.2s ease;
+    --flvc-grid        : rgba(100, 116, 139, 0.14);
+    --flvc-axis        : #334155;
+    --flvc-label       : #64748b;
+    --flvc-dot-fill    : #ffffff;
+}
+
+:root[data-theme='dark'] {
+    --flvc-bg          : #0f172a;
+    --flvc-bg-card     : #1e293b;
+    --flvc-border      : #334155;
+    --flvc-shadow      : 0 2px 12px rgba(0, 0, 0, 0.4);
+    --flvc-shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.5);
+    --flvc-color-text  : #f1f5f9;
+    --flvc-color-muted : #94a3b8;
+    --flvc-grid        : rgba(148, 163, 184, 0.24);
+    --flvc-axis        : #94a3b8;
+    --flvc-label       : #94a3b8;
+    --flvc-dot-fill    : #0f172a;
 }
 
 /* ─────────────────────────────────────────────
@@ -159,7 +177,7 @@
    Dark theme  (prefers-color-scheme)
    ───────────────────────────────────────────── */
 @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-theme='light']) {
         --flvc-bg          : #0f172a;
         --flvc-bg-card     : #1e293b;
         --flvc-border      : #334155;
@@ -167,6 +185,10 @@
         --flvc-shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.5);
         --flvc-color-text  : #f1f5f9;
         --flvc-color-muted : #94a3b8;
+        --flvc-grid        : rgba(148, 163, 184, 0.24);
+        --flvc-axis        : #94a3b8;
+        --flvc-label       : #94a3b8;
+        --flvc-dot-fill    : #0f172a;
     }
 }
 
@@ -183,6 +205,10 @@
     --flvc-shadow-hover: 0 8px 24px rgba(0,0,0,0.5);
     --flvc-color-text  : #f1f5f9;
     --flvc-color-muted : #94a3b8;
+    --flvc-grid        : rgba(148, 163, 184, 0.24);
+    --flvc-axis        : #94a3b8;
+    --flvc-label       : #94a3b8;
+    --flvc-dot-fill    : #0f172a;
 }
 
 .flvchart-dark .flvchart-canvas {
