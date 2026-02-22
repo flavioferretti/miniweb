@@ -26,6 +26,34 @@
       margin-top: 0.75rem;
     }
 
+    /* Chart canvas — altezza responsiva */
+    .flvchart-canvas {
+      width: 100% !important;
+      height: 260px !important;  /* desktop default */
+    }
+
+    @media (max-width: 767px) {
+      .flvchart-canvas {
+        height: 220px !important;
+      }
+
+      /* Su mobile i due chart vanno in colonna unica e prendono tutta la larghezza */
+      .chart-grid {
+        grid-template-columns: 1fr;
+      }
+
+      /* Ogni card grafico occupa più spazio verticale */
+      .flvchart-card {
+        min-height: 280px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .flvchart-canvas {
+        height: 220px !important;
+      }
+    }
+
     .stat-value { font-size: 1.6rem; font-weight: 700; }
     .progress {
       width: 100%;
