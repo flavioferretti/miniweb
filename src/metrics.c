@@ -16,6 +16,8 @@
 #include <unistd.h>
 #include <errno.h>
 #include <time.h>
+#include <stdint.h>
+#include <pthread.h>
 #include <pwd.h>          /* For struct passwd (process usernames). */
 
 #include "../include/metrics.h"
@@ -23,8 +25,10 @@
 #include "../include/http_handler.h"
 #include "../include/http_utils.h"
 
-#define JSON_BUFFER_SIZE 8192
+#define JSON_BUFFER_SIZE 65536
 #define MB (1024 * 1024)
+#define RING_CAPACITY (1024 * 1024 / sizeof(MetricSample))
+#define METRICS_HISTORY_WINDOW 120
 
 
 
@@ -45,6 +49,175 @@ static void append_process_json_sections(char *top_cpu_json,
 	size_t top_mem_json_size,
 	char *proc_stats_json,
 	size_t proc_stats_json_size);
+
+typedef struct {
+	int64_t ts;
+	float cpu;
+	uint32_t mem_used;
+	uint32_t mem_total;
+	uint32_t swap_used;
+	uint32_t net_rx;
+	uint32_t net_tx;
+} MetricSample;
+
+typedef struct {
+	MetricSample *buf;
+	size_t head;
+	size_t count;
+	pthread_mutex_t lock;
+} MetricRing;
+
+static MetricRing g_metrics_ring;
+static pthread_t g_metrics_thread;
+static pthread_once_t g_metrics_once = PTHREAD_ONCE_INIT;
+static int g_metrics_ring_ready = 0;
+
+static int ring_init(MetricRing *r);
+static void ring_push(MetricRing *r, const MetricSample *s);
+static size_t ring_last(MetricRing *r, size_t n, MetricSample *out);
+static void ring_free(MetricRing *r);
+static void metrics_ring_bootstrap(void);
+static void *metrics_sampler_thread(void *arg);
+static void metrics_take_sample(MetricSample *sample);
+static void append_metrics_history_json(char *buffer, size_t size,
+							MetricSample *history, size_t count);
+
+static int
+ring_init(MetricRing *r)
+{
+	r->buf = malloc(RING_CAPACITY * sizeof(MetricSample));
+	if (!r->buf)
+		return -1;
+	r->head = 0;
+	r->count = 0;
+	pthread_mutex_init(&r->lock, NULL);
+	return 0;
+}
+
+static void
+ring_push(MetricRing *r, const MetricSample *s)
+{
+	pthread_mutex_lock(&r->lock);
+	r->buf[r->head] = *s;
+	r->head = (r->head + 1) % RING_CAPACITY;
+	if (r->count < RING_CAPACITY)
+		r->count++;
+	pthread_mutex_unlock(&r->lock);
+}
+
+static size_t
+ring_last(MetricRing *r, size_t n, MetricSample *out)
+{
+	if (!g_metrics_ring_ready || r->buf == NULL)
+		return 0;
+
+	pthread_mutex_lock(&r->lock);
+
+	if (n > r->count)
+		n = r->count;
+
+	size_t start = (r->head + RING_CAPACITY - n) % RING_CAPACITY;
+	for (size_t i = 0; i < n; i++)
+		out[i] = r->buf[(start + i) % RING_CAPACITY];
+
+	pthread_mutex_unlock(&r->lock);
+	return n;
+}
+
+static void
+ring_free(MetricRing *r)
+{
+	free(r->buf);
+	pthread_mutex_destroy(&r->lock);
+	r->buf = NULL;
+	r->count = 0;
+	r->head = 0;
+}
+
+static void
+metrics_take_sample(MetricSample *sample)
+{
+	CpuStats cpu;
+	MemoryStats mem;
+	time_t now = time(NULL);
+
+	memset(sample, 0, sizeof(*sample));
+	sample->ts = (int64_t)now;
+
+	if (metrics_get_cpu_stats(&cpu) == 0)
+		sample->cpu = (float)(100 - cpu.idle);
+
+	if (metrics_get_memory_stats(&mem) == 0) {
+		long used = mem.active_mb + mem.wired_mb;
+		sample->mem_used = (used > 0) ? (uint32_t)used : 0;
+		sample->mem_total = (mem.total_mb > 0) ? (uint32_t)mem.total_mb : 0;
+		sample->swap_used =
+			(mem.swap_used_mb > 0) ? (uint32_t)mem.swap_used_mb : 0;
+	}
+}
+
+static void *
+metrics_sampler_thread(void *arg)
+{
+	(void)arg;
+	for (;;) {
+		MetricSample sample;
+		metrics_take_sample(&sample);
+		ring_push(&g_metrics_ring, &sample);
+		sleep(1);
+	}
+	return NULL;
+}
+
+static void
+metrics_ring_bootstrap(void)
+{
+	if (ring_init(&g_metrics_ring) != 0) {
+		LOG("Failed to allocate 1MB metrics ring");
+		return;
+	}
+	if (pthread_create(&g_metrics_thread, NULL,
+		metrics_sampler_thread, NULL) != 0) {
+		LOG("Failed to start metrics sampler thread");
+		ring_free(&g_metrics_ring);
+		return;
+	}
+	g_metrics_ring_ready = 1;
+	pthread_detach(g_metrics_thread);
+}
+
+static void
+append_metrics_history_json(char *buffer, size_t size,
+	MetricSample *history, size_t count)
+{
+	char *ptr = buffer;
+	int written = snprintf(ptr, size, "\"history\": [");
+	if (written < 0 || (size_t)written >= size) {
+		if (size > 0)
+			buffer[0] = '\0';
+		return;
+	}
+	ptr += written;
+	size -= (size_t)written;
+
+	for (size_t i = 0; i < count && size > 0; i++) {
+		written = snprintf(ptr, size,
+			"%s{\"ts\": %lld, \"cpu\": %.2f, \"mem_used_mb\": %u, "
+			"\"mem_total_mb\": %u, \"swap_used_mb\": %u, "
+			"\"net_rx\": %u, \"net_tx\": %u}",
+			(i > 0) ? ", " : "",
+			(long long)history[i].ts, history[i].cpu,
+			history[i].mem_used, history[i].mem_total,
+			history[i].swap_used, history[i].net_rx, history[i].net_tx);
+		if (written < 0 || (size_t)written >= size)
+			break;
+		ptr += written;
+		size -= (size_t)written;
+	}
+
+	if (size > 0)
+		snprintf(ptr, size, "]");
+}
 
 /* qsort comparator: sort by descending RSS. */
 /**
@@ -951,6 +1124,8 @@ append_top_ports_json(char *buffer, size_t size)
 char *
 get_system_metrics_json(void)
 {
+	(void)pthread_once(&g_metrics_once, metrics_ring_bootstrap);
+
 	char *json = malloc(JSON_BUFFER_SIZE);
 	if (!json) {
 		LOG("Failed to allocate JSON buffer");
@@ -972,6 +1147,9 @@ get_system_metrics_json(void)
 	char top_cpu_json[2048];
 	char top_mem_json[2048];
 	char proc_stats_json[256];
+	char history_json[32768];
+	MetricSample history[METRICS_HISTORY_WINDOW];
+	size_t history_count = 0;
 
 	time(&now);
 
@@ -997,6 +1175,10 @@ get_system_metrics_json(void)
 	append_process_json_sections(top_cpu_json, sizeof(top_cpu_json),
 		top_mem_json, sizeof(top_mem_json),
 		proc_stats_json, sizeof(proc_stats_json));
+	history_count = ring_last(&g_metrics_ring, METRICS_HISTORY_WINDOW,
+		history);
+	append_metrics_history_json(history_json, sizeof(history_json),
+		history, history_count);
 
 	snprintf(json, JSON_BUFFER_SIZE,
 			 "{"
@@ -1009,13 +1191,14 @@ get_system_metrics_json(void)
 			 "%s,"
 			 "%s,"
 			 "%s,"
-			 "%s,"
-			 "%s,"
-			 "%s"
-			 "}",
-		  timestamp, hostname, cpu_json, memory_json, load_json, os_json,
-		  uptime_json, disks_json, ports_json,
-		  top_cpu_json, top_mem_json, proc_stats_json);
+		 "%s,"
+		 "%s,"
+		 "%s,"
+		 "%s"
+		 "}",
+	  timestamp, hostname, cpu_json, memory_json, load_json, os_json,
+	  uptime_json, disks_json, ports_json,
+	  top_cpu_json, top_mem_json, proc_stats_json, history_json);
 
 	return json;
 }
