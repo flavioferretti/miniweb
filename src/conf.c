@@ -89,6 +89,7 @@ conf_defaults(miniweb_conf_t *conf)
     conf->max_req_size   = 16384;
     conf->mandoc_timeout = 10;
     conf->verbose        = 0;
+    conf->log_file[0]    = '\0';
 
     strlcpy(conf->bind_addr,     "127.0.0.1",         sizeof(conf->bind_addr));
     strlcpy(conf->static_dir,    "static",             sizeof(conf->static_dir));
@@ -228,6 +229,7 @@ parse_file(FILE *f, const char *path, miniweb_conf_t *conf)
             KSTR ("trusted_proxy",   trusted_proxy)
 
             /* Logging */
+            KSTR ("log_file",        log_file)
             KBOOL("verbose",         verbose)
 
             #undef KSTR
@@ -340,6 +342,7 @@ conf_dump(const miniweb_conf_t *conf)
             "  templates_dir   %s\n"
             "  mandoc_path     %s\n"
             "  trusted_proxy   %s\n"
+            "  log_file        %s\n"
             "  verbose         %s\n",
             conf->port,
             conf->bind_addr,
@@ -352,5 +355,6 @@ conf_dump(const miniweb_conf_t *conf)
             conf->templates_dir,
             conf->mandoc_path,
             conf->trusted_proxy,
+            conf->log_file[0] ? conf->log_file : "(stderr)",
             conf->verbose ? "yes" : "no");
 }

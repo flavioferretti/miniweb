@@ -87,6 +87,9 @@ Open <http://127.0.0.1:9001>.
   -h        Show this help
 ```
 
+When `log_file` is configured, runtime logs are written through the centralized
+logger (`src/log.c`) to that file; otherwise logs default to stderr.
+
 ## Endpoints
 
 Responses follow HTTP/1.1 connection semantics: keep-alive is enabled by default for
@@ -283,6 +286,24 @@ To keep this section compact, only representative endpoints are shown:
 
 Takeaways: static and template routes are fast at high concurrency, while expensive system and subprocess-backed endpoints (`/api/metrics`, package APIs) remain compute-bound.
 
+### PR-63 static HTML benchmark snapshot
+
+From `benchmark.sh` (4 threads, 20s duration, `/static/test.html`):
+
+| Connections | Req/s |
+|---:|---:|
+| 4 | 21,843.9 |
+| 8 | 11,364.4 |
+| 16 | 15,879.6 |
+| 32 | 11,835.3 |
+| 64 | 16,555.0 |
+| 128 | 17,135.3 |
+| 256 | 26,222.9 |
+
+These runs validate the PR-63 overload/memory guardrails under high fan-in:
+bounded queue depth, fixed connection slab, response object pool reuse, and
+rate-limited static-cache insertions to avoid bursty allocator pressure.
+
 ### History note
 
 The rewrite from `libmicrohttpd` to native `kqueue(2)` + `EV_DISPATCH` workers improved measured static throughput from ~7,000 req/s to over **23,000 req/s** (~+228%, measured with `wrk` at 32 concurrent connections on a four-core system).
@@ -413,7 +434,17 @@ key    value
 | `templates_dir` | `templates` | Templates directory |
 | `mandoc_path` | `/usr/bin/mandoc` | `mandoc(1)` binary path |
 | `trusted_proxy` | `127.0.0.1` | Trusted proxy IP for forwarded headers |
+| `log_file` | `` (unset) | Optional absolute/relative file path for runtime logs |
 | `verbose` | `no` | `yes/no/true/false/1/0` |
+
+## Logging
+
+MiniWeb includes a central logging facility in `src/log.c` used by runtime
+paths that need consistent formatting and sink selection.
+
+- If `log_file` is set in configuration, logs are appended to that file.
+- If `log_file` is unset, logs go to stderr.
+- `verbose` controls debug-level emission; warnings/errors are still emitted.
 
 
 ## kqueue Concurrency Analysis (main + http_handler)

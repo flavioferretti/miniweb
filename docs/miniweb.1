@@ -472,6 +472,9 @@ Effective client IP is determined in precedence order:
 then the peer socket address.
 Includes a shared template render and send helper used by all view
 handlers.
+.It Pa src/log.c
+Central logging facility for stderr/file sinks, shared by runtime paths
+that require consistent log routing.
 .It Pa src/metrics.c
 System metrics collected exclusively through native interfaces:
 .Xr sysctl 2 ,
@@ -559,6 +562,33 @@ Static and template routes remain fast at high concurrency.
 System-snapshot and subprocess-backed endpoints
 .Pq Pa /api/metrics
 and the package APIs are compute-bound.
+.Ss PR-63 Static HTML Benchmark Snapshot
+Measured with
+.Xr wrk 1
+via
+.Pa benchmark.sh
+at 4 threads, 20 seconds, path
+.Pa /static/test.html :
+.Bl -tag -width "256 connections"
+.It 4 connections
+21,843.9 requests/s.
+.It 8 connections
+11,364.4 requests/s.
+.It 16 connections
+15,879.6 requests/s.
+.It 32 connections
+11,835.3 requests/s.
+.It 64 connections
+16,555.0 requests/s.
+.It 128 connections
+17,135.3 requests/s.
+.It 256 connections
+26,222.9 requests/s.
+.El
+.Pp
+These results are consistent with PR-63 overload and memory protections:
+bounded dispatch queue depth, fixed-size connection slab, pooled response
+objects, and rate-limited static cache admission to reduce allocator bursts.
 .Ss Compile-Time Limits
 .Bl -tag -width "REQUEST_BUFFER_SIZE"
 .It Dv MAX_EVENTS
@@ -825,6 +855,11 @@ and
 headers are accepted.
 Default:
 .Cm 127.0.0.1 .
+.It Cm log_file Ar path
+Optional path for runtime log output handled by the central logger.
+If unset, logs are written to standard error.
+Default:
+unset.
 .It Cm verbose Ar bool
 Enable verbose logging.
 Accepted values:
