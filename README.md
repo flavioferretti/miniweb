@@ -271,59 +271,17 @@ Internal refactoring keeps connection teardown logic in one path (`free_connecti
 
 ## Performance
 
-Measured on OpenBSD 7.8, amd64, 4-core CPU with `wrk` (4 threads, 20 s per run).
-Connection counts in parentheses indicate the concurrency level at which each figure was recorded.
-
-### Static file serving
+Updated from `static/benchmark.html` (OpenBSD 7.8, `wrk` with 4 threads, 10 s runs).
+To keep this section compact, only representative endpoints are shown:
 
 | Endpoint | Conns | Req/s | Avg latency |
 |---|---:|---:|---:|
-| `/static/test.html` | 32 | **23,201** | 1.47 ms |
-| `/static/css/custom.css` | 32 | **18,335** | 1.62 ms |
-| `/static/js/theme_toggler.js` | 32 | **17,965** | 1.68 ms |
-| `/static/assets/favicon.svg` | 32 | **17,557** | 1.72 ms |
+| `/static/js/theme_toggler.js` | 100 | **29,680.3** | 3.15 ms |
+| `/networking` | 100 | **25,570.0** | 3.11 ms |
+| `/api/metrics` | 100 | **726.2** | 136.60 ms |
+| `/api/packages/info` | 5 | **13.8** | 283.69 ms |
 
-Static file throughput peaks above **23,000 req/s** at moderate concurrency. All four endpoints sustain over **17,000 req/s** at 32 concurrent connections with sub-2 ms average latency.
-
-### Dynamic page rendering
-
-| Endpoint | Conns | Req/s | Avg latency |
-|---|---:|---:|---:|
-| `/docs` | 32 | **9,615** | 3.46 ms |
-| `/` | 64 | **7,851** | 8.89 ms |
-| `/packages` | 32 | **6,109** | 5.36 ms |
-| `/apiroot` | 32 | **5,324** | 6.03 ms |
-| `/networking` | 32 | **2,030** | 19.34 ms |
-
-Template-backed pages sustain **5,000–9,600 req/s**. `/networking` is slower because it collects live interface, routing, and DNS data on every request.
-
-### JSON API endpoints
-
-| Endpoint | Conns | Req/s | Avg latency |
-|---|---:|---:|---:|
-| `/api/networking` | 64 | **1,790** | 35.53 ms |
-| `/api/metrics` | 64 | **101** | 604.94 ms |
-
-`/api/metrics` throughput is bounded by the cost of a full system snapshot (sysctl, process table, filesystem and network enumeration) collected on every request, not by HTTP overhead.
-
-### Package API endpoints
-
-| Endpoint | Conns | Req/s | Avg latency |
-|---|---:|---:|---:|
-| `/api/packages/info` | 8 | **14** | 556 ms |
-| `/api/packages/search` | 8 | **11** | 686 ms |
-| `/api/packages/files` | 8 | **9** | 823 ms |
-
-Package API throughput is bounded entirely by `pkg_info(1)` subprocess execution time. These endpoints spawn an external process per request and are not intended for high-frequency automated polling.
-
-### Manual page endpoints
-
-| Endpoint | Conns | Req/s (uncached) | Avg latency (uncached) |
-|---|---:|---:|---:|
-| `/api/man/search` | 32 | **22** | 1,370 ms |
-| `/man/1/1/ls` | 32 | **4** | — |
-
-First-render latency is dominated by `mandoc(1)` subprocess time. After the first render, pages are cached under `static/man/` and served at static-file speeds.
+Takeaways: static and template routes are fast at high concurrency, while expensive system and subprocess-backed endpoints (`/api/metrics`, package APIs) remain compute-bound.
 
 ### History note
 
