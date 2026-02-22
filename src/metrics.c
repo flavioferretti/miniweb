@@ -53,6 +53,8 @@ static void append_process_json_sections(char *top_cpu_json,
 typedef struct {
 	int64_t ts;
 	float cpu;
+	uint64_t cpu_total_ticks;
+	uint64_t cpu_idle_ticks;
 	uint32_t mem_used;
 	uint32_t mem_total;
 	uint32_t swap_used;
@@ -79,8 +81,46 @@ static void ring_free(MetricRing *r);
 static void metrics_ring_bootstrap(void);
 static void *metrics_sampler_thread(void *arg);
 static void metrics_take_sample(MetricSample *sample);
+static int metrics_read_cpu_ticks(uint64_t *total_ticks, uint64_t *idle_ticks);
 static void append_metrics_history_json(char *buffer, size_t size,
 							MetricSample *history, size_t count);
+
+/**
+ * @brief Read raw kernel CPU tick counters.
+ * @param total_ticks Receives summed ticks across all CPU states.
+ * @param idle_ticks Receives idle-state ticks.
+ * @return 0 on success, -1 on failure.
+ */
+static int
+metrics_read_cpu_ticks(uint64_t *total_ticks, uint64_t *idle_ticks)
+{
+	#ifdef __OpenBSD__
+	int mib[2] = {CTL_KERN, KERN_CPTIME};
+	long cp_time[CPUSTATES];
+	size_t len = sizeof(cp_time);
+	uint64_t total = 0;
+
+	if (sysctl(mib, 2, cp_time, &len, NULL, 0) == -1)
+		return -1;
+
+	for (int i = 0; i < CPUSTATES; i++) {
+		if (cp_time[i] < 0)
+			return -1;
+		total += (uint64_t)cp_time[i];
+	}
+
+	if (total == 0 || cp_time[CP_IDLE] < 0)
+		return -1;
+
+	*total_ticks = total;
+	*idle_ticks = (uint64_t)cp_time[CP_IDLE];
+	return 0;
+	#else
+	(void)total_ticks;
+	(void)idle_ticks;
+	return -1;
+	#endif
+}
 
 /**
  * @brief Initialize the in-memory metrics ring buffer.
@@ -162,15 +202,38 @@ ring_free(MetricRing *r)
 static void
 metrics_take_sample(MetricSample *sample)
 {
-	CpuStats cpu;
 	MemoryStats mem;
+	MetricSample prev;
+	uint64_t total_ticks;
+	uint64_t idle_ticks;
 	time_t now = time(NULL);
 
 	memset(sample, 0, sizeof(*sample));
 	sample->ts = (int64_t)now;
 
-	if (metrics_get_cpu_stats(&cpu) == 0)
-		sample->cpu = (float)(100 - cpu.idle);
+	if (metrics_read_cpu_ticks(&total_ticks, &idle_ticks) == 0) {
+		sample->cpu_total_ticks = total_ticks;
+		sample->cpu_idle_ticks = idle_ticks;
+
+		if (ring_last(&g_metrics_ring, 1, &prev) == 1 &&
+			prev.cpu_total_ticks > 0 &&
+			total_ticks > prev.cpu_total_ticks) {
+			uint64_t total_delta = total_ticks - prev.cpu_total_ticks;
+			uint64_t idle_delta = 0;
+
+			if (idle_ticks >= prev.cpu_idle_ticks)
+				idle_delta = idle_ticks - prev.cpu_idle_ticks;
+
+			sample->cpu = (float)(100.0 *
+				(1.0 - ((double)idle_delta / (double)total_delta)));
+			if (sample->cpu < 0.0f)
+				sample->cpu = 0.0f;
+			if (sample->cpu > 100.0f)
+				sample->cpu = 100.0f;
+		} else {
+			sample->cpu = 0.0f;
+		}
+	}
 
 	if (metrics_get_memory_stats(&mem) == 0) {
 		long used = mem.active_mb + mem.wired_mb;
