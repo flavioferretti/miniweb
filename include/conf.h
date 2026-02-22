@@ -69,6 +69,7 @@ void conf_apply_cli(miniweb_conf_t *conf,
                     const char *cli_bind,
                     int cli_threads,
                     int cli_max_conns,
+                    const char *cli_log_file,
                     int cli_verbose);
 
 /* Print the active configuration to stderr (verbose mode). */

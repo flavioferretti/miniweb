@@ -645,6 +645,7 @@ usage(const char *prog)
 			"  -b ADDR   Bind address (default %s)\n"
 			"  -t NUM    Worker threads (default %d, max %d)\n"
 			"  -c NUM    Max connections (default %d)\n"
+			"  -l FILE   Log file path (default: stderr)\n"
 			"  -v        Verbose\n"
 			"  -h        Help\n",
 		 prog,
@@ -667,16 +668,18 @@ parse_args(int argc, char *argv[])
 	const char *cli_bind   = NULL;
 	int         cli_threads  = -1;
 	int         cli_conns    = -1;
+	const char *cli_log_file = NULL;
 	int         cli_verbose  = 0;
 
 	int opt;
-	while ((opt = getopt(argc, argv, "f:p:b:t:c:vh")) != -1) {
+	while ((opt = getopt(argc, argv, "f:p:b:t:c:l:vh")) != -1) {
 		switch (opt) {
 			case 'f': conf_file   = optarg;      break;
 			case 'p': cli_port    = atoi(optarg); break;
 			case 'b': cli_bind    = optarg;       break;
 			case 't': cli_threads = atoi(optarg); break;
 			case 'c': cli_conns   = atoi(optarg); break;
+			case 'l': cli_log_file = optarg;      break;
 			case 'v': cli_verbose = 1;            break;
 			case 'h': usage(argv[0]); exit(0);
 			default:  usage(argv[0]); exit(1);
@@ -692,7 +695,7 @@ parse_args(int argc, char *argv[])
 
 	/* 3. CLI flags (highest priority — overwrite everything) */
 	conf_apply_cli(&config, cli_port, cli_bind,
-				   cli_threads, cli_conns, cli_verbose);
+				   cli_threads, cli_conns, cli_log_file, cli_verbose);
 
 	/* Clamp to hard limits */
 	if (config.threads  < 1)               config.threads  = 1;
