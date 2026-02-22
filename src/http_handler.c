@@ -17,8 +17,10 @@
 #include <pthread.h>
 #include <time.h>
 
-#define WRITE_RETRY_LIMIT 256
-#define WRITE_WAIT_MS 100
+#include "../include/log.h"
+
+#define WRITE_RETRY_LIMIT 20
+#define WRITE_WAIT_MS 10
 #define FILE_CACHE_SLOTS 32
 #define FILE_CACHE_MAX_BYTES (256 * 1024)
 #define FILE_CACHE_INSERTS_PER_SEC 8
@@ -496,11 +498,11 @@ int http_response_send(http_request_t *req, http_response_t *resp)
 
 	if (resp->body && resp->body_len > 0) {
 		if (writev_all(req->fd, iov, 2) < 0) {
-			fprintf(stderr, "[HTTP] Error writing response\n");
+			log_error("[HTTP] Error writing response");
 			return -1;
 		}
 	} else if (write_all(req->fd, header, (size_t)header_len) < 0) {
-		fprintf(stderr, "[HTTP] Error writing headers\n");
+		log_error("[HTTP] Error writing headers");
 		return -1;
 	}
 

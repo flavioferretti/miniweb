@@ -29,7 +29,6 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <time.h>
-#include <err.h>
 
 #include "../include/conf.h"
 #include "../include/config.h"
@@ -38,14 +37,15 @@
 #include "../include/template_engine.h"
 #include "../include/routes.h"
 #include "../include/urls.h"
+#include "../include/log.h"
 
 /* -- Compile-time hard limits (not overridable at runtime) ------------------ */
-#define MAX_EVENTS          64
-#define MAX_CONNECTIONS     1280
-#define THREAD_POOL_SIZE    4
+#define MAX_EVENTS          256
+#define MAX_CONNECTIONS     4096
+#define THREAD_POOL_SIZE    32
 #define REQUEST_BUFFER_SIZE 16384
-#define LISTEN_BACKLOG      128
-#define QUEUE_CAPACITY      512
+#define LISTEN_BACKLOG      1024
+#define QUEUE_CAPACITY      4096
 #define MAX_KEEPALIVE_REQUESTS 64
 
 /* -- Active configuration (populated in main before any thread starts) ------ */
@@ -368,6 +368,21 @@ send_error_response(int fd, int code, const char *msg)
 	(void)http_send_error(&req, code, msg);
 }
 
+
+static void
+close_connection(int fd)
+{
+	if (fd < 0)
+		return;
+	if (kq_fd >= 0) {
+		struct kevent ev;
+		EV_SET(&ev, fd, EVFILT_READ, EV_DELETE, 0, 0, NULL);
+		(void)kevent(kq_fd, &ev, 1, NULL, 0, NULL);
+	}
+	close(fd);
+	free_connection(fd);
+}
+
 /**
  * @brief Try rearm keepalive.
  * @param conn Connection object.
@@ -500,8 +515,7 @@ worker_thread(void *arg)
 		}
 
 		if (close_conn) {
-			close(fd);
-			free_connection(fd);
+			close_connection(fd);
 		}
 
 		next_conn:;
@@ -544,15 +558,10 @@ handle_accept(void)
 					close(drop_fd);
 
 				spare_fd = open("/dev/null", O_RDONLY);
-				if (config.verbose) {
-					fprintf(stderr,
-						"fd limit reached (errno=%d), shedding one pending connection\n",
-						errno);
-				}
+				log_debug("fd limit reached (errno=%d), shedding one pending connection", errno);
 				return;
 			}
-			if (config.verbose)
-				perror("accept");
+			log_errno("accept");
 			return;
 		}
 
@@ -562,8 +571,7 @@ handle_accept(void)
 		if (!conn) {
 			send_error_response(cfd, 503, "Server busy");
 			close(cfd);
-			if (config.verbose)
-				fprintf(stderr, "Connection limit reached, rejected fd=%d\n", cfd);
+			log_debug("Connection limit reached, rejected fd=%d", cfd);
 			continue;
 		}
 
@@ -572,16 +580,14 @@ handle_accept(void)
 		struct kevent ev;
 		EV_SET(&ev, cfd, EVFILT_READ, EV_ADD | EV_DISPATCH, 0, 0, conn);
 		if (kevent(kq_fd, &ev, 1, NULL, 0, NULL) < 0) {
-			close(cfd);
-			free_connection(cfd);
+			close_connection(cfd);
 			continue;
 		}
 
 		if (config.verbose) {
 			char ip[INET_ADDRSTRLEN];
 			inet_ntop(AF_INET, &caddr.sin_addr, ip, sizeof(ip));
-			fprintf(stderr, "New connection: fd=%d from %s (active: %d)\n",
-					cfd, ip, active_connections);
+			log_debug("New connection: fd=%d from %s (active: %d)", cfd, ip, active_connections);
 		}
 	}
 }
@@ -608,8 +614,7 @@ sweep_idle_connections(void)
 	pthread_mutex_unlock(&conn_mutex);
 
 	for (int i = 0; i < timed_out_count; i++) {
-		close(timed_out_fds[i]);
-		free_connection(timed_out_fds[i]);
+		close_connection(timed_out_fds[i]);
 	}
 }
 
@@ -713,7 +718,7 @@ static void
 apply_openbsd_security(void)
 {
 	#ifdef __OpenBSD__
-	fprintf(stderr, "Applying OpenBSD security features...\n");
+	log_info("Applying OpenBSD security features...");
 
 	/* Filesystem paths from config */
 	unveil(config.templates_dir, "r");
@@ -753,14 +758,14 @@ apply_openbsd_security(void)
 	const char *promises =
 	"stdio rpath wpath cpath inet route proc exec vminfo ps getpw";
 	if (pledge(promises, NULL) == -1) {
-		perror("pledge");
-		fprintf(stderr, "Continuing without pledge...\n");
+		log_errno("pledge");
+		log_error("Continuing without pledge...");
 	} else if (config.verbose) {
-		fprintf(stderr, "Pledge promises set: %s\n", promises);
+		log_debug("Pledge promises set: %s", promises);
 	}
 	#else
 	if (config.verbose)
-		fprintf(stderr, "OpenBSD security features disabled on this platform.\n");
+		log_debug("OpenBSD security features disabled on this platform.");
 	#endif
 }
 
@@ -775,8 +780,15 @@ int
 main(int argc, char *argv[])
 {
 	parse_args(argc, argv);
-	if (template_cache_init() != 0)
-		err(1, "template_cache_init");
+	if (log_init(config.log_file, config.verbose) != 0) {
+		fprintf(stderr, "log init failed for %s\n", config.log_file);
+		return 1;
+	}
+	log_set_verbose(config.verbose);
+	if (template_cache_init() != 0) {
+		log_error("template_cache_init failed");
+		return 1;
+	}
 	init_routes();
 
 	signal(SIGINT,  handle_signal);
@@ -790,7 +802,7 @@ main(int argc, char *argv[])
 
 	/* -- Listen socket -- */
 	listen_fd = socket(AF_INET, SOCK_STREAM, 0);
-	if (listen_fd < 0) err(1, "socket");
+	if (listen_fd < 0) { log_errno("socket"); return 1; }
 
 	int on = 1;
 	setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
@@ -800,22 +812,23 @@ main(int argc, char *argv[])
 	memset(&sa, 0, sizeof(sa));
 	sa.sin_family = AF_INET;
 	sa.sin_port   = htons(config.port);
-	if (inet_pton(AF_INET, config.bind_addr, &sa.sin_addr) != 1)
-		errx(1, "Invalid bind address: %s", config.bind_addr);
+	if (inet_pton(AF_INET, config.bind_addr, &sa.sin_addr) != 1) {
+		log_error("Invalid bind address: %s", config.bind_addr);
+		return 1;
+	}
 
-	if (bind(listen_fd,   (struct sockaddr *)&sa, sizeof(sa)) < 0) err(1, "bind");
-	if (listen(listen_fd, LISTEN_BACKLOG) < 0)                      err(1, "listen");
+	if (bind(listen_fd,   (struct sockaddr *)&sa, sizeof(sa)) < 0) { log_errno("bind"); return 1; }
+	if (listen(listen_fd, LISTEN_BACKLOG) < 0) { log_errno("listen"); return 1; }
 
 	/* -- kqueue -- */
 	kq_fd = kqueue();
-	if (kq_fd < 0) err(1, "kqueue");
+	if (kq_fd < 0) { log_errno("kqueue"); return 1; }
 
 	/* Register listen socket. EV_CLEAR resets the backlog counter after each
 	 * kevent() return so we don't accumulate stale counts. */
 	struct kevent chg;
 	EV_SET(&chg, listen_fd, EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, NULL);
-	if (kevent(kq_fd, &chg, 1, NULL, 0, NULL) < 0)
-		err(1, "kevent: add listen");
+	if (kevent(kq_fd, &chg, 1, NULL, 0, NULL) < 0) { log_errno("kevent: add listen"); return 1; }
 
 	/* -- Work queue + worker threads -- */
 	queue_init(&wq);
@@ -823,8 +836,7 @@ main(int argc, char *argv[])
 
 	pthread_t threads[THREAD_POOL_SIZE];
 	for (int i = 0; i < config.threads; i++) {
-		if (pthread_create(&threads[i], NULL, worker_thread, NULL) != 0)
-			err(1, "pthread_create");
+		if (pthread_create(&threads[i], NULL, worker_thread, NULL) != 0) { log_errno("pthread_create"); return 1; }
 	}
 
 	apply_openbsd_security();
@@ -844,7 +856,7 @@ main(int argc, char *argv[])
 
 		if (n < 0) {
 			if (errno == EINTR) continue;
-			perror("kevent");
+			log_errno("kevent");
 			break;
 		}
 
@@ -885,8 +897,7 @@ main(int argc, char *argv[])
 
 			/* -- EOF or error: close immediately, don't bother queuing -- */
 			if (ev->flags & (EV_EOF | EV_ERROR)) {
-				close(fd);
-				free_connection(fd);
+				close_connection(fd);
 				continue;
 			}
 
@@ -900,8 +911,7 @@ main(int argc, char *argv[])
 			if (queue_push(&wq, conn) < 0) {
 				/* Queue full: server overloaded, drop the connection */
 				send_error_response(fd, 503, "Server busy");
-				close(fd);
-				free_connection(fd);
+				close_connection(fd);
 			}
 		}
 	}
@@ -916,8 +926,7 @@ main(int argc, char *argv[])
 
 	for (int i = 0; i < MAX_CONNECTIONS; i++) {
 		if (connections[i]) {
-			close(connections[i]->fd);
-			free_connection(connections[i]->fd);
+			close_connection(connections[i]->fd);
 		}
 	}
 
@@ -928,5 +937,6 @@ main(int argc, char *argv[])
 	template_cache_cleanup();
 
 	printf("Server stopped.\n");
+	log_close();
 	return 0;
 }
