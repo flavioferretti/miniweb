@@ -8,8 +8,7 @@
 
   let currentTab = 'overview';
   let latest = null;
-  let previous = null;
-  const throughputCharts = new Map();
+  const interfaceCharts = new Map();
   let overviewSignature = '';
 
   const REFRESH_INTERVAL_MS = 4000;
@@ -25,8 +24,6 @@
     const i = Math.min(sizes.length - 1, Math.floor(Math.log(bytes) / Math.log(k)));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
-
-  const formatRate = (bytesPerSecond) => `${formatBytes(bytesPerSecond)}/s`;
 
   const formatNumber = (num) => String(num ?? 0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 
@@ -59,7 +56,7 @@
     return `<div class="network-table-wrapper"><table class="network-table">${headers}${rows}</table></div>`;
   };
 
-  const createThroughputChart = (canvasId, color, yLabel) => new flvChart({
+  const createBytesChart = (canvasId, color, yLabel) => new flvChart({
     canvas: canvasId,
     title: '',
     xLabel: 'sample',
@@ -84,10 +81,10 @@
       </div>`,`chart-panel`);
 
     const charts = ipv4Ifaces.length === 0
-      ? panel('Throughput', '<p class="muted">No interfaces with IPv4 addresses found.</p>', 'chart-panel')
-      : panel('Throughput', `<div id="throughputChartGrid" class="chart-grid"></div>`, 'chart-panel');
+      ? panel('Interface RX/TX Bytes', '<p class="muted">No interfaces with IPv4 addresses found.</p>', 'chart-panel')
+      : panel('Interface RX/TX Bytes', `<div id="interfaceChartGrid" class="chart-grid"></div>`, 'chart-panel');
 
-    if (overviewSignature === signature && dashboard.querySelector('#throughputChartGrid')) {
+    if (overviewSignature === signature && dashboard.querySelector('#interfaceChartGrid')) {
       return;
     }
 
@@ -95,11 +92,11 @@
     dashboard.innerHTML = [summary, charts].join('');
 
     if (ipv4Ifaces.length === 0) {
-      throughputCharts.clear();
+      interfaceCharts.clear();
       return;
     }
 
-    const grid = document.getElementById('throughputChartGrid');
+    const grid = document.getElementById('interfaceChartGrid');
     ipv4Ifaces.forEach((iface) => {
       const idBase = iface.interface.replace(/[^a-zA-Z0-9_-]/g, '_');
       const rxCanvasId = `net_${idBase}_rx`;
@@ -111,52 +108,44 @@
         <div class="chart-grid chart-grid-two"><div class="flvchart-wrap"><canvas id="${rxCanvasId}" class="flvchart-canvas" width="700" height="220"></canvas></div><div class="flvchart-wrap"><canvas id="${txCanvasId}" class="flvchart-canvas" width="700" height="220"></canvas></div></div>`;
       grid.appendChild(card);
 
-      throughputCharts.set(iface.interface, {
-        rx: createThroughputChart(rxCanvasId, '#2563eb', 'RX B/s'),
-        tx: createThroughputChart(txCanvasId, '#dc2626', 'TX B/s'),
-        rxSeries: [],
-        txSeries: [],
+      interfaceCharts.set(iface.interface, {
+        rx: createBytesChart(rxCanvasId, '#2563eb', 'RX bytes'),
+        tx: createBytesChart(txCanvasId, '#dc2626', 'TX bytes'),
       });
     });
   };
 
-  const updateThroughput = () => {
+  const updateInterfaceCharts = () => {
     if (currentTab !== 'overview' || !latest) return;
-    const now = Number(latest.timestamp_unix || 0);
-    if (!previous || !now) {
-      previous = latest;
-      return;
-    }
 
-    const prevByName = new Map((previous.interfaces || []).map((i) => [i.interface, i]));
+    const history = latest.history || [];
+    if (!history.length) return;
+
+    const boundedHistory = history.slice(-MAX_WINDOW_POINTS);
     (latest.interfaces || []).filter((i) => hasIpv4(i.ipv4)).forEach((iface) => {
-      const chart = throughputCharts.get(iface.interface);
-      const prev = prevByName.get(iface.interface);
-      if (!chart || !prev) return;
+      const chart = interfaceCharts.get(iface.interface);
+      if (!chart) return;
 
-      const prevTs = Number(previous.timestamp_unix || 0);
-      const dt = Math.max(1, now - prevTs);
-      const rxDelta = Math.max(0, Number(iface.rx_bytes || 0) - Number(prev.rx_bytes || 0));
-      const txDelta = Math.max(0, Number(iface.tx_bytes || 0) - Number(prev.tx_bytes || 0));
-      const rxRate = rxDelta / dt;
-      const txRate = txDelta / dt;
+      const rxSeries = [];
+      const txSeries = [];
+      boundedHistory.forEach((sample) => {
+        const point = (sample.interfaces || []).find((s) => s.interface === iface.interface);
+        if (!point) return;
+        const ts = Number(sample.ts || 0);
+        rxSeries.push({ x: ts, y: Number(point.rx_bytes || 0) });
+        txSeries.push({ x: ts, y: Number(point.tx_bytes || 0) });
+      });
 
-      chart.rxSeries.push({ x: now, y: rxRate });
-      chart.txSeries.push({ x: now, y: txRate });
-      chart.rxSeries = chart.rxSeries.slice(-MAX_WINDOW_POINTS);
-      chart.txSeries = chart.txSeries.slice(-MAX_WINDOW_POINTS);
-      chart.rx.plot(chart.rxSeries);
-      chart.tx.plot(chart.txSeries);
+      chart.rx.plot(rxSeries);
+      chart.tx.plot(txSeries);
     });
-
-    previous = latest;
   };
 
   const render = () => {
     if (!latest) return;
     if (currentTab === 'overview') {
       mountOverview();
-      updateThroughput();
+      updateInterfaceCharts();
       return;
     }
     if (currentTab === 'routes') {
