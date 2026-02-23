@@ -190,6 +190,10 @@ Implementation details (current):
 | Endpoint | Description |
 |---|---|
 | `GET /api/man/search?q=query` | Raw `apropos(1)` output (`text/plain`) |
+| `GET /api/man/sections` | JSON list of available manual sections |
+| `GET /api/man/pages?section={n}` | JSON list of pages in a section |
+| `GET /api/man/resolve?name={page}&section={n}` | JSON with resolved `{area}`, `{section}`, and filesystem path for a page via `man -w` |
+| `GET /api/man/{area}/{section}` | JSON list of pages for a given area and section |
 | `GET /man/{area}/{section}/{page}` | HTML (default) |
 | `GET /man/{area}/{section}/{page}.html` | HTML |
 | `GET /man/{area}/{section}/{page}.md` | Markdown |
@@ -197,7 +201,7 @@ Implementation details (current):
 | `GET /man/{area}/{section}/{page}.ps` | PostScript |
 | `GET /man/{area}/{section}/{page}.txt` | ASCII text |
 
-Rendered manual pages are cached for reuse under `static/man/{area}/{section}/{page}.{format}` (absolute path: `{static_dir}/man/{area}/{section}/{page}.{format}` where `static_dir` comes from config).
+Rendered pages are cached on disk under `{static_dir}/man/{area}/{section}/{page}.{format}`. For `html` and `md`, a hot-cache TTL (`MAN_HOT_CACHE_TTL_SEC=30` s) skips re-rendering on hits within the window. For `txt`, `ps`, and `pdf`, the file is re-rendered on every request, immediately written to the cache path, and then served via the static-file handler. All cached files are eligible for promotion into the in-memory static cache on repeated access.
 
 ## Caching facilities (implemented)
 
@@ -226,8 +230,7 @@ MiniWeb currently uses six distinct caches/buffers with different goals:
 4. **On-disk man render cache (`man.c`)**
    - Cache path: `{static_dir}/man/{area}/{section}/{page}.{format}`.
    - Supported cached formats: `html`, `txt`, `md`, `ps`, `pdf`.
-   - Request flow checks the cache first; on miss it renders via `mandoc`, writes cache file, then prefers serving back through static-file path.
-   - Cached man files can also benefit from the in-memory static cache after repeated access.
+   - For `html` and `md`: a hot-cache TTL check (`MAN_HOT_CACHE_TTL_SEC=30` s) skips re-rendering entirely if the cached file is fresh. For `txt`, `ps`, and `pdf`: every request triggers a fresh render, immediately writes the result to the cache path, then serves via `static_handler`. All formats are eligible for subsequent promotion into the in-memory static cache.
 
 5. **Metrics snapshot cache (`metrics.c`)**
    - A detached background sampler updates one shared JSON snapshot string once per second.
@@ -302,43 +305,38 @@ Internal refactoring keeps connection teardown logic in one path (`free_connecti
 
 ## Performance
 
-Latest benchmark report (provided run generated `2026-02-23 11:38:19`, OpenBSD 7.8, `wrk`, 4 threads, 20s) compared against `static/benchmark_baseline.html`:
+Benchmark run generated `2026-02-23 13:13:24`, OpenBSD 7.8, `wrk`, 4 threads, 20 s duration, base URL `http://localhost:3000`:
 
-- Peak throughput: **35,341.94 req/s** (baseline 34,949.62, **+1.1%**)
-- Average throughput: **15,908.6 req/s** (baseline 13,071.1, **+21.7%**)
-- Best average latency: **0.119 ms** (baseline 0.156, **23.7% lower**)
-- Worst max latency: **1580.000 ms** (baseline 2000.000, **21.0% lower**)
-- Grand average latency: **10.64 ms** (baseline 68.07, **84.4% lower**)
+| Metric | Value |
+|---|---|
+| Peak throughput | **38,761.49 req/s** |
+| Average throughput | **15,952.6 req/s** |
+| Best average latency | **0.123 ms** |
+| Worst max latency | **1,450 ms** |
+| Grand average latency | **10.76 ms** |
 
-Per-endpoint behavior in this run:
+Per-endpoint summary (connections vary 4–256):
 
-- Static assets and lightweight API endpoints peak around 32–128 connections with very high req/s.
-- Dynamic/manual-page endpoints show higher latency growth at 128–256 concurrency.
-- Several 256-connection rows still report `HTTP=000000` while row status remains `OK`; treat these as high-pressure artifacts and validate against server logs when interpreting saturation behavior.
+| Endpoint | Peak req/s | Notes |
+|---|---|---|
+| `GET /apiroot` | 38,761 | Highest observed peak (64 conns) |
+| `GET /api/metrics` | 26,197 | Mutex-protected JSON snapshot |
+| `GET /static/assets/favicon.svg` | 34,801 | Small SVG, in-memory static cache |
+| `GET /static/css/custom.css` | 27,810 | CSS, in-memory static cache |
+| `GET /` | 26,838 | Template-rendered, hot-view cache |
+| `GET /packages` | 25,679 | Template-rendered, hot-view cache |
+| `GET /api/networking` | 21,746 | Live route + DNS collection, ring cache |
+| `GET /api/packages/search?q=curl` | 21,728 | `pkg_info` subprocess, query micro-cache |
+| `GET /man/system/1/ls` (HTML) | 18,279 | On-disk man render cache hit |
+| `GET /man/system/1/ls.md` | 19,427 | On-disk man render cache hit |
 
-This pattern is consistent with the architecture: hot static/template paths are now heavily cache-assisted, while subprocess- or render-heavy paths (`mandoc`, package queries) remain the dominant tail-latency sources.
+Static assets and lightweight template-backed pages peak at 16–128 concurrent connections. API endpoints backed by native syscalls (`/api/metrics`, `/api/networking`) sustain high throughput through in-memory snapshot caches. Man-page endpoints show higher latency growth at 128–256 concurrency when the on-disk render cache is cold. Several 256-connection rows report `HTTP=000000` while row status is `OK`; these are high-pressure saturation artifacts and should be validated against server logs before drawing conclusions.
 
-### PR-63 static HTML benchmark snapshot
-
-From `benchmark.sh` (4 threads, 20s duration, `/static/benchmark.html`):
-
-| Connections | Req/s |
-|---:|---:|
-| 4 | 21,191.0 |
-| 8 | 11,128.7 |
-| 16 | 15,691.2 |
-| 32 | 25,735.8 |
-| 64 | 12,010.7 |
-| 128 | 18,772.8 |
-| 256 | 21,039.0 |
-
-These runs validate the PR-63 overload/memory guardrails under high fan-in:
-bounded queue depth, fixed connection slab, response object pool reuse, and
-rate-limited static-cache insertions to avoid bursty allocator pressure.
+This pattern is consistent with the architecture: hot static and template-backed paths benefit from in-memory static, hot-view, and template TTL caches; subprocess- and render-heavy paths (`mandoc`, `pkg_info`) remain the dominant tail-latency sources.
 
 ### History note
 
-The rewrite from `libmicrohttpd` to native `kqueue(2)` + `EV_DISPATCH` workers improved measured static throughput from ~7,000 req/s to over **23,000 req/s** (~+228%, measured with `wrk` at 32 concurrent connections on a four-core system).
+The rewrite from `libmicrohttpd` to native `kqueue(2)` + `EV_DISPATCH` workers improved measured static throughput from ~7,000 req/s to over **23,000 req/s** (~+228%, measured with `wrk` at 32 concurrent connections on a four-core system). Subsequent pool, slab, and cache improvements have lifted the peak to over **38,000 req/s** on lightweight template endpoints.
 
 ## Security
 
@@ -537,11 +535,11 @@ Some limits are compile-time constants (hard caps), while others are configurabl
 
 | Cap | Value | Effective range | Notes |
 |---|---:|---|---|
-| `MAX_EVENTS` | 64 | `1..64` per `kevent` wait | Upper bound of events processed per loop iteration. |
+| `MAX_EVENTS` | 256 | `1..256` per `kevent` wait | Upper bound of events processed per loop iteration. |
 | `MAX_CONNECTIONS` | 4096 | `1..4096` runtime active conns | Absolute upper bound; `-c`/`max_conns` cannot exceed this. |
 | `THREAD_POOL_SIZE` | 32 | `1..32` workers | Runtime `threads` is clamped to this value. |
 | `REQUEST_BUFFER_SIZE` | 16384 | `1024..16384` bytes effective request size | Runtime `max_req_size` parsed up to 1 MiB but now clamped to buffer size. |
-| `LISTEN_BACKLOG` | 128 | fixed (`listen(2)` backlog hint) | Pending accept queue hint; tune with kernel limits in mind. |
+| `LISTEN_BACKLOG` | 1024 | fixed (`listen(2)` backlog hint) | Pending accept queue hint; tune with kernel limits in mind. |
 | `QUEUE_CAPACITY` | 4096 | `1..4096` queued dispatched conns | Circular queue depth before overload 503/drop path. |
 | `MAX_KEEPALIVE_REQUESTS` | 64 | fixed per connection | Forces close after 64 served requests on one keep-alive connection. |
 | `WRITE_RETRY_LIMIT` | 20 | fixed write retries | Max EAGAIN retry cycles before write failure. |
@@ -550,7 +548,7 @@ Some limits are compile-time constants (hard caps), while others are configurabl
 | `FILE_CACHE_MAX_BYTES` | 262144 | `1..262144` bytes per cached file | Files above threshold bypass memory cache. |
 | `FILE_CACHE_INSERTS_PER_SEC` | 8 | fixed inserts/second | Token budget that rate-limits cache insertions. |
 | `FILE_CACHE_MAX_AGE_SEC` | 120 | fixed seconds | Age-based eviction threshold for cache entries and admission candidates. |
-| Response pool size | 1024 | fixed objects + heap fallback | Upper bound of reusable pooled `http_response_t` objects before fallback allocation. |
+| Response pool size | 16,384 | 16 shards × 1024 objects + heap fallback | Upper bound of reusable pooled `http_response_t` objects; `RESPONSE_POOL_SHARDS=16` shards each holding 1024 items, with thread-hash shard selection. |
 
 ### Configurable caps and parser ranges
 
@@ -614,9 +612,9 @@ Esempio di script `/etc/rc.d/miniweb`:
 ```sh
 #!/bin/ksh
 
-daemon="/home/flavio/DEV/miniweb/build/miniweb"
+daemon="/usr/local/bin/miniweb"
 daemon_flags="-f /etc/miniweb.conf"
-daemon_user="flavio"
+daemon_user="_miniweb"
 
 . /etc/rc.d/rc.subr
 
@@ -712,7 +710,7 @@ MiniWeb originally used `libmicrohttpd`, then was rewritten in early 2026 around
 
 The configuration file system (`miniweb.conf`) was added afterward to replace hardcoded runtime values.
 
-Recent runtime-path improvements also added pooled response objects, two-hit/rate-limited/age-evicted static-file memory caching, and on-disk manpage render reuse under `static/man/...`.
+Subsequent iterations added a fixed-size connection slab with a free-stack (eliminating per-accept heap allocation), a sharded pooled `http_response_t` allocator (`RESPONSE_POOL_SHARDS=16` × 1024 objects), two-hit/rate-limited/age-evicted in-memory static-file caching, and on-disk man render reuse under `static/man/` for repeat requests. These changes lifted the measured peak past **38,000 req/s** on lightweight template endpoints (see Performance).
 
 ## Authors
 
