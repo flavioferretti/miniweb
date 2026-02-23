@@ -15,9 +15,7 @@ SRCS=      ${SRCDIR}/app_main.c \
            ${SRCDIR}/router/url_registry.c \
            ${SRCDIR}/modules/networking/networking_module.c \
            ${SRCDIR}/http/response.c \
-           ${SRCDIR}/core/config.c \
            ${SRCDIR}/modules/packages/packages_module.c \
-           ${SRCDIR}/core/log.c \
            ${SRCDIR}/core/heartbeat.c \
            ${SRCDIR}/router/router.c \
            ${SRCDIR}/router/module_attach.c \
@@ -34,9 +32,7 @@ OBJS=      ${BUILDDIR}/app_main.o \
            ${BUILDDIR}/url_registry.o \
            ${BUILDDIR}/networking_module.o \
            ${BUILDDIR}/http_response.o \
-           ${BUILDDIR}/config.o \
            ${BUILDDIR}/packages_module.o \
-           ${BUILDDIR}/log_core.o \
            ${BUILDDIR}/heartbeat.o \
            ${BUILDDIR}/router.o \
            ${BUILDDIR}/module_attach.o \
@@ -82,10 +78,6 @@ clean:
 	rm -rf ${BUILDDIR}
 	rm -f ${PROG} *.o
 
-${BUILDDIR}/config.o: ${SRCDIR}/core/config.c
-	@mkdir -p ${BUILDDIR}
-	${CC} ${CFLAGS} -c ${SRCDIR}/core/config.c -o $@
-
 # --- Individual Compilation Rules ---
 # These rules handle the compilation of each .c file into its .o counterpart
 # Keep explicit per-file rules for BSD make portability (avoid GNU-specific $< usage).
@@ -93,10 +85,6 @@ ${BUILDDIR}/config.o: ${SRCDIR}/core/config.c
 ${BUILDDIR}/packages_module.o: ${SRCDIR}/modules/packages/packages_module.c
 	@mkdir -p ${BUILDDIR}
 	${CC} ${CFLAGS} -c ${SRCDIR}/modules/packages/packages_module.c -o $@
-
-${BUILDDIR}/log_core.o: ${SRCDIR}/core/log.c
-	@mkdir -p ${BUILDDIR}
-	${CC} ${CFLAGS} -c ${SRCDIR}/core/log.c -o $@
 
 ${BUILDDIR}/http_response.o: ${SRCDIR}/http/response.c
 	@mkdir -p ${BUILDDIR}
@@ -165,9 +153,9 @@ unit-tests: ${BUILDDIR}/routes_test ${BUILDDIR}/template_test
 integration-test: ${BUILDDIR}/${PROG}
 	bash ${TESTDIR}/integration_endpoints.sh
 
-${BUILDDIR}/routes_test: ${TESTDIR}/routes_test.c ${SRCDIR}/router/route_table.c ${SRCDIR}/modules/metrics/metrics_module.c ${SRCDIR}/modules/man/man_module.c ${SRCDIR}/modules/networking/networking_module.c ${SRCDIR}/render/template_render.c ${SRCDIR}/http/utils.c ${SRCDIR}/router/url_registry.c ${SRCDIR}/http/response.c ${SRCDIR}/core/config.c ${SRCDIR}/modules/packages/packages_module.c ${SRCDIR}/core/log.c ${SRCDIR}/core/heartbeat.c
+${BUILDDIR}/routes_test: ${TESTDIR}/routes_test.c ${SRCDIR}/router/route_table.c ${SRCDIR}/modules/metrics/metrics_module.c ${SRCDIR}/modules/man/man_module.c ${SRCDIR}/modules/networking/networking_module.c ${SRCDIR}/render/template_render.c ${SRCDIR}/http/utils.c ${SRCDIR}/router/url_registry.c ${SRCDIR}/http/response.c ${SRCDIR}/modules/packages/packages_module.c ${SRCDIR}/core/heartbeat.c
 	@mkdir -p ${BUILDDIR}
-	${CC} ${CFLAGS} ${LDFLAGS} -I${INCDIR} -o $@ ${TESTDIR}/routes_test.c ${SRCDIR}/modules/networking/networking_module.c ${SRCDIR}/router/route_table.c ${SRCDIR}/modules/metrics/metrics_module.c ${SRCDIR}/modules/man/man_module.c ${SRCDIR}/render/template_render.c ${SRCDIR}/http/utils.c ${SRCDIR}/http/response.c ${SRCDIR}/core/config.c ${SRCDIR}/modules/packages/packages_module.c ${SRCDIR}/router/url_registry.c ${SRCDIR}/core/log.c ${SRCDIR}/core/heartbeat.c ${LDADD}
+	${CC} ${CFLAGS} ${LDFLAGS} -I${INCDIR} -o $@ ${TESTDIR}/routes_test.c ${SRCDIR}/modules/networking/networking_module.c ${SRCDIR}/router/route_table.c ${SRCDIR}/modules/metrics/metrics_module.c ${SRCDIR}/modules/man/man_module.c ${SRCDIR}/render/template_render.c ${SRCDIR}/http/utils.c ${SRCDIR}/http/response.c ${SRCDIR}/modules/packages/packages_module.c ${SRCDIR}/router/url_registry.c ${SRCDIR}/core/heartbeat.c ${LDADD}
 
 ${BUILDDIR}/template_test: ${TESTDIR}/template_test.c ${SRCDIR}/render/template_render.c
 	@mkdir -p ${BUILDDIR}
