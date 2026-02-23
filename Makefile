@@ -82,7 +82,15 @@ clean:
 	rm -rf ${BUILDDIR}
 	rm -f ${PROG} *.o
 
+<<<<<<< HEAD
 ${BUILDDIR}/config.o: ${SRCDIR}/core/config.c
+=======
+# --- Individual Compilation Rules ---
+# These rules handle the compilation of each .c file into its .o counterpart
+# Keep explicit per-file rules for BSD make portability (avoid GNU-specific $< usage).
+
+${BUILDDIR}/conf.o: ${SRCDIR}/conf.c
+>>>>>>> pr-83
 	@mkdir -p ${BUILDDIR}
 	${CC} ${CFLAGS} -c $< -o $@
 
