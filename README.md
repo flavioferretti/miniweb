@@ -121,7 +121,7 @@ Anything else returns a generated HTML `404 Not Found` page.
 | Static assets (`/static/*`) | Dynamic prefix (`/static/`) | `static_handler()` blocks traversal (`..`, `//`), resolves MIME by extension, then streams through `http_send_file()` |
 | Favicon (`/favicon.ico`) | Exact `GET` | `favicon_handler()` serves `{static_dir}/assets/favicon.svg` as `image/svg+xml` |
 
-> Note: only `GET` routes are registered. Unsupported methods typically fall through to `404` (not `405`) because routing is method+path exact match.
+For known paths hit with an unsupported method, dispatch now returns `405 Method Not Allowed`; unknown paths still return `404 Not Found`.
 
 ### Web Interface
 
@@ -197,9 +197,10 @@ Rendered manual pages are cached for reuse under `static/man/{area}/{section}/{p
 MiniWeb currently uses three distinct caches:
 
 1. **Template cache (`template_engine.c`)**
-   - Preloaded once at startup by `template_cache_init()` by reading every regular file under `templates_dir`.
+   - Preloaded at startup by `template_cache_init()` by reading every regular file under `templates_dir`.
+   - Protected by `template_cache_lock` for concurrent reads/refreshes.
+   - TTL-based invalidation: once `TEMPLATE_CACHE_TTL_SEC=5` expires, the next template read triggers a full reload (`template_cache_refresh_locked()`), so template edits are picked up without restart.
    - Rendering looks up template fragments in memory and duplicates strings per request.
-   - No TTL/invalidation; refresh requires process restart.
 
 2. **In-memory static file cache (`http_handler.c`)**
    - Fixed-size cache with `FILE_CACHE_SLOTS=32` and per-object max payload `FILE_CACHE_MAX_BYTES=256 KiB`.
@@ -334,7 +335,6 @@ static/             rwc
 /usr/bin/mandoc     x
 /usr/bin/man        x
 /usr/bin/apropos    x
-/bin/ps             x
 /usr/bin/netstat    x
 /bin/sh             x
 /etc/man.conf       r
@@ -470,7 +470,7 @@ paths that need consistent formatting and sink selection.
 ### Latest merged PR summary (PR-41)
 
 - Replaced per-accept `calloc/free` connection lifecycle with a fixed-size connection slab + free-stack in `main.c`.
-- Added a pooled `http_response_t` allocator in `http_handler.c` (256 reusable response objects).
+- Added a pooled `http_response_t` allocator in `http_handler.c` (1024 reusable response objects, with heap fallback on transient pool exhaustion).
 - Hardened static file cache behavior with:
   - insertion token budget (`FILE_CACHE_INSERTS_PER_SEC=8`),
   - two-hit admission before entering the main cache,
@@ -501,7 +501,7 @@ Why this improves efficiency even if req/s is similar:
 - **Connection lifecycle (`main.c`)**: now uses a preallocated fixed-size slab + free-stack; no per-accept heap allocation in the hot path.
 - **Static file cache (`http_handler.c`)**: still allocates payload copies, but insertion is token-limited, gated by two-hit admission, and stale entries are evicted by age.
 - **File-send path**: uncached file responses may still allocate a temporary full-file copy (`cache_copy`) up to cache limit for insertion.
-- **Response objects**: now served from a mutex-protected pool (`256` slots), avoiding frequent heap allocation/free for `http_response_t`.
+- **Response objects**: served from a mutex-protected pool (`1024` slots) with heap fallback when the pool is temporarily exhausted, avoiding most hot-path heap churn.
 
 Potential follow-ups:
 
@@ -518,26 +518,26 @@ Some limits are compile-time constants (hard caps), while others are configurabl
 | Cap | Value | Effective range | Notes |
 |---|---:|---|---|
 | `MAX_EVENTS` | 64 | `1..64` per `kevent` wait | Upper bound of events processed per loop iteration. |
-| `MAX_CONNECTIONS` | 1280 | `1..1280` runtime active conns | Absolute upper bound; `-c`/`max_conns` cannot exceed this. |
-| `THREAD_POOL_SIZE` | 4 | `1..4` workers | Runtime `threads` is clamped to this value. |
+| `MAX_CONNECTIONS` | 4096 | `1..4096` runtime active conns | Absolute upper bound; `-c`/`max_conns` cannot exceed this. |
+| `THREAD_POOL_SIZE` | 32 | `1..32` workers | Runtime `threads` is clamped to this value. |
 | `REQUEST_BUFFER_SIZE` | 16384 | `1024..16384` bytes effective request size | Runtime `max_req_size` parsed up to 1 MiB but now clamped to buffer size. |
 | `LISTEN_BACKLOG` | 128 | fixed (`listen(2)` backlog hint) | Pending accept queue hint; tune with kernel limits in mind. |
-| `QUEUE_CAPACITY` | 512 | `1..512` queued dispatched conns | Circular queue depth before overload 503/drop path. |
+| `QUEUE_CAPACITY` | 4096 | `1..4096` queued dispatched conns | Circular queue depth before overload 503/drop path. |
 | `MAX_KEEPALIVE_REQUESTS` | 64 | fixed per connection | Forces close after 64 served requests on one keep-alive connection. |
-| `WRITE_RETRY_LIMIT` | 256 | fixed write retries | Max EAGAIN retry cycles before write failure. |
-| `WRITE_WAIT_MS` | 100 | fixed poll wait ms | Poll wait step used by write retry loop. |
+| `WRITE_RETRY_LIMIT` | 20 | fixed write retries | Max EAGAIN retry cycles before write failure. |
+| `WRITE_WAIT_MS` | 10 | fixed poll wait ms | Poll wait step used by write retry loop. |
 | `FILE_CACHE_SLOTS` | 32 | fixed entries | Number of in-memory static file cache slots. |
 | `FILE_CACHE_MAX_BYTES` | 262144 | `1..262144` bytes per cached file | Files above threshold bypass memory cache. |
 | `FILE_CACHE_INSERTS_PER_SEC` | 8 | fixed inserts/second | Token budget that rate-limits cache insertions. |
 | `FILE_CACHE_MAX_AGE_SEC` | 120 | fixed seconds | Age-based eviction threshold for cache entries and admission candidates. |
-| Response pool size | 256 | fixed objects | Upper bound of reusable `http_response_t` objects before allocation fails. |
+| Response pool size | 1024 | fixed objects + heap fallback | Upper bound of reusable pooled `http_response_t` objects before fallback allocation. |
 
 ### Configurable caps and parser ranges
 
 | Key | Parser range | Runtime effective range | Reason |
 |---|---|---|---|
-| `threads` | `1..64` | `1..4` | hard-clamped by `THREAD_POOL_SIZE`. |
-| `max_conns` | `1..65535` | `1..1280` | hard-clamped by `MAX_CONNECTIONS`. |
+| `threads` | `1..64` | `1..32` | hard-clamped by `THREAD_POOL_SIZE`. |
+| `max_conns` | `1..65535` | `1..4096` | hard-clamped by `MAX_CONNECTIONS`. |
 | `max_req_size` | `1024..1048576` | `1024..16384` | hard-clamped by `REQUEST_BUFFER_SIZE`. |
 | `conn_timeout` | `1..3600` | `1..3600` | used by idle sweep logic. |
 | `mandoc_timeout` | `1..120` | `1..120` | subprocess timeout bound. |
@@ -557,7 +557,7 @@ Recommended tuning profile for high parallel request loads:
 - `static/` — assets served under `/static/`
 - `/etc/passwd`, `/etc/group`, `/etc/resolv.conf` — lookups/data for runtime views
 - `/etc/man.conf`, `/usr/share/man`, `/usr/local/man`, `/usr/X11R6/man` — manpage data
-- `/usr/bin/mandoc`, `/usr/bin/apropos`, `/bin/ps`, `/usr/bin/netstat`, `/bin/sh` — executed helpers
+- `/usr/bin/mandoc`, `/usr/bin/apropos`, `/usr/bin/netstat`, `/bin/sh` — executed helpers
 - `/usr/sbin/pkg_info` — package information tool, executed by packages API
 - `/var/db/pkg` — installed package database, read by `pkg_info(1)`
 - `/usr/local`, `/usr/bin`, `/usr/sbin`, `/bin`, `/sbin` — unveiled read-only so `pkg_info -E` can stat arbitrary file paths
@@ -569,7 +569,7 @@ miniweb -v
 miniweb -f /etc/miniweb.conf
 miniweb -f /etc/miniweb.conf -p 8080
 miniweb -b 0.0.0.0 -p 8080 -t 8
-miniweb -b 127.0.0.1 -p 9001 -c 1280 -t 4
+miniweb -b 127.0.0.1 -p 9001 -c 4096 -t 8
 miniweb -l /var/log/miniweb.log -v
 curl -s http://127.0.0.1:9001/api/metrics | jq .
 ```
@@ -644,7 +644,7 @@ make DEBUG=1
 
 ## Roadmap
 
-- [ ] Add explicit method handling (`405 Method Not Allowed` + `Allow`) for non-GET requests on known paths.
+- [ ] Add `Allow` header generation for `405 Method Not Allowed` responses on known paths.
 - [ ] Add conditional HTTP caching support (`ETag`/`If-None-Match`, `Last-Modified`/`If-Modified-Since`) for static and cached man assets.
 - [ ] Add cache observability counters (static cache hit/miss/admission/eviction and man cache hit/miss) under `/api/metrics`.
 - [ ] Add live streaming endpoint for metrics updates (SSE or WebSocket) to reduce polling overhead.
