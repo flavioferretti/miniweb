@@ -2,11 +2,22 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-/* Global verbose flag - defined in main.c */
+/**
+ * @brief Global verbose logging flag configured during process startup.
+ *
+ * Defined in app_main.c and consumed by modules that need process-wide
+ * logging verbosity state.
+ */
 extern int config_verbose;
 
-/* Runtime-selected asset directories (set from config at startup). */
+/**
+ * @brief Runtime-selected static asset directory path.
+ */
 extern char config_static_dir[];
+
+/**
+ * @brief Runtime-selected templates directory path.
+ */
 extern char config_templates_dir[];
 
 #endif /* CONFIG_H */

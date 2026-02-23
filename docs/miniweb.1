@@ -31,6 +31,16 @@ features while introducing modular architecture, centralized heartbeat
 scheduling, and a reusable sqlite3 storage interface.
 .Pp
 The implementation must remain strictly C99 and follow OpenBSD KNF.
+.Pp
+The current source tree has already moved to capability-oriented folders under
+.Pa src/
+(e.g.\~\c
+.Pa core/ ,
+.Pa http/ ,
+.Pa router/ ,
+.Pa modules/ ,
+.Pa render/ ,
+.Pa storage/ ), while preserving endpoint compatibility.
 .Sh OPTIONS
 The options are as follows:
 .Bl -tag -width Ds
@@ -140,8 +150,8 @@ Unified heartbeat scheduler is planned.
 Current caches are in-memory and filesystem based.
 Reusable sqlite3 facade is planned.
 .It File organization
-Current tree contains large multi-responsibility files.
-Capability-based modular tree is planned.
+Core/http/router/render/modules/storage files are now split into subdirectories.
+Further per-domain decomposition is ongoing to reduce residual file sizes.
 .El
 .Sh DESIGN REQUIREMENTS
 .Bl -bullet -compact
