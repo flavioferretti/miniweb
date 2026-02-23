@@ -34,6 +34,9 @@ route_handler_t route_match(const char *method, const char *path);
 /** Return non-zero when the path exists for any supported method. */
 int route_path_known(const char *path);
 
+/** Build an Allow-header method list for a known path. */
+int route_allow_methods(const char *path, char *buf, size_t buf_len);
+
 /** Register one method/path to handler mapping into the route table. */
 void register_route(const char *method, const char *path,
                                route_handler_t handler);

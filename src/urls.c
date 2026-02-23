@@ -1,6 +1,7 @@
 /* urls.c - URL routing table */
 
 #include <string.h>
+#include <stdio.h>
 
 #include "../include/man.h"
 #include "../include/metrics.h"
@@ -145,6 +146,56 @@ route_match(const char *method, const char *path)
 	}
 
 	return NULL;
+}
+
+
+int
+route_allow_methods(const char *path, char *buf, size_t buf_len)
+{
+	if (!path || !buf || buf_len == 0)
+		return 0;
+
+	buf[0] = '\0';
+	size_t used = 0;
+	int count = 0;
+
+	for (size_t i = 0; i < route_count; i++) {
+		if (strcmp(routes[i].path, path) != 0)
+			continue;
+
+		int seen = 0;
+		for (size_t j = 0; j < i; j++) {
+			if (strcmp(routes[j].path, path) == 0 &&
+			    strcmp(routes[j].method, routes[i].method) == 0) {
+				seen = 1;
+				break;
+			}
+		}
+		if (seen)
+			continue;
+
+		int wrote = snprintf(buf + used, buf_len - used,
+								 "%s%s",
+								 count > 0 ? ", " : "",
+								 routes[i].method);
+		if (wrote < 0 || (size_t)wrote >= buf_len - used)
+			return count;
+
+		used += (size_t)wrote;
+		count++;
+	}
+
+	if (strncmp(path, "/man/", 5) == 0 ||
+	    strncmp(path, "/api/man", 8) == 0 ||
+	    strncmp(path, "/api/packages", 13) == 0 ||
+	    strncmp(path, "/static/", 8) == 0) {
+		if (count == 0 && buf_len > 3) {
+			strlcpy(buf, "GET", buf_len);
+			count = 1;
+		}
+	}
+
+	return count;
 }
 
 int

@@ -19,6 +19,7 @@
 #include <time.h>
 
 #include "../include/log.h"
+#include "../include/urls.h"
 
 #define WRITE_RETRY_LIMIT 20
 #define WRITE_WAIT_MS 10
@@ -775,6 +776,12 @@ http_send_error(http_request_t *req, int status_code, const char *message)
 		return -1;
 	http_response_set_status(resp, status_code);
 	http_response_set_body(resp, body, body_len, 0);
+
+	if (status_code == 405 && req && req->url) {
+		char allow[256];
+		if (route_allow_methods(req->url, allow, sizeof(allow)) > 0)
+			http_response_add_header(resp, "Allow", allow);
+	}
 
 	int ret = http_response_send(req, resp);
 	http_response_free(resp);
