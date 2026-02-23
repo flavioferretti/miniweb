@@ -82,85 +82,81 @@ clean:
 	rm -rf ${BUILDDIR}
 	rm -f ${PROG} *.o
 
-<<<<<<< HEAD
 ${BUILDDIR}/config.o: ${SRCDIR}/core/config.c
-=======
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/core/config.c -o $@
+
 # --- Individual Compilation Rules ---
 # These rules handle the compilation of each .c file into its .o counterpart
 # Keep explicit per-file rules for BSD make portability (avoid GNU-specific $< usage).
 
-${BUILDDIR}/conf.o: ${SRCDIR}/conf.c
->>>>>>> pr-83
-	@mkdir -p ${BUILDDIR}
-	${CC} ${CFLAGS} -c $< -o $@
-
 ${BUILDDIR}/packages_module.o: ${SRCDIR}/modules/packages/packages_module.c
 	@mkdir -p ${BUILDDIR}
-	${CC} ${CFLAGS} -c $< -o $@
+	${CC} ${CFLAGS} -c ${SRCDIR}/modules/packages/packages_module.c -o $@
 
 ${BUILDDIR}/log_core.o: ${SRCDIR}/core/log.c
 	@mkdir -p ${BUILDDIR}
-	${CC} ${CFLAGS} -c $< -o $@
+	${CC} ${CFLAGS} -c ${SRCDIR}/core/log.c -o $@
 
 ${BUILDDIR}/http_response.o: ${SRCDIR}/http/response.c
 	@mkdir -p ${BUILDDIR}
-	${CC} ${CFLAGS} -c $< -o $@
+	${CC} ${CFLAGS} -c ${SRCDIR}/http/response.c -o $@
 
 ${BUILDDIR}/http_utils.o: ${SRCDIR}/http/utils.c
 	@mkdir -p ${BUILDDIR}
-	${CC} ${CFLAGS} -c $< -o $@
+	${CC} ${CFLAGS} -c ${SRCDIR}/http/utils.c -o $@
 
 ${BUILDDIR}/app_main.o: ${SRCDIR}/app_main.c
 	@mkdir -p ${BUILDDIR}
-	${CC} ${CFLAGS} -c $< -o $@
+	${CC} ${CFLAGS} -c ${SRCDIR}/app_main.c -o $@
 
 ${BUILDDIR}/man_module.o: ${SRCDIR}/modules/man/man_module.c
 	@mkdir -p ${BUILDDIR}
-	${CC} ${CFLAGS} -c $< -o $@
+	${CC} ${CFLAGS} -c ${SRCDIR}/modules/man/man_module.c -o $@
 
 ${BUILDDIR}/metrics_module.o: ${SRCDIR}/modules/metrics/metrics_module.c
 	@mkdir -p ${BUILDDIR}
-	${CC} ${CFLAGS} -c $< -o $@
+	${CC} ${CFLAGS} -c ${SRCDIR}/modules/metrics/metrics_module.c -o $@
 
 ${BUILDDIR}/networking_module.o: ${SRCDIR}/modules/networking/networking_module.c
 	@mkdir -p ${BUILDDIR}
-	${CC} ${CFLAGS} -c $< -o $@
+	${CC} ${CFLAGS} -c ${SRCDIR}/modules/networking/networking_module.c -o $@
 
 ${BUILDDIR}/route_table.o: ${SRCDIR}/router/route_table.c
 	@mkdir -p ${BUILDDIR}
-	${CC} ${CFLAGS} -c $< -o $@
+	${CC} ${CFLAGS} -c ${SRCDIR}/router/route_table.c -o $@
 
 ${BUILDDIR}/template_render.o: ${SRCDIR}/render/template_render.c
 	@mkdir -p ${BUILDDIR}
-	${CC} ${CFLAGS} -c $< -o $@
+	${CC} ${CFLAGS} -c ${SRCDIR}/render/template_render.c -o $@
 
 ${BUILDDIR}/url_registry.o: ${SRCDIR}/router/url_registry.c
 	@mkdir -p ${BUILDDIR}
-	${CC} ${CFLAGS} -c $< -o $@
+	${CC} ${CFLAGS} -c ${SRCDIR}/router/url_registry.c -o $@
 
 ${BUILDDIR}/heartbeat.o: ${SRCDIR}/core/heartbeat.c
 	@mkdir -p ${BUILDDIR}
-	${CC} ${CFLAGS} -c $< -o $@
+	${CC} ${CFLAGS} -c ${SRCDIR}/core/heartbeat.c -o $@
 
 ${BUILDDIR}/router.o: ${SRCDIR}/router/router.c
 	@mkdir -p ${BUILDDIR}
-	${CC} ${CFLAGS} -c $< -o $@
+	${CC} ${CFLAGS} -c ${SRCDIR}/router/router.c -o $@
 
 ${BUILDDIR}/module_attach.o: ${SRCDIR}/router/module_attach.c
 	@mkdir -p ${BUILDDIR}
-	${CC} ${CFLAGS} -c $< -o $@
+	${CC} ${CFLAGS} -c ${SRCDIR}/router/module_attach.c -o $@
 
 ${BUILDDIR}/sqlite_db.o: ${SRCDIR}/storage/sqlite_db.c
 	@mkdir -p ${BUILDDIR}
-	${CC} ${CFLAGS} -c $< -o $@
+	${CC} ${CFLAGS} -c ${SRCDIR}/storage/sqlite_db.c -o $@
 
 ${BUILDDIR}/sqlite_stmt.o: ${SRCDIR}/storage/sqlite_stmt.c
 	@mkdir -p ${BUILDDIR}
-	${CC} ${CFLAGS} -c $< -o $@
+	${CC} ${CFLAGS} -c ${SRCDIR}/storage/sqlite_stmt.c -o $@
 
 ${BUILDDIR}/sqlite_schema.o: ${SRCDIR}/storage/sqlite_schema.c
 	@mkdir -p ${BUILDDIR}
-	${CC} ${CFLAGS} -c $< -o $@
+	${CC} ${CFLAGS} -c ${SRCDIR}/storage/sqlite_schema.c -o $@
 
 unit-tests: ${BUILDDIR}/routes_test ${BUILDDIR}/template_test
 	./${BUILDDIR}/routes_test
