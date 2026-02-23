@@ -30,14 +30,14 @@
 #include <errno.h>
 #include <time.h>
 
-#include "../include/conf.h"
-#include "../include/config.h"
-#include "../include/http_handler.h"
-#include "../include/http_utils.h"
-#include "../include/template_engine.h"
-#include "../include/routes.h"
-#include "../include/urls.h"
-#include "../include/log.h"
+#include <miniweb/core/conf.h>
+#include <miniweb/core/config.h>
+#include <miniweb/http/handler.h>
+#include <miniweb/http/utils.h>
+#include <miniweb/render/template_engine.h>
+#include <miniweb/router/routes.h>
+#include <miniweb/router/urls.h>
+#include <miniweb/core/log.h>
 
 /* -- Compile-time hard limits (not overridable at runtime) ------------------ */
 #define MAX_EVENTS          256

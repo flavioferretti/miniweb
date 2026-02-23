@@ -9,14 +9,14 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <time.h>
-#include "../../../include/miniweb/router/router.h"
+#include <miniweb/router/router.h>
 
-#include "../include/config.h"
-#include "../include/http_handler.h"
-#include "../include/http_utils.h"
-#include "../include/man.h"
-#include "../include/routes.h"
-#include "../include/log.h"
+#include <miniweb/core/config.h>
+#include <miniweb/http/handler.h>
+#include <miniweb/http/utils.h>
+#include <miniweb/modules/man.h>
+#include <miniweb/router/routes.h>
+#include <miniweb/core/log.h>
 
 #define MAX_JSON_SIZE (256 * 1024)
 #define MAX_OUTPUT_SIZE (10 * 1024 * 1024) //10 MB!

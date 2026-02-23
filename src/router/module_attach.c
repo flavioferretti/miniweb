@@ -1,4 +1,4 @@
-#include "../../include/miniweb/router/module_attach.h"
+#include <miniweb/router/module_attach.h>
 
 /**
  * @brief Initialize and attach every enabled module to the router.

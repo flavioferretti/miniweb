@@ -3,13 +3,13 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "../../include/man.h"
-#include "../../include/metrics.h"
-#include "../../include/networking.h"
-#include "../../include/pkg_manager.h"
-#include "../../include/routes.h"
-#include "../../include/miniweb/router/module_attach.h"
-#include "../../include/urls.h"
+#include <miniweb/modules/man.h>
+#include <miniweb/modules/metrics.h>
+#include <miniweb/modules/networking.h>
+#include <miniweb/modules/pkg_manager.h>
+#include <miniweb/router/routes.h>
+#include <miniweb/router/module_attach.h>
+#include <miniweb/router/urls.h>
 
 static struct route routes[MAX_ROUTES];
 static size_t route_count = 0;

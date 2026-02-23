@@ -1,4 +1,4 @@
-#include "../../include/miniweb/router/router.h"
+#include <miniweb/router/router.h>
 
 int
 router_register(struct router *r, const char *method,

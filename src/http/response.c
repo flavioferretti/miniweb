@@ -1,7 +1,7 @@
 /* http_handler.c - HTTP handler utilities */
 
-#include "../include/config.h"
-#include "http_handler.h"
+#include <miniweb/core/config.h>
+#include <miniweb/http/handler.h>
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -18,8 +18,8 @@
 #include <pthread.h>
 #include <time.h>
 
-#include "../include/log.h"
-#include "../include/urls.h"
+#include <miniweb/core/log.h>
+#include <miniweb/router/urls.h>
 
 #define WRITE_RETRY_LIMIT 20
 #define WRITE_WAIT_MS 10

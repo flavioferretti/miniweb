@@ -1,5 +1,24 @@
 # MiniWeb Enterprise Refactor Plan (C99 + OpenBSD KNF)
 
+## Refactor status snapshot (2026-02-23)
+
+### Completed
+
+- Source tree standardized around capability folders in `src/` (`core`, `http`, `router`, `modules`, `render`, `storage`) with `app_main.c` as entrypoint.
+- Public headers now include a namespaced surface under `include/miniweb/` for core/http/router/render/modules/storage APIs while preserving compatibility wrappers.
+- Heartbeat scheduler API (`heartbeat_init/register/start/stop`) is in place and used by module sampling responsibilities.
+- Router/module boundary is active through `struct miniweb_module` and `miniweb_module_attach_enabled()` with `init_routes()` wiring module registration.
+- sqlite storage facade has been introduced (`sqlite_db`, `sqlite_stmt`, `sqlite_schema`) for staged persistence rollout.
+
+### In progress
+
+- Full split of large feature files into service + json + module units (metrics/networking/man/packages).
+- Expansion of integration coverage to route semantics (404/405) and golden payload assertions.
+
+### Next milestone
+
+- Keep the current phased roadmap, but execute decomposition and test hardening as the primary next sprint goals.
+
 ## 1) In-depth codebase review
 
 ### 1.1 High-level findings

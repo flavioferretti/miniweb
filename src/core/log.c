@@ -8,7 +8,7 @@
 #include <time.h>
 #include <pthread.h>
 
-#include "../../include/log.h"
+#include <miniweb/core/log.h>
 
 static FILE            *log_fp      = NULL;
 static int              log_verbose = 0;

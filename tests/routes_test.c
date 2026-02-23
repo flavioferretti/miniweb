@@ -1,9 +1,10 @@
 #include <assert.h>
 #include <stdio.h>
+#include <string.h>
 
-#include "../include/config.h"
-#include "../include/routes.h"
-#include "../include/urls.h"
+#include <miniweb/core/config.h>
+#include <miniweb/router/routes.h>
+#include <miniweb/router/urls.h>
 
 int config_verbose = 0;
 char config_static_dir[] = "static";
@@ -41,6 +42,9 @@ int main(void)
 
 	/* Negative cases */
 	assert(route_match("POST", "/")        == NULL);
+	char allow[64];
+	assert(route_allow_methods("/", allow, sizeof(allow)) == 1);
+	assert(strcmp(allow, "GET") == 0);
 	assert(route_path_known("/")             == 1);
 	assert(route_path_known("/api/man/search") == 1);
 	assert(route_path_known("/static/css/custom.css") == 1);

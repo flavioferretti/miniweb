@@ -9,7 +9,7 @@
 #include <sys/proc.h>
 #include <sys/swap.h>
 #include <sys/utsname.h>  /* Required for uname() and struct utsname. */
-#include "../../../include/miniweb/router/router.h"
+#include <miniweb/router/router.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,12 +21,12 @@
 #include <pthread.h>
 #include <pwd.h>          /* For struct passwd (process usernames). */
 
-#include "../include/metrics.h"
-#include "../include/config.h"
-#include "../include/http_handler.h"
-#include "../include/http_utils.h"
-#include "../include/log.h"
-#include "../include/heartbeat.h"
+#include <miniweb/modules/metrics.h>
+#include <miniweb/core/config.h>
+#include <miniweb/http/handler.h>
+#include <miniweb/http/utils.h>
+#include <miniweb/core/log.h>
+#include <miniweb/core/heartbeat.h>
 
 #define JSON_BUFFER_SIZE 65536
 #define MB (1024 * 1024)

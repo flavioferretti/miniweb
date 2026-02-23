@@ -1,4 +1,4 @@
-#include "../../include/miniweb/storage/sqlite_stmt.h"
+#include <miniweb/storage/sqlite_stmt.h>
 
 /**
  * @brief Prepared-statement wrapper used by the SQLite facade.

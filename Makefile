@@ -90,7 +90,7 @@ ${BUILDDIR}/packages_module.o: ${SRCDIR}/modules/packages/packages_module.c
 	@mkdir -p ${BUILDDIR}
 	${CC} ${CFLAGS} -c ${SRCDIR}/modules/packages/packages_module.c -o $@
 
-${BUILDDIR}/http_response.o: ${SRCDIR}/http/response.c
+${BUILDDIR}/http_response.o: ${SRCDIR}/http/response.c ${SRCDIR}/core/log.c
 	@mkdir -p ${BUILDDIR}
 	${CC} ${CFLAGS} -c ${SRCDIR}/http/response.c -o $@
 
@@ -165,9 +165,9 @@ unit-tests: ${BUILDDIR}/routes_test ${BUILDDIR}/template_test
 integration-test: ${BUILDDIR}/${PROG}
 	bash ${TESTDIR}/integration_endpoints.sh
 
-${BUILDDIR}/routes_test: ${TESTDIR}/routes_test.c ${SRCDIR}/router/route_table.c ${SRCDIR}/modules/metrics/metrics_module.c ${SRCDIR}/modules/man/man_module.c ${SRCDIR}/modules/networking/networking_module.c ${SRCDIR}/render/template_render.c ${SRCDIR}/http/utils.c ${SRCDIR}/router/url_registry.c ${SRCDIR}/http/response.c ${SRCDIR}/modules/packages/packages_module.c ${SRCDIR}/core/heartbeat.c
+${BUILDDIR}/routes_test: ${TESTDIR}/routes_test.c ${TESTDIR}/routes_test_stubs.c ${SRCDIR}/router/route_table.c ${SRCDIR}/router/url_registry.c ${SRCDIR}/router/router.c ${SRCDIR}/router/module_attach.c ${SRCDIR}/render/template_render.c ${SRCDIR}/http/utils.c ${SRCDIR}/http/response.c
 	@mkdir -p ${BUILDDIR}
-	${CC} ${CFLAGS} ${LDFLAGS} -I${INCDIR} -o $@ ${TESTDIR}/routes_test.c ${SRCDIR}/modules/networking/networking_module.c ${SRCDIR}/router/route_table.c ${SRCDIR}/modules/metrics/metrics_module.c ${SRCDIR}/modules/man/man_module.c ${SRCDIR}/render/template_render.c ${SRCDIR}/http/utils.c ${SRCDIR}/http/response.c ${SRCDIR}/modules/packages/packages_module.c ${SRCDIR}/router/url_registry.c ${SRCDIR}/core/heartbeat.c ${LDADD}
+	${CC} ${CFLAGS} ${LDFLAGS} -I${INCDIR} -o $@ ${TESTDIR}/routes_test.c ${TESTDIR}/routes_test_stubs.c ${SRCDIR}/router/route_table.c ${SRCDIR}/router/url_registry.c ${SRCDIR}/router/router.c ${SRCDIR}/router/module_attach.c ${SRCDIR}/render/template_render.c ${SRCDIR}/http/utils.c ${SRCDIR}/http/response.c ${SRCDIR}/core/log.c ${LDADD}
 
 ${BUILDDIR}/template_test: ${TESTDIR}/template_test.c ${SRCDIR}/render/template_render.c
 	@mkdir -p ${BUILDDIR}
