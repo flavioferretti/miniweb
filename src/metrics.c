@@ -89,6 +89,11 @@ static void metrics_take_sample(MetricSample *sample);
 static int metrics_read_cpu_ticks(uint64_t *total_ticks, uint64_t *idle_ticks);
 static void append_metrics_history_json(char *buffer, size_t size,
 							MetricSample *history, size_t count);
+static char *build_system_metrics_json(MetricSample *history, size_t history_count);
+static void metrics_snapshot_update(void);
+
+static pthread_mutex_t g_metrics_snapshot_lock = PTHREAD_MUTEX_INITIALIZER;
+static char *g_metrics_snapshot_json = NULL;
 
 /**
  * @brief Read raw kernel CPU tick counters.
@@ -262,6 +267,7 @@ metrics_sampler_thread(void *arg)
 		MetricSample sample;
 		metrics_take_sample(&sample);
 		ring_push(&g_metrics_ring, &sample);
+		metrics_snapshot_update();
 		sleep(1);
 	}
 	return NULL;
@@ -284,6 +290,7 @@ metrics_ring_bootstrap(void)
 		return;
 	}
 	g_metrics_ring_ready = 1;
+	metrics_snapshot_update();
 	pthread_detach(g_metrics_thread);
 }
 
@@ -1238,11 +1245,9 @@ append_top_ports_json(char *buffer, size_t size)
  * @brief Get system metrics json.
  * @return Returns 0 on success or a negative value on failure unless documented otherwise.
  */
-char *
-get_system_metrics_json(void)
+static char *
+build_system_metrics_json(MetricSample *history, size_t history_count)
 {
-	(void)pthread_once(&g_metrics_once, metrics_ring_bootstrap);
-
 	char *json = malloc(JSON_BUFFER_SIZE);
 	if (!json) {
 		LOG("Failed to allocate JSON buffer");
@@ -1252,8 +1257,7 @@ get_system_metrics_json(void)
 	char timestamp[64];
 	char hostname[256];
 	time_t now;
-	struct tm tm_buf; /* Buffer for localtime_r(). */
-
+	struct tm tm_buf;
 	char cpu_json[256];
 	char memory_json[512];
 	char load_json[256];
@@ -1265,16 +1269,11 @@ get_system_metrics_json(void)
 	char top_mem_json[2048];
 	char proc_stats_json[256];
 	char history_json[32768];
-	MetricSample history[METRICS_HISTORY_WINDOW];
-	size_t history_count = 0;
 
 	time(&now);
-
-	/* Critical: use localtime_r() instead of localtime(). */
 	struct tm *tm_ptr = localtime_r(&now, &tm_buf);
 	if (tm_ptr) {
-		strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S",
-				 tm_ptr);
+		strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", tm_ptr);
 	} else {
 		strlcpy(timestamp, "unknown", sizeof(timestamp));
 	}
@@ -1292,10 +1291,8 @@ get_system_metrics_json(void)
 	append_process_json_sections(top_cpu_json, sizeof(top_cpu_json),
 		top_mem_json, sizeof(top_mem_json),
 		proc_stats_json, sizeof(proc_stats_json));
-	history_count = ring_last(&g_metrics_ring, METRICS_HISTORY_WINDOW,
-		history);
-	append_metrics_history_json(history_json, sizeof(history_json),
-		history, history_count);
+	append_metrics_history_json(history_json, sizeof(history_json), history,
+		history_count);
 
 	snprintf(json, JSON_BUFFER_SIZE,
 			 "{"
@@ -1308,17 +1305,55 @@ get_system_metrics_json(void)
 			 "%s,"
 			 "%s,"
 			 "%s,"
-		 "%s,"
-		 "%s,"
-		 "%s,"
-		 "%s"
-		 "}",
-	  timestamp, hostname, cpu_json, memory_json, load_json, os_json,
-	  uptime_json, disks_json, ports_json,
-	  top_cpu_json, top_mem_json, proc_stats_json, history_json);
-
+			 "%s,"
+			 "%s,"
+			 "%s,"
+			 "%s"
+			 "}",
+		  timestamp, hostname, cpu_json, memory_json, load_json, os_json,
+		  uptime_json, disks_json, ports_json,
+		  top_cpu_json, top_mem_json, proc_stats_json, history_json);
 	return json;
 }
+
+static void
+metrics_snapshot_update(void)
+{
+	MetricSample history[METRICS_HISTORY_WINDOW];
+	size_t history_count = ring_last(&g_metrics_ring, METRICS_HISTORY_WINDOW,
+		history);
+	char *json = build_system_metrics_json(history, history_count);
+	if (!json)
+		return;
+
+	pthread_mutex_lock(&g_metrics_snapshot_lock);
+	free(g_metrics_snapshot_json);
+	g_metrics_snapshot_json = json;
+	pthread_mutex_unlock(&g_metrics_snapshot_lock);
+}
+
+char *
+get_system_metrics_json(void)
+{
+	(void)pthread_once(&g_metrics_once, metrics_ring_bootstrap);
+
+	pthread_mutex_lock(&g_metrics_snapshot_lock);
+	if (g_metrics_snapshot_json) {
+		char *copy = strdup(g_metrics_snapshot_json);
+		pthread_mutex_unlock(&g_metrics_snapshot_lock);
+		if (copy)
+			return copy;
+	} else {
+		pthread_mutex_unlock(&g_metrics_snapshot_lock);
+		metrics_snapshot_update();
+		pthread_mutex_lock(&g_metrics_snapshot_lock);
+	}
+
+	char *fallback = g_metrics_snapshot_json ? strdup(g_metrics_snapshot_json) : NULL;
+	pthread_mutex_unlock(&g_metrics_snapshot_lock);
+	return fallback;
+}
+
 
 
 /**

@@ -8,6 +8,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <time.h>
 
 #include "../include/config.h"
 #include "../include/http_handler.h"
@@ -18,6 +19,7 @@
 
 #define MAX_JSON_SIZE (256 * 1024)
 #define MAX_OUTPUT_SIZE (10 * 1024 * 1024) //10 MB!
+#define MAN_HOT_CACHE_TTL_SEC 30
 
 /* Remove nroff overstrike sequences (for example "N\bN", "_\bX")
  * from mandoc ASCII output so markdown fallback remains readable. */
@@ -438,6 +440,22 @@ add_content_disposition_for_format(http_response_t *resp,
  * @param page Manual page name.
  * @return HTTP send result code or -1 on read/build failures.
  */
+static int
+is_hot_man_cache_hit(const char *cache_abs, const char *format)
+{
+	if (!cache_abs || !format)
+		return 0;
+	if (strcmp(format, "html") != 0 && strcmp(format, "md") != 0)
+		return 0;
+
+	struct stat st;
+	if (stat(cache_abs, &st) != 0)
+		return 0;
+
+	time_t now = time(NULL);
+	return (now - st.st_mtime) <= MAN_HOT_CACHE_TTL_SEC;
+}
+
 static int
 is_static_cache_format(const char *format)
 {
@@ -871,7 +889,8 @@ man_render_handler(http_request_t *req)
 	if (build_cache_paths(area, section, page, format, cache_rel,
 				  sizeof(cache_rel), cache_abs,
 				  sizeof(cache_abs)) == 0 &&
-		is_static_cache_format(format) && access(cache_abs, R_OK) == 0) {
+		is_static_cache_format(format) && access(cache_abs, R_OK) == 0 &&
+		is_hot_man_cache_hit(cache_abs, format)) {
 		const char *old_url = req->url;
 		req->url = cache_rel;
 		int ret = static_handler(req);
