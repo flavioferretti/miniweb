@@ -10,7 +10,6 @@ miniweb
 *.dylib
 
 # Core dumps
-core
 *.core
 vgcore.*
 
