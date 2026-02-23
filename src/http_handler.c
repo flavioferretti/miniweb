@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <string.h>
 #include <strings.h>
 #include <poll.h>
@@ -25,6 +26,8 @@
 #define FILE_CACHE_MAX_BYTES (256 * 1024)
 #define FILE_CACHE_INSERTS_PER_SEC 8
 #define FILE_CACHE_MAX_AGE_SEC 120
+#define RESPONSE_POOL_SHARDS 16
+#define FILE_CACHE_SHARDS 16
 
 /**
  * @brief Internal data structure.
@@ -37,9 +40,7 @@ typedef struct {
 	int initialized;
 } response_pool_t;
 
-static response_pool_t response_pool = {
-	.lock = PTHREAD_MUTEX_INITIALIZER,
-};
+static response_pool_t response_pools[RESPONSE_POOL_SHARDS];
 
 /**
  * @brief Wait fd writable.
@@ -94,26 +95,72 @@ typedef struct file_cache_candidate {
 	time_t atime;
 } file_cache_candidate_t;
 
-static file_cache_entry_t file_cache[FILE_CACHE_SLOTS];
-static file_cache_candidate_t file_cache_candidates[FILE_CACHE_SLOTS * 2];
-static pthread_mutex_t file_cache_lock = PTHREAD_MUTEX_INITIALIZER;
+typedef struct {
+	file_cache_entry_t entries[FILE_CACHE_SLOTS];
+	file_cache_candidate_t candidates[FILE_CACHE_SLOTS * 2];
+	pthread_mutex_t lock;
+	int cache_insert_tokens;
+	time_t cache_insert_window;
+	unsigned int window_hits;
+	unsigned int window_misses;
+	unsigned int window_inserts;
+	unsigned int window_throttles;
+} file_cache_shard_t;
 
-static int cache_insert_tokens = FILE_CACHE_INSERTS_PER_SEC;
-static time_t cache_insert_window = 0;
+static file_cache_shard_t file_cache_shards[FILE_CACHE_SHARDS];
+static pthread_once_t cache_once = PTHREAD_ONCE_INIT;
+
+static void
+http_handler_globals_init(void)
+{
+	for (int i = 0; i < RESPONSE_POOL_SHARDS; i++)
+		pthread_mutex_init(&response_pools[i].lock, NULL);
+
+	for (int i = 0; i < FILE_CACHE_SHARDS; i++) {
+		pthread_mutex_init(&file_cache_shards[i].lock, NULL);
+		file_cache_shards[i].cache_insert_tokens = FILE_CACHE_INSERTS_PER_SEC;
+	}
+}
+
+static inline unsigned long
+thread_hash(void)
+{
+	uintptr_t tid = (uintptr_t)pthread_self();
+	return (unsigned long)(tid ^ (tid >> 7) ^ (tid >> 13));
+}
+
+static int
+response_pool_shard_index(void)
+{
+	return (int)(thread_hash() % RESPONSE_POOL_SHARDS);
+}
+
+static int
+file_cache_shard_index(const char *path)
+{
+	unsigned long hash = 1469598103934665603UL;
+
+	for (const unsigned char *p = (const unsigned char *)path; *p; p++) {
+		hash ^= *p;
+		hash *= 1099511628211UL;
+	}
+
+	return (int)(hash % FILE_CACHE_SHARDS);
+}
 
 /**
  * @brief Response pool init locked.
  */
 static void
-response_pool_init_locked(void)
+response_pool_init_locked(response_pool_t *pool)
 {
-	if (response_pool.initialized)
+	if (pool->initialized)
 		return;
 
-	response_pool.free_top = 1024;
+	pool->free_top = 1024;
 	for (int i = 0; i < 1024; i++)
-		response_pool.free_stack[i] = 1023 - i;
-	response_pool.initialized = 1;
+		pool->free_stack[i] = 1023 - i;
+	pool->initialized = 1;
 }
 
 /**
@@ -121,11 +168,26 @@ response_pool_init_locked(void)
  * @param now Parameter used by this function.
  */
 static void
-file_cache_refill_budget_locked(time_t now)
+file_cache_refill_budget_locked(file_cache_shard_t *shard, time_t now,
+					int shard_idx)
 {
-	if (cache_insert_window == 0 || now != cache_insert_window) {
-		cache_insert_window = now;
-		cache_insert_tokens = FILE_CACHE_INSERTS_PER_SEC;
+	if (shard->cache_insert_window == 0 || now != shard->cache_insert_window) {
+		if (shard->cache_insert_window != 0) {
+			log_debug("[FILE_CACHE] shard=%d/sec=%ld hits=%u misses=%u inserts=%u throttles=%u budget=%d",
+				  shard_idx,
+				  (long)shard->cache_insert_window,
+				  shard->window_hits,
+				  shard->window_misses,
+				  shard->window_inserts,
+				  shard->window_throttles,
+				  FILE_CACHE_INSERTS_PER_SEC);
+		}
+		shard->cache_insert_window = now;
+		shard->cache_insert_tokens = FILE_CACHE_INSERTS_PER_SEC;
+		shard->window_hits = 0;
+		shard->window_misses = 0;
+		shard->window_inserts = 0;
+		shard->window_throttles = 0;
 	}
 }
 
@@ -134,23 +196,23 @@ file_cache_refill_budget_locked(time_t now)
  * @param now Parameter used by this function.
  */
 static void
-file_cache_evict_stale_locked(time_t now)
+file_cache_evict_stale_locked(file_cache_shard_t *shard, time_t now)
 {
 	for (int i = 0; i < FILE_CACHE_SLOTS; i++) {
-		if (file_cache[i].path[0] == '\0')
+		if (shard->entries[i].path[0] == '\0')
 			continue;
-		if ((now - file_cache[i].atime) > FILE_CACHE_MAX_AGE_SEC) {
-			free(file_cache[i].data);
-			memset(&file_cache[i], 0, sizeof(file_cache[i]));
+		if ((now - shard->entries[i].atime) > FILE_CACHE_MAX_AGE_SEC) {
+			free(shard->entries[i].data);
+			memset(&shard->entries[i], 0, sizeof(shard->entries[i]));
 		}
 	}
 
 	for (int i = 0; i < FILE_CACHE_SLOTS * 2; i++) {
-		if (file_cache_candidates[i].path[0] == '\0')
+		if (shard->candidates[i].path[0] == '\0')
 			continue;
-		if ((now - file_cache_candidates[i].atime) > FILE_CACHE_MAX_AGE_SEC)
-			memset(&file_cache_candidates[i], 0,
-				   sizeof(file_cache_candidates[i]));
+		if ((now - shard->candidates[i].atime) > FILE_CACHE_MAX_AGE_SEC)
+			memset(&shard->candidates[i], 0,
+				   sizeof(shard->candidates[i]));
 	}
 }
 
@@ -161,23 +223,24 @@ file_cache_evict_stale_locked(time_t now)
  * @return Returns 0 on success or a negative value on failure unless documented otherwise.
  */
 static int
-file_cache_admit_locked(const char *path, time_t now)
+file_cache_admit_locked(file_cache_shard_t *shard, const char *path,
+				time_t now)
 {
 	int slot = -1;
 	time_t oldest = 0;
 
 	for (int i = 0; i < FILE_CACHE_SLOTS * 2; i++) {
-		if (file_cache_candidates[i].path[0] == '\0') {
+		if (shard->candidates[i].path[0] == '\0') {
 			slot = i;
 			break;
 		}
-		if (strcmp(file_cache_candidates[i].path, path) == 0) {
-			file_cache_candidates[i].hits++;
-			file_cache_candidates[i].atime = now;
-			return file_cache_candidates[i].hits >= 2;
+		if (strcmp(shard->candidates[i].path, path) == 0) {
+			shard->candidates[i].hits++;
+			shard->candidates[i].atime = now;
+			return shard->candidates[i].hits >= 2;
 		}
-		if (slot == -1 || file_cache_candidates[i].atime < oldest) {
-			oldest = file_cache_candidates[i].atime;
+		if (slot == -1 || shard->candidates[i].atime < oldest) {
+			oldest = shard->candidates[i].atime;
 			slot = i;
 		}
 	}
@@ -185,10 +248,10 @@ file_cache_admit_locked(const char *path, time_t now)
 	if (slot < 0)
 		return 0;
 
-	strlcpy(file_cache_candidates[slot].path, path,
-			sizeof(file_cache_candidates[slot].path));
-	file_cache_candidates[slot].hits = 1;
-	file_cache_candidates[slot].atime = now;
+	strlcpy(shard->candidates[slot].path, path,
+		sizeof(shard->candidates[slot].path));
+	shard->candidates[slot].hits = 1;
+	shard->candidates[slot].atime = now;
 	return 0;
 }
 
@@ -205,19 +268,23 @@ file_cache_store(const char *path, const struct stat *st, const char *data,
 {
 	if (!path || !st || !data || len == 0 || len > FILE_CACHE_MAX_BYTES)
 		return;
+	pthread_once(&cache_once, http_handler_globals_init);
+	int shard_idx = file_cache_shard_index(path);
+	file_cache_shard_t *shard = &file_cache_shards[shard_idx];
 
-	pthread_mutex_lock(&file_cache_lock);
+	pthread_mutex_lock(&shard->lock);
 	time_t now = time(NULL);
-	file_cache_refill_budget_locked(now);
-	file_cache_evict_stale_locked(now);
+	file_cache_refill_budget_locked(shard, now, shard_idx);
+	file_cache_evict_stale_locked(shard, now);
 
-	if (cache_insert_tokens <= 0) {
-		pthread_mutex_unlock(&file_cache_lock);
+	if (shard->cache_insert_tokens <= 0) {
+		shard->window_throttles++;
+		pthread_mutex_unlock(&shard->lock);
 		return;
 	}
 
-	if (!file_cache_admit_locked(path, now)) {
-		pthread_mutex_unlock(&file_cache_lock);
+	if (!file_cache_admit_locked(shard, path, now)) {
+		pthread_mutex_unlock(&shard->lock);
 		return;
 	}
 
@@ -225,33 +292,34 @@ file_cache_store(const char *path, const struct stat *st, const char *data,
 	time_t oldest = 0;
 
 	for (int i = 0; i < FILE_CACHE_SLOTS; i++) {
-		if (file_cache[i].path[0] == '\0') {
+		if (shard->entries[i].path[0] == '\0') {
 			slot = i;
 			break;
 		}
-		if (slot == -1 || file_cache[i].atime < oldest) {
-			oldest = file_cache[i].atime;
+		if (slot == -1 || shard->entries[i].atime < oldest) {
+			oldest = shard->entries[i].atime;
 			slot = i;
 		}
 	}
 
 	if (slot >= 0) {
-		cache_insert_tokens--;
-		free(file_cache[slot].data);
-		file_cache[slot].data = malloc(len);
-		if (file_cache[slot].data) {
-			memcpy(file_cache[slot].data, data, len);
-			strlcpy(file_cache[slot].path, path,
-					sizeof(file_cache[slot].path));
-			file_cache[slot].len = len;
-			file_cache[slot].mtime = st->st_mtime;
-			file_cache[slot].atime = now;
+		shard->cache_insert_tokens--;
+		free(shard->entries[slot].data);
+		shard->entries[slot].data = malloc(len);
+		if (shard->entries[slot].data) {
+			memcpy(shard->entries[slot].data, data, len);
+			strlcpy(shard->entries[slot].path, path,
+					sizeof(shard->entries[slot].path));
+			shard->entries[slot].len = len;
+			shard->entries[slot].mtime = st->st_mtime;
+			shard->entries[slot].atime = now;
+			shard->window_inserts++;
 		} else {
-			memset(&file_cache[slot], 0, sizeof(file_cache[slot]));
+			memset(&shard->entries[slot], 0, sizeof(shard->entries[slot]));
 		}
 	}
 
-	pthread_mutex_unlock(&file_cache_lock);
+	pthread_mutex_unlock(&shard->lock);
 }
 
 /**
@@ -271,28 +339,35 @@ file_cache_lookup(const char *path, const struct stat *st, char **out,
 	if (!path || !st || !out || !out_len || st->st_size <= 0 ||
 		(size_t)st->st_size > FILE_CACHE_MAX_BYTES)
 		return 0;
+	pthread_once(&cache_once, http_handler_globals_init);
+	int shard_idx = file_cache_shard_index(path);
+	file_cache_shard_t *shard = &file_cache_shards[shard_idx];
 
-	pthread_mutex_lock(&file_cache_lock);
+	pthread_mutex_lock(&shard->lock);
 	time_t now = time(NULL);
-	file_cache_refill_budget_locked(now);
-	file_cache_evict_stale_locked(now);
+	file_cache_refill_budget_locked(shard, now, shard_idx);
+	file_cache_evict_stale_locked(shard, now);
 
 	for (int i = 0; i < FILE_CACHE_SLOTS; i++) {
-		if (file_cache[i].path[0] == '\0')
+		if (shard->entries[i].path[0] == '\0')
 			continue;
-		if (strcmp(file_cache[i].path, path) == 0 &&
-			file_cache[i].mtime == st->st_mtime) {
-			*out = malloc(file_cache[i].len);
-		if (*out) {
-			memcpy(*out, file_cache[i].data, file_cache[i].len);
-			*out_len = file_cache[i].len;
-			file_cache[i].atime = now;
-			found = 1;
-		}
-		break;
+		if (strcmp(shard->entries[i].path, path) == 0 &&
+			shard->entries[i].mtime == st->st_mtime) {
+			*out = malloc(shard->entries[i].len);
+			if (*out) {
+				memcpy(*out, shard->entries[i].data,
+				       shard->entries[i].len);
+				*out_len = shard->entries[i].len;
+				shard->entries[i].atime = now;
+				shard->window_hits++;
+				found = 1;
 			}
+			break;
+		}
 	}
-	pthread_mutex_unlock(&file_cache_lock);
+	if (!found)
+		shard->window_misses++;
+	pthread_mutex_unlock(&shard->lock);
 
 	return found;
 }
@@ -305,16 +380,20 @@ file_cache_lookup(const char *path, const struct stat *st, char **out,
 http_response_t *
 http_response_create(void)
 {
-	pthread_mutex_lock(&response_pool.lock);
-	response_pool_init_locked();
+	pthread_once(&cache_once, http_handler_globals_init);
+	int shard_idx = response_pool_shard_index();
+	response_pool_t *pool = &response_pools[shard_idx];
+
+	pthread_mutex_lock(&pool->lock);
+	response_pool_init_locked(pool);
 
 	http_response_t *resp = NULL;
-	if (response_pool.free_top > 0) {
-		int idx = response_pool.free_stack[--response_pool.free_top];
-		resp = &response_pool.items[idx];
+	if (pool->free_top > 0) {
+		int idx = pool->free_stack[--pool->free_top];
+		resp = &pool->items[idx];
 		memset(resp, 0, sizeof(*resp));
 	}
-	pthread_mutex_unlock(&response_pool.lock);
+	pthread_mutex_unlock(&pool->lock);
 
 	if (!resp) {
 		resp = calloc(1, sizeof(*resp));
@@ -542,6 +621,7 @@ http_response_free(http_response_t *resp)
 {
 	if (!resp)
 		return;
+	pthread_once(&cache_once, http_handler_globals_init);
 
 	/* If free_body is 1, release the allocated body buffer (for example
 	 * from fread). */
@@ -549,14 +629,17 @@ http_response_free(http_response_t *resp)
 		free(resp->body);
 	}
 
-	ptrdiff_t idx = resp - response_pool.items;
-	if (idx >= 0 && idx < 1024) {
-		pthread_mutex_lock(&response_pool.lock);
-		memset(resp, 0, sizeof(*resp));
-		if (response_pool.free_top < 1024)
-			response_pool.free_stack[response_pool.free_top++] = (int)idx;
-		pthread_mutex_unlock(&response_pool.lock);
-		return;
+	for (int shard_idx = 0; shard_idx < RESPONSE_POOL_SHARDS; shard_idx++) {
+		response_pool_t *pool = &response_pools[shard_idx];
+		if (resp >= pool->items && resp < (pool->items + 1024)) {
+			ptrdiff_t idx = resp - pool->items;
+			pthread_mutex_lock(&pool->lock);
+			memset(resp, 0, sizeof(*resp));
+			if (pool->free_top < 1024)
+				pool->free_stack[pool->free_top++] = (int)idx;
+			pthread_mutex_unlock(&pool->lock);
+			return;
+		}
 	}
 
 	free(resp);
