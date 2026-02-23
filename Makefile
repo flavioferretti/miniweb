@@ -21,7 +21,9 @@ SRCS=      ${SRCDIR}/app_main.c \
            ${SRCDIR}/router/module_attach.c \
            ${SRCDIR}/storage/sqlite_db.c \
            ${SRCDIR}/storage/sqlite_stmt.c \
-           ${SRCDIR}/storage/sqlite_schema.c
+           ${SRCDIR}/storage/sqlite_schema.c \
+           ${SRCDIR}/core/conf.c \
+           ${SRCDIR}/core/log.c
 
 OBJS=      ${BUILDDIR}/app_main.o \
            ${BUILDDIR}/route_table.o \
@@ -38,7 +40,9 @@ OBJS=      ${BUILDDIR}/app_main.o \
            ${BUILDDIR}/module_attach.o \
            ${BUILDDIR}/sqlite_db.o \
            ${BUILDDIR}/sqlite_stmt.o \
-           ${BUILDDIR}/sqlite_schema.o
+           ${BUILDDIR}/sqlite_schema.o \
+           ${BUILDDIR}/conf.o \
+           ${BUILDDIR}/log.o
 
 CC?=       cc
 CFLAGS+=   -std=c99 -O2 -Wall -Wextra -pedantic
@@ -145,6 +149,14 @@ ${BUILDDIR}/sqlite_stmt.o: ${SRCDIR}/storage/sqlite_stmt.c
 ${BUILDDIR}/sqlite_schema.o: ${SRCDIR}/storage/sqlite_schema.c
 	@mkdir -p ${BUILDDIR}
 	${CC} ${CFLAGS} -c ${SRCDIR}/storage/sqlite_schema.c -o $@
+
+${BUILDDIR}/conf.o: ${SRCDIR}/core/conf.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/core/conf.c -o $@
+
+${BUILDDIR}/log.o: ${SRCDIR}/core/log.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/core/log.c -o $@
 
 unit-tests: ${BUILDDIR}/routes_test ${BUILDDIR}/template_test
 	./${BUILDDIR}/routes_test
