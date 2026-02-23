@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-#include "../../routes.h"
+#include "miniweb/router/routes.h"
 
 struct router {
 	int (*register_fn)(void *ctx, const char *method, const char *path,

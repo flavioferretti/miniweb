@@ -1,4 +1,4 @@
-#include "../../include/miniweb/storage/sqlite_schema.h"
+#include <miniweb/storage/sqlite_schema.h>
 
 /**
  * @brief Apply an ordered migration list to the database.

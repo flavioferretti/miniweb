@@ -16,7 +16,7 @@
 #include <strings.h>
 #include <ctype.h>
 
-#include "../../include/conf.h"
+#include <miniweb/core/conf.h>
 
 void
 conf_defaults(miniweb_conf_t *conf)

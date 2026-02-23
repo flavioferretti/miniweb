@@ -14,7 +14,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <ifaddrs.h>
-#include "../../../include/miniweb/router/router.h"
+#include <miniweb/router/router.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,12 +25,12 @@
 #include <time.h>
 
 /* Include del progetto */
-#include "../include/networking.h"
-#include "../include/template_engine.h"
-#include "../include/config.h"
-#include "../include/http_handler.h"
-#include "../include/log.h"
-#include "../include/heartbeat.h"
+#include <miniweb/modules/networking.h>
+#include <miniweb/render/template_engine.h>
+#include <miniweb/core/config.h>
+#include <miniweb/http/handler.h>
+#include <miniweb/core/log.h>
+#include <miniweb/core/heartbeat.h>
 
 #ifndef SA_SIZE
 #define SA_SIZE(sa)                                                   \

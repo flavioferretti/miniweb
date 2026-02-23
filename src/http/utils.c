@@ -3,7 +3,7 @@
  *
  * No libmicrohttpd dependency. */
 
-#include "http_utils.h"
+#include <miniweb/http/utils.h>
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>

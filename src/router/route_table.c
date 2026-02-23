@@ -8,10 +8,10 @@
 #include <sys/stat.h>
 #include <time.h>
 
-#include "../include/http_handler.h"
-#include "../include/config.h"
-#include "../include/routes.h"
-#include "../include/urls.h"
+#include <miniweb/http/handler.h>
+#include <miniweb/core/config.h>
+#include <miniweb/router/routes.h>
+#include <miniweb/router/urls.h>
 
 #define HOT_VIEW_CACHE_TTL_SEC 10
 #define HOT_VIEW_CACHE_MAX 5

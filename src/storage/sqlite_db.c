@@ -1,6 +1,6 @@
 #include <stdlib.h>
 
-#include "../../include/miniweb/storage/sqlite_db.h"
+#include <miniweb/storage/sqlite_db.h>
 
 /**
  * @brief Internal database handle used by the storage facade.

@@ -4,11 +4,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include "../../../include/miniweb/router/router.h"
+#include <miniweb/router/router.h>
 
-#include "../include/http_handler.h"
-#include "../include/http_utils.h"
-#include "../include/pkg_manager.h"
+#include <miniweb/http/handler.h>
+#include <miniweb/http/utils.h>
+#include <miniweb/modules/pkg_manager.h>
 
 #define PKG_JSON_MAX (1024 * 1024)
 #define PKG_CMD_MAX_OUTPUT  (8 * 1024 * 1024)

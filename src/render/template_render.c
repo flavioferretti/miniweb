@@ -9,8 +9,8 @@
 #include <sys/stat.h>
 #include <time.h>
 
-#include "../include/template_engine.h"
-#include "../include/config.h"
+#include <miniweb/render/template_engine.h>
+#include <miniweb/core/config.h>
 
 /**
  * @brief Internal data structure.

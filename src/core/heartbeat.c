@@ -3,7 +3,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "../../include/heartbeat.h"
+#include <miniweb/core/heartbeat.h>
 
 #define HB_MAX_TASKS 32
 
