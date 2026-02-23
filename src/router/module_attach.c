@@ -1,3 +1,4 @@
+/* module_attach.c - module attach facility */
 #include <miniweb/router/module_attach.h>
 
 /**

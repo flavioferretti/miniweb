@@ -1,3 +1,4 @@
+/* heartbeat.c - unique heartbeat logic */
 #include <pthread.h>
 #include <string.h>
 #include <time.h>

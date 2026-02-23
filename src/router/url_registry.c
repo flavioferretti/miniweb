@@ -1,4 +1,4 @@
-/* urls.c - URL routing table */
+/* url_registry.c - URL routing table */
 
 #include <stdio.h>
 #include <string.h>
@@ -7,8 +7,8 @@
 #include <miniweb/modules/metrics.h>
 #include <miniweb/modules/networking.h>
 #include <miniweb/modules/pkg_manager.h>
-#include <miniweb/router/routes.h>
 #include <miniweb/router/module_attach.h>
+#include <miniweb/router/routes.h>
 #include <miniweb/router/urls.h>
 
 static struct route routes[MAX_ROUTES];
@@ -19,21 +19,21 @@ static struct prefix_route prefix_routes[MAX_PREFIX_ROUTES];
 static size_t prefix_route_count = 0;
 
 static const struct view_route view_routes[] = {
-	{"GET", "/", "MiniWeb - Dashboard", "dashboard.html",
-	 "dashboard_extra_head.html", "dashboard_extra_js.html"},
-	{"GET", "/docs", "MiniWeb - Documentation", "docs.html",
-	 "docs_extra_head.html", "docs_extra_js.html"},
-	{"GET", "/apiroot", "MiniWeb - API Root", "api.html",
-	 "api_extra_head.html", "api_extra_js.html"},
-	{"GET", "/networking", "MiniWeb - Networking", "networking.html",
-	 "networking_extra_head.html", "networking_extra_js.html"},
-	{"GET", "/packages", "MiniWeb - Package Manager", "packages.html",
-	 "packages_extra_head.html", "packages_extra_js.html"},
+    {"GET", "/", "MiniWeb - Dashboard", "dashboard.html",
+     "dashboard_extra_head.html", "dashboard_extra_js.html"},
+    {"GET", "/docs", "MiniWeb - Documentation", "docs.html",
+     "docs_extra_head.html", "docs_extra_js.html"},
+    {"GET", "/apiroot", "MiniWeb - API Root", "api.html", "api_extra_head.html",
+     "api_extra_js.html"},
+    {"GET", "/networking", "MiniWeb - Networking", "networking.html",
+     "networking_extra_head.html", "networking_extra_js.html"},
+    {"GET", "/packages", "MiniWeb - Package Manager", "packages.html",
+     "packages_extra_head.html", "packages_extra_js.html"},
 };
 
 static int
 url_registry_register(void *ctx, const char *method, const char *path,
-	route_handler_t handler)
+		      route_handler_t handler)
 {
 	(void)ctx;
 	register_route(method, path, handler);
@@ -41,8 +41,8 @@ url_registry_register(void *ctx, const char *method, const char *path,
 }
 
 static int
-url_registry_register_prefix(void *ctx, const char *method,
-	const char *prefix, int min_slashes, route_handler_t handler)
+url_registry_register_prefix(void *ctx, const char *method, const char *prefix,
+			     int min_slashes, route_handler_t handler)
 {
 	(void)ctx;
 	register_prefix_route(method, prefix, min_slashes, handler);
@@ -52,15 +52,17 @@ url_registry_register_prefix(void *ctx, const char *method,
 int
 views_module_attach_routes(struct router *r)
 {
-	for (size_t i = 0; i < sizeof(view_routes) / sizeof(view_routes[0]); i++) {
+	for (size_t i = 0; i < sizeof(view_routes) / sizeof(view_routes[0]);
+	     i++) {
 		if (router_register(r, view_routes[i].method,
-		    view_routes[i].path, view_template_handler) != 0)
+				    view_routes[i].path,
+				    view_template_handler) != 0)
 			return -1;
 	}
 	if (router_register(r, "GET", "/favicon.ico", favicon_handler) != 0)
 		return -1;
-	if (router_register_prefix(r, "GET", "/static/", 0,
-	    static_handler) != 0)
+	if (router_register_prefix(r, "GET", "/static/", 0, static_handler) !=
+	    0)
 		return -1;
 	return 0;
 }
@@ -77,8 +79,8 @@ register_route(const char *method, const char *path, route_handler_t handler)
 }
 
 void
-register_prefix_route(const char *method, const char *prefix,
-	int min_slashes, route_handler_t handler)
+register_prefix_route(const char *method, const char *prefix, int min_slashes,
+		      route_handler_t handler)
 {
 	if (prefix_route_count >= MAX_PREFIX_ROUTES)
 		return;
@@ -93,9 +95,10 @@ register_prefix_route(const char *method, const char *prefix,
 const struct view_route *
 find_view_route(const char *method, const char *path)
 {
-	for (size_t i = 0; i < sizeof(view_routes) / sizeof(view_routes[0]); i++) {
+	for (size_t i = 0; i < sizeof(view_routes) / sizeof(view_routes[0]);
+	     i++) {
 		if (strcmp(view_routes[i].method, method) == 0 &&
-			strcmp(view_routes[i].path, path) == 0)
+		    strcmp(view_routes[i].path, path) == 0)
 			return &view_routes[i];
 	}
 
@@ -106,43 +109,43 @@ void
 init_routes(void)
 {
 	struct router r = {
-		.register_fn = url_registry_register,
-		.register_prefix_fn = url_registry_register_prefix,
-		.ctx = NULL,
+	    .register_fn = url_registry_register,
+	    .register_prefix_fn = url_registry_register_prefix,
+	    .ctx = NULL,
 	};
 	struct miniweb_module modules[] = {
-		{
-			.name = "views",
-			.attach_routes = views_module_attach_routes,
-			.enabled_by_default = 1,
-		},
-		{
-			.name = "metrics",
-			.attach_routes = metrics_module_attach_routes,
-			.enabled_by_default = 1,
-		},
-		{
-			.name = "networking",
-			.attach_routes = networking_module_attach_routes,
-			.enabled_by_default = 1,
-		},
-		{
-			.name = "man",
-			.attach_routes = man_module_attach_routes,
-			.enabled_by_default = 1,
-		},
-		{
-			.name = "packages",
-			.attach_routes = packages_module_attach_routes,
-			.enabled_by_default = 1,
-		},
+	    {
+		.name = "views",
+		.attach_routes = views_module_attach_routes,
+		.enabled_by_default = 1,
+	    },
+	    {
+		.name = "metrics",
+		.attach_routes = metrics_module_attach_routes,
+		.enabled_by_default = 1,
+	    },
+	    {
+		.name = "networking",
+		.attach_routes = networking_module_attach_routes,
+		.enabled_by_default = 1,
+	    },
+	    {
+		.name = "man",
+		.attach_routes = man_module_attach_routes,
+		.enabled_by_default = 1,
+	    },
+	    {
+		.name = "packages",
+		.attach_routes = packages_module_attach_routes,
+		.enabled_by_default = 1,
+	    },
 	};
 
 	route_count = 0;
 	prefix_route_count = 0;
 
-	(void)miniweb_module_attach_enabled(&r, modules,
-	    sizeof(modules) / sizeof(modules[0]), NULL);
+	(void)miniweb_module_attach_enabled(
+	    &r, modules, sizeof(modules) / sizeof(modules[0]), NULL);
 }
 
 route_handler_t
@@ -202,8 +205,8 @@ route_allow_methods(const char *path, char *buf, size_t buf_len)
 		if (seen)
 			continue;
 
-		int wrote = snprintf(buf + used, buf_len - used,
-		    "%s%s", count > 0 ? ", " : "", routes[i].method);
+		int wrote = snprintf(buf + used, buf_len - used, "%s%s",
+				     count > 0 ? ", " : "", routes[i].method);
 		if (wrote < 0 || (size_t)wrote >= buf_len - used)
 			return count;
 
@@ -213,10 +216,11 @@ route_allow_methods(const char *path, char *buf, size_t buf_len)
 
 	for (size_t i = 0; i < prefix_route_count; i++) {
 		if (strncmp(path, prefix_routes[i].prefix,
-		    strlen(prefix_routes[i].prefix)) != 0)
+			    strlen(prefix_routes[i].prefix)) != 0)
 			continue;
 		if (count == 0 && buf_len > 3)
-			(void)snprintf(buf, buf_len, "%s", prefix_routes[i].method);
+			(void)snprintf(buf, buf_len, "%s",
+				       prefix_routes[i].method);
 		if (count == 0)
 			count = 1;
 		break;
@@ -238,7 +242,7 @@ route_path_known(const char *path)
 
 	for (size_t i = 0; i < prefix_route_count; i++) {
 		if (strncmp(path, prefix_routes[i].prefix,
-		    strlen(prefix_routes[i].prefix)) != 0)
+			    strlen(prefix_routes[i].prefix)) != 0)
 			continue;
 		if (prefix_routes[i].min_slashes <= 0)
 			return 1;

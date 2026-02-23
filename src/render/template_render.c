@@ -1,16 +1,16 @@
-/* template_engine.c - Template Engine Implementation */
+/* template_render.c - Template Engine Implementation */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <dirent.h>
 #include <limits.h>
 #include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <time.h>
 
-#include <miniweb/render/template_engine.h>
 #include <miniweb/core/config.h>
+#include <miniweb/render/template_engine.h>
 
 /**
  * @brief Internal data structure.
@@ -127,8 +127,8 @@ add_template_to_cache(const char *filename, const char *path, time_t mtime)
 	if (read_file_content(path, &content) != 0)
 		return -1;
 
-	new_cache = realloc(template_cache,
-				   sizeof(*template_cache) * (template_cache_count + 1));
+	new_cache = realloc(template_cache, sizeof(*template_cache) *
+						(template_cache_count + 1));
 	if (!new_cache) {
 		free(content);
 		return -1;
@@ -187,7 +187,8 @@ template_cache_reload_locked(void)
 		if (!S_ISREG(st.st_mode))
 			continue;
 
-		if (add_template_to_cache(entry->d_name, path, st.st_mtime) != 0) {
+		if (add_template_to_cache(entry->d_name, path, st.st_mtime) !=
+		    0) {
 			closedir(dir);
 			template_cache_cleanup_locked();
 			return -1;
@@ -255,7 +256,7 @@ out:
 
 /* Forward declaration for the single placeholder replacement logic */
 static char *replace_single(const char *str, const char *needle,
-							const char *value);
+			    const char *value);
 
 /**
  * @brief Replace all supported placeholders in the base template string.
@@ -268,8 +269,8 @@ static char *replace_single(const char *str, const char *needle,
  */
 static char *
 replace_all(const char *template_str, const char *title,
-			const char *page_content, const char *extra_head,
-			const char *extra_js)
+	    const char *page_content, const char *extra_head,
+	    const char *extra_js)
 {
 	char *result = NULL;
 	char *temp1 = NULL, *temp2 = NULL, *temp3 = NULL;
@@ -290,7 +291,7 @@ replace_all(const char *template_str, const char *title,
 
 	/* Replace {{page_content}} tag */
 	temp2 = replace_single(result, "{{page_content}}",
-						   page_content ? page_content : "");
+			       page_content ? page_content : "");
 	if (!temp2) {
 		free(result);
 		return NULL;
@@ -300,7 +301,7 @@ replace_all(const char *template_str, const char *title,
 
 	/* Replace {{extra_head}} tag */
 	temp3 = replace_single(result, "{{extra_head}}",
-						   extra_head ? extra_head : "");
+			       extra_head ? extra_head : "");
 	if (!temp3) {
 		free(result);
 		return NULL;
@@ -310,7 +311,7 @@ replace_all(const char *template_str, const char *title,
 
 	/* Replace {{extra_js}} tag */
 	temp1 =
-	replace_single(result, "{{extra_js}}", extra_js ? extra_js : "");
+	    replace_single(result, "{{extra_js}}", extra_js ? extra_js : "");
 	if (!temp1) {
 		free(result);
 		return NULL;
@@ -350,7 +351,7 @@ replace_single(const char *str, const char *needle, const char *value)
 	memcpy(result, str, before_len);
 	memcpy(result + before_len, value, value_len);
 	memcpy(result + before_len + value_len, pos + needle_len,
-	   after_len + 1);
+	       after_len + 1);
 
 	return result;
 }
@@ -389,7 +390,7 @@ template_render_with_data(struct template_data *data, char **output)
 	/* Load optional header file if specified in template_data */
 	if (data->extra_head_file) {
 		if (read_template_file(data->extra_head_file, &extra_head) !=
-			0) {
+		    0) {
 			/* Fail silently if file is missing, keeping it empty */
 			extra_head = NULL;
 		}
@@ -404,7 +405,7 @@ template_render_with_data(struct template_data *data, char **output)
 
 	/* Execute placeholder replacements */
 	result =
-	replace_all(base_template, data->title, page_content,
+	    replace_all(base_template, data->title, page_content,
 			extra_head ? extra_head : "", extra_js ? extra_js : "");
 	if (!result) {
 		goto cleanup;
@@ -440,9 +441,9 @@ int
 template_render(const char *page, char **output)
 {
 	struct template_data data = {.title = "MiniWeb",
-		.page_content = page,
-		.extra_head_file = NULL,
-		.extra_js_file = NULL};
+				     .page_content = page,
+				     .extra_head_file = NULL,
+				     .extra_js_file = NULL};
 
 	return template_render_with_data(&data, output);
 }

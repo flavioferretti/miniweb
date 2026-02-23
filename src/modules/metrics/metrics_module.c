@@ -1,4 +1,4 @@
-/* metrics.c - System metrics collection (Native kqueue version) */
+/* metrics_module.c - System metrics collection (Native kqueue version) */
 
 #include <sys/types.h>
 #include <sys/param.h>

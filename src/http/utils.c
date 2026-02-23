@@ -1,4 +1,4 @@
-/* http_utils.c - Utility functions: JSON escaping, string sanitization,
+/* utils.c - Utility functions: JSON escaping, string sanitization,
  *                subprocess execution.
  *
  * No libmicrohttpd dependency. */

@@ -1,3 +1,4 @@
+/* sqlite_db.c - DB facility */
 #include <stdlib.h>
 
 #include <miniweb/storage/sqlite_db.h>

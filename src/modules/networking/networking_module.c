@@ -1,5 +1,5 @@
 /*
- * networking.c - Network information collection for OpenBSD
+ * networking_module.c - Network information collection for OpenBSD
  *
  * Collects routing tables, DNS config, and interface statistics
  * WITHOUT requiring root privileges (no pfctl)

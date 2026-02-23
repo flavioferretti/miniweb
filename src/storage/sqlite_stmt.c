@@ -1,3 +1,4 @@
+/* sqlite_stmt.c - statement prepare facility */
 #include <miniweb/storage/sqlite_stmt.h>
 
 /**
@@ -73,7 +74,8 @@ mw_bind_null(struct mw_stmt *stmt, int idx)
 /**
  * @brief Execute one step on a prepared statement.
  * @param stmt Prepared statement handle.
- * @return 0 when a row/result is available, positive on completion, -1 on error.
+ * @return 0 when a row/result is available, positive on completion, -1 on
+ * error.
  */
 int
 mw_stmt_step(struct mw_stmt *stmt)

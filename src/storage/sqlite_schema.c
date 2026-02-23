@@ -1,3 +1,4 @@
+/* sql_schema.c - miniweb model */
 #include <miniweb/storage/sqlite_schema.h>
 
 /**

@@ -1,4 +1,4 @@
-/* main.c - kqueue-based HTTP server for OpenBSD
+/* app_main.c - kqueue-based HTTP server for OpenBSD
  *
  * Architecture: single-threaded dispatcher (kqueue) + worker thread pool.
  *
@@ -14,74 +14,77 @@
  *   - Idle timeout swept by the main thread (no worker needed for it).
  */
 
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/event.h>
-#include <netinet/in.h>
 #include <arpa/inet.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <netinet/in.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <errno.h>
+#include <sys/event.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 #include <time.h>
+#include <unistd.h>
 
 #include <miniweb/core/conf.h>
 #include <miniweb/core/config.h>
+#include <miniweb/core/log.h>
 #include <miniweb/http/handler.h>
 #include <miniweb/http/utils.h>
 #include <miniweb/render/template_engine.h>
 #include <miniweb/router/routes.h>
 #include <miniweb/router/urls.h>
-#include <miniweb/core/log.h>
 
-/* -- Compile-time hard limits (not overridable at runtime) ------------------ */
-#define MAX_EVENTS          256
-#define MAX_CONNECTIONS     4096
-#define THREAD_POOL_SIZE    32
+/* -- Compile-time hard limits (not overridable at runtime) ------------------
+ */
+#define MAX_EVENTS 256
+#define MAX_CONNECTIONS 4096
+#define THREAD_POOL_SIZE 32
 #define REQUEST_BUFFER_SIZE 16384
-#define LISTEN_BACKLOG      1024
-#define QUEUE_CAPACITY      4096
+#define LISTEN_BACKLOG 1024
+#define QUEUE_CAPACITY 4096
 #define MAX_KEEPALIVE_REQUESTS 64
 
-/* -- Active configuration (populated in main before any thread starts) ------ */
+/* -- Active configuration (populated in main before any thread starts) ------
+ */
 static miniweb_conf_t config;
 
-int config_verbose = 0;   /* consulted by other translation units */
+int config_verbose = 0; /* consulted by other translation units */
 char config_static_dir[CONF_STR_MAX] = "static";
 char config_templates_dir[CONF_STR_MAX] = "templates";
 
 static volatile sig_atomic_t running = 1;
-static int kq_fd     = -1;
+static int kq_fd = -1;
 static int listen_fd = -1;
-static int spare_fd  = -1;
+static int spare_fd = -1;
 
-/* -- Connection pool -------------------------------------------------------- */
+/* -- Connection pool --------------------------------------------------------
+ */
 /**
  * @brief Internal data structure.
  */
 typedef struct connection {
-	int              fd;
+	int fd;
 	struct sockaddr_in addr;
-	char             buffer[REQUEST_BUFFER_SIZE];
-	size_t           bytes_read;
-	time_t           created;
-	time_t           last_activity;
-	int              requests_served;
-	unsigned int     gen;     /* matches conn_gen[fd] at alloc time */
+	char buffer[REQUEST_BUFFER_SIZE];
+	size_t bytes_read;
+	time_t created;
+	time_t last_activity;
+	int requests_served;
+	unsigned int gen; /* matches conn_gen[fd] at alloc time */
 } connection_t;
 
-static connection_t  *connections[MAX_CONNECTIONS];
-static unsigned int   conn_gen[MAX_CONNECTIONS];
+static connection_t *connections[MAX_CONNECTIONS];
+static unsigned int conn_gen[MAX_CONNECTIONS];
 static pthread_mutex_t conn_mutex = PTHREAD_MUTEX_INITIALIZER;
-static int            active_connections = 0;
-static connection_t   connection_pool[MAX_CONNECTIONS];
-static int            connection_free_stack[MAX_CONNECTIONS];
-static int            connection_free_top = 0;
+static int active_connections = 0;
+static connection_t connection_pool[MAX_CONNECTIONS];
+static int connection_free_stack[MAX_CONNECTIONS];
+static int connection_free_top = 0;
 
 /**
  * @brief Init connection pool.
@@ -95,17 +98,18 @@ init_connection_pool(void)
 	}
 }
 
-/* -- Work queue ------------------------------------------------------------- */
+/* -- Work queue -------------------------------------------------------------
+ */
 /**
  * @brief Internal data structure.
  */
 typedef struct {
 	connection_t *items[QUEUE_CAPACITY];
-	int           head;
-	int           tail;
-	int           count;
+	int head;
+	int tail;
+	int count;
 	pthread_mutex_t lock;
-	pthread_cond_t  not_empty;
+	pthread_cond_t not_empty;
 } work_queue_t;
 
 static work_queue_t wq;
@@ -128,7 +132,8 @@ queue_init(work_queue_t *q)
  * @brief Queue push.
  * @param q Work queue instance.
  * @param conn Connection object.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 static int
 queue_push(work_queue_t *q, connection_t *conn)
@@ -151,7 +156,8 @@ queue_push(work_queue_t *q, connection_t *conn)
 /**
  * @brief Queue pop.
  * @param q Work queue instance.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 static connection_t *
 queue_pop(work_queue_t *q)
@@ -160,7 +166,7 @@ queue_pop(work_queue_t *q)
 	while (q->count == 0 && running) {
 		pthread_cond_wait(&q->not_empty, &q->lock);
 	}
-	if (q->count == 0) {          /* running == 0 and queue empty */
+	if (q->count == 0) { /* running == 0 and queue empty */
 		pthread_mutex_unlock(&q->lock);
 		return NULL;
 	}
@@ -184,12 +190,14 @@ queue_broadcast_shutdown(work_queue_t *q)
 	pthread_mutex_unlock(&q->lock);
 }
 
-/* -- Connection pool helpers ------------------------------------------------ */
+/* -- Connection pool helpers ------------------------------------------------
+ */
 /**
  * @brief Alloc connection.
  * @param fd File descriptor to operate on.
  * @param addr Socket address metadata.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 static connection_t *
 alloc_connection(int fd, struct sockaddr_in *addr)
@@ -199,8 +207,7 @@ alloc_connection(int fd, struct sockaddr_in *addr)
 
 	pthread_mutex_lock(&conn_mutex);
 
-	if (active_connections >= config.max_conns ||
-		connections[fd] != NULL) {
+	if (active_connections >= config.max_conns || connections[fd] != NULL) {
 		pthread_mutex_unlock(&conn_mutex);
 		return NULL;
 	}
@@ -214,10 +221,10 @@ alloc_connection(int fd, struct sockaddr_in *addr)
 	connection_t *conn = &connection_pool[slot_idx];
 	memset(conn, 0, sizeof(*conn));
 
-	conn->fd      = fd;
+	conn->fd = fd;
 	conn->created = time(NULL);
 	conn->last_activity = conn->created;
-	conn->gen     = conn_gen[fd];
+	conn->gen = conn_gen[fd];
 	if (addr)
 		memcpy(&conn->addr, addr, sizeof(struct sockaddr_in));
 
@@ -245,7 +252,8 @@ free_connection(int fd)
 		if (pool_idx >= 0 && pool_idx < MAX_CONNECTIONS) {
 			memset(conn, 0, sizeof(*conn));
 			if (connection_free_top < MAX_CONNECTIONS)
-				connection_free_stack[connection_free_top++] = pool_idx;
+				connection_free_stack[connection_free_top++] =
+				    pool_idx;
 		}
 		connections[fd] = NULL;
 		conn_gen[fd]++;
@@ -255,7 +263,8 @@ free_connection(int fd)
 	pthread_mutex_unlock(&conn_mutex);
 }
 
-/* -- Helpers ---------------------------------------------------------------- */
+/* -- Helpers ----------------------------------------------------------------
+ */
 /**
  * @brief Set nonblock.
  * @param fd File descriptor to operate on.
@@ -264,7 +273,8 @@ static void
 set_nonblock(int fd)
 {
 	int flags = fcntl(fd, F_GETFL, 0);
-	if (flags == -1) flags = 0;
+	if (flags == -1)
+		flags = 0;
 	fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
@@ -274,7 +284,8 @@ set_nonblock(int fd)
  * @param method HTTP method string.
  * @param url Request URL path.
  * @param version HTTP protocol version string.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 static int
 parse_request_line(const char *buf, char *method, char *url, char *version)
@@ -311,7 +322,8 @@ parse_request_line(const char *buf, char *method, char *url, char *version)
 /**
  * @brief Find header end.
  * @param buf Input buffer containing textual data.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 static const char *
 find_header_end(const char *buf)
@@ -323,7 +335,8 @@ find_header_end(const char *buf)
  * @brief Request keep alive.
  * @param buf Input buffer containing textual data.
  * @param version HTTP protocol version string.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 static int
 request_keep_alive(const char *buf, const char *version)
@@ -364,16 +377,15 @@ static void
 send_error_response(int fd, int code, const char *msg)
 {
 	http_request_t req = {
-		.fd = fd,
-		.method = "GET",
-		.url = "/",
-		.version = "HTTP/1.1",
-		.keep_alive = 0,
+	    .fd = fd,
+	    .method = "GET",
+	    .url = "/",
+	    .version = "HTTP/1.1",
+	    .keep_alive = 0,
 	};
 
 	(void)http_send_error(&req, code, msg);
 }
-
 
 /**
  * @brief close_connection.
@@ -395,7 +407,8 @@ close_connection(int fd)
 /**
  * @brief Try rearm keepalive.
  * @param conn Connection object.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 static int
 try_rearm_keepalive(connection_t *conn)
@@ -415,7 +428,8 @@ try_rearm_keepalive(connection_t *conn)
 	return kevent(kq_fd, &ev, 1, NULL, 0, NULL) == 0;
 }
 
-/* -- Worker thread ---------------------------------------------------------- */
+/* -- Worker thread ----------------------------------------------------------
+ */
 /**
  * @brief Process queued connections on a worker thread.
  * @param arg Unused worker argument placeholder.
@@ -427,39 +441,42 @@ try_rearm_keepalive(connection_t *conn)
 static void *
 worker_thread(void *arg)
 {
-	(void)arg;   /* workers are identical; id not needed */
+	(void)arg; /* workers are identical; id not needed */
 
 	while (running) {
 		connection_t *conn = queue_pop(&wq);
 		if (!conn) {
-			break;   /* shutdown signal */
+			break; /* shutdown signal */
 		}
 
 		int fd = conn->fd;
 		int close_conn = 1;
 
-		/* -- Read loop: accumulate until we have a full HTTP request ---- */
+		/* -- Read loop: accumulate until we have a full HTTP request
+		 * ---- */
 		int request_done = 0;
 		while (!request_done) {
-			ssize_t n = recv(fd,
-							 conn->buffer + conn->bytes_read,
-					(size_t)config.max_req_size - conn->bytes_read - 1,
-							 0);
+			ssize_t n = recv(fd, conn->buffer + conn->bytes_read,
+					 (size_t)config.max_req_size -
+					     conn->bytes_read - 1,
+					 0);
 			if (n < 0) {
 				if (errno == EAGAIN || errno == EWOULDBLOCK) {
-					/* No data yet — re-arm the kqueue event and bail.
-					 * EV_ENABLE re-enables the EVFILT_READ (was auto-
-					 * disabled by EV_DISPATCH on first delivery). */
+					/* No data yet — re-arm the kqueue event
+					 * and bail. EV_ENABLE re-enables the
+					 * EVFILT_READ (was auto- disabled by
+					 * EV_DISPATCH on first delivery). */
 					struct kevent ev;
-					EV_SET(&ev, fd, EVFILT_READ, EV_ENABLE, 0, 0, conn);
+					EV_SET(&ev, fd, EVFILT_READ, EV_ENABLE,
+					       0, 0, conn);
 					kevent(kq_fd, &ev, 1, NULL, 0, NULL);
-					goto next_conn;   /* do NOT close */
+					goto next_conn; /* do NOT close */
 				}
 				/* Real error → fall through to close */
 				break;
 			}
 			if (n == 0) {
-				break;   /* peer closed */
+				break; /* peer closed */
 			}
 
 			conn->bytes_read += (size_t)n;
@@ -468,68 +485,81 @@ worker_thread(void *arg)
 
 			if (find_header_end(conn->buffer)) {
 				request_done = 1;
-			} else if (conn->bytes_read >= (size_t)config.max_req_size - 1) {
+			} else if (conn->bytes_read >=
+				   (size_t)config.max_req_size - 1) {
 				/* Request too large */
-				send_error_response(fd, 400, "Request Too Large");
+				send_error_response(fd, 400,
+						    "Request Too Large");
 				break;
 			} else {
-				/* Partial read: try again (socket is non-blocking, so if
-				 * there's nothing available recv() returns EAGAIN above) */
+				/* Partial read: try again (socket is
+				 * non-blocking, so if there's nothing available
+				 * recv() returns EAGAIN above) */
 				continue;
 			}
 		}
 
 		if (request_done) {
-			char method[32]  = {0};
-			char path[512]   = {0};
+			char method[32] = {0};
+			char path[512] = {0};
 			char version[32] = {0};
 
-			if (parse_request_line(conn->buffer,
-				method, path, version) == 0) {
-				int keep_alive = request_keep_alive(conn->buffer, version);
+			if (parse_request_line(conn->buffer, method, path,
+					       version) == 0) {
+				int keep_alive =
+				    request_keep_alive(conn->buffer, version);
 				int path_known = route_path_known(path);
 
-				/* We must advertise "Connection: close" on the final request
-				 * we are willing to serve on this socket, otherwise clients can
-				 * wait a long time before retrying follow-up static assets. */
-				if (conn->requests_served >= MAX_KEEPALIVE_REQUESTS)
+				/* We must advertise "Connection: close" on the
+				 * final request we are willing to serve on this
+				 * socket, otherwise clients can wait a long
+				 * time before retrying follow-up static assets.
+				 */
+				if (conn->requests_served >=
+				    MAX_KEEPALIVE_REQUESTS)
 					keep_alive = 0;
-				http_handler_t handler = route_match(method, path);
+				http_handler_t handler =
+				    route_match(method, path);
 				if (handler) {
 					http_request_t req = {
-						.fd          = fd,
-						.method      = method,
-						.url         = path,
-						.version     = version,
-						.keep_alive  = keep_alive,
-						.buffer      = conn->buffer,
-						.buffer_len  = conn->bytes_read,
-						.client_addr = &conn->addr,
+					    .fd = fd,
+					    .method = method,
+					    .url = path,
+					    .version = version,
+					    .keep_alive = keep_alive,
+					    .buffer = conn->buffer,
+					    .buffer_len = conn->bytes_read,
+					    .client_addr = &conn->addr,
 					};
 					handler(&req);
 					keep_alive = req.keep_alive;
-					if (keep_alive && try_rearm_keepalive(conn))
+					if (keep_alive &&
+					    try_rearm_keepalive(conn))
 						close_conn = 0;
 				} else {
 					http_request_t req = {
-						.fd          = fd,
-						.method      = method,
-						.url         = path,
-						.version     = version,
-						.keep_alive  = keep_alive,
-						.buffer      = conn->buffer,
-						.buffer_len  = conn->bytes_read,
-						.client_addr = &conn->addr,
+					    .fd = fd,
+					    .method = method,
+					    .url = path,
+					    .version = version,
+					    .keep_alive = keep_alive,
+					    .buffer = conn->buffer,
+					    .buffer_len = conn->bytes_read,
+					    .client_addr = &conn->addr,
 					};
 					if (path_known)
-						http_send_error(&req, 405, "Method Not Allowed");
+						http_send_error(
+						    &req, 405,
+						    "Method Not Allowed");
 					else
-						http_send_error(&req, 404, "Not Found");
-					if (req.keep_alive && try_rearm_keepalive(conn))
+						http_send_error(&req, 404,
+								"Not Found");
+					if (req.keep_alive &&
+					    try_rearm_keepalive(conn))
 						close_conn = 0;
 				}
 			} else {
-					send_error_response(fd, 400, "Bad Request");
+				send_error_response(fd, 400, "Bad Request");
 			}
 		}
 
@@ -537,36 +567,38 @@ worker_thread(void *arg)
 			close_connection(fd);
 		}
 
-		next_conn:;
+	next_conn:;
 	}
 
 	return NULL;
 }
 
-/* -- Accept helper (called from main loop) ---------------------------------- */
+/* -- Accept helper (called from main loop) ----------------------------------
+ */
 /**
  * @brief Handle accept.
  */
 static void
 handle_accept(void)
 {
-	for (;;) {   /* drain all pending connections in one go */
+	for (;;) { /* drain all pending connections in one go */
 		struct sockaddr_in caddr;
-		socklen_t          clen = sizeof(caddr);
+		socklen_t clen = sizeof(caddr);
 
-		int cfd = accept(listen_fd,
-						 (struct sockaddr *)&caddr, &clen);
+		int cfd = accept(listen_fd, (struct sockaddr *)&caddr, &clen);
 		if (cfd < 0) {
 			if (errno == EAGAIN || errno == EWOULDBLOCK) {
-				return;   /* no more pending connections */
+				return; /* no more pending connections */
 			}
 			if (errno == EINTR)
 				continue;
 			if (errno == EMFILE || errno == ENFILE) {
-				/* Process/system fd table full: temporarily free one fd so we can
-				 * accept and immediately close one pending client. This prevents
-				 * the listen socket from staying permanently readable and spinning
-				 * the event loop under sustained connection fan-in. */
+				/* Process/system fd table full: temporarily
+				 * free one fd so we can accept and immediately
+				 * close one pending client. This prevents the
+				 * listen socket from staying permanently
+				 * readable and spinning the event loop under
+				 * sustained connection fan-in. */
 				if (spare_fd >= 0) {
 					close(spare_fd);
 					spare_fd = -1;
@@ -577,7 +609,9 @@ handle_accept(void)
 					close(drop_fd);
 
 				spare_fd = open("/dev/null", O_RDONLY);
-				log_debug("fd limit reached (errno=%d), shedding one pending connection", errno);
+				log_debug("fd limit reached (errno=%d), "
+					  "shedding one pending connection",
+					  errno);
 				return;
 			}
 			log_errno("accept");
@@ -590,7 +624,8 @@ handle_accept(void)
 		if (!conn) {
 			send_error_response(cfd, 503, "Server busy");
 			close(cfd);
-			log_debug("Connection limit reached, rejected fd=%d", cfd);
+			log_debug("Connection limit reached, rejected fd=%d",
+				  cfd);
 			continue;
 		}
 
@@ -606,12 +641,14 @@ handle_accept(void)
 		if (config.verbose) {
 			char ip[INET_ADDRSTRLEN];
 			inet_ntop(AF_INET, &caddr.sin_addr, ip, sizeof(ip));
-			log_debug("New connection: fd=%d from %s (active: %d)", cfd, ip, active_connections);
+			log_debug("New connection: fd=%d from %s (active: %d)",
+				  cfd, ip, active_connections);
 		}
 	}
 }
 
-/* -- Idle timeout sweep ----------------------------------------------------- */
+/* -- Idle timeout sweep -----------------------------------------------------
+ */
 /**
  * @brief Sweep idle connections.
  */
@@ -626,7 +663,7 @@ sweep_idle_connections(void)
 	for (int i = 0; i < MAX_CONNECTIONS; i++) {
 		connection_t *c = connections[i];
 		if (c && (now - c->last_activity) > config.conn_timeout &&
-			timed_out_count < MAX_CONNECTIONS) {
+		    timed_out_count < MAX_CONNECTIONS) {
 			timed_out_fds[timed_out_count++] = c->fd;
 		}
 	}
@@ -637,7 +674,8 @@ sweep_idle_connections(void)
 	}
 }
 
-/* -- Signal handler --------------------------------------------------------- */
+/* -- Signal handler ---------------------------------------------------------
+ */
 /**
  * @brief Handle signal.
  * @param sig Signal number delivered by the OS.
@@ -649,7 +687,8 @@ handle_signal(int sig)
 	running = 0;
 }
 
-/* -- CLI -------------------------------------------------------------------- */
+/* -- CLI --------------------------------------------------------------------
+ */
 /**
  * @brief Usage.
  * @param prog Program name used in usage text.
@@ -658,19 +697,17 @@ static void
 usage(const char *prog)
 {
 	fprintf(stderr,
-			"Usage: %s [options]\n"
-			"  -f FILE   Config file (default: auto-detect)\n"
-			"  -p PORT   Port (default %d)\n"
-			"  -b ADDR   Bind address (default %s)\n"
-			"  -t NUM    Worker threads (default %d, max %d)\n"
-			"  -c NUM    Max connections (default %d)\n"
-			"  -l FILE   Log file path (default: stderr)\n"
-			"  -v        Verbose\n"
-			"  -h        Help\n",
-		 prog,
-		 config.port, config.bind_addr,
-		 config.threads, THREAD_POOL_SIZE,
-		 config.max_conns);
+		"Usage: %s [options]\n"
+		"  -f FILE   Config file (default: auto-detect)\n"
+		"  -p PORT   Port (default %d)\n"
+		"  -b ADDR   Bind address (default %s)\n"
+		"  -t NUM    Worker threads (default %d, max %d)\n"
+		"  -c NUM    Max connections (default %d)\n"
+		"  -l FILE   Log file path (default: stderr)\n"
+		"  -v        Verbose\n"
+		"  -h        Help\n",
+		prog, config.port, config.bind_addr, config.threads,
+		THREAD_POOL_SIZE, config.max_conns);
 }
 
 /**
@@ -682,26 +719,44 @@ static void
 parse_args(int argc, char *argv[])
 {
 	/* Raw CLI values — -1/NULL means "not supplied". */
-	const char *conf_file  = NULL;
-	int         cli_port   = -1;
-	const char *cli_bind   = NULL;
-	int         cli_threads  = -1;
-	int         cli_conns    = -1;
+	const char *conf_file = NULL;
+	int cli_port = -1;
+	const char *cli_bind = NULL;
+	int cli_threads = -1;
+	int cli_conns = -1;
 	const char *cli_log_file = NULL;
-	int         cli_verbose  = 0;
+	int cli_verbose = 0;
 
 	int opt;
 	while ((opt = getopt(argc, argv, "f:p:b:t:c:l:vh")) != -1) {
 		switch (opt) {
-			case 'f': conf_file   = optarg;      break;
-			case 'p': cli_port    = atoi(optarg); break;
-			case 'b': cli_bind    = optarg;       break;
-			case 't': cli_threads = atoi(optarg); break;
-			case 'c': cli_conns   = atoi(optarg); break;
-			case 'l': cli_log_file = optarg;      break;
-			case 'v': cli_verbose = 1;            break;
-			case 'h': usage(argv[0]); exit(0);
-			default:  usage(argv[0]); exit(1);
+		case 'f':
+			conf_file = optarg;
+			break;
+		case 'p':
+			cli_port = atoi(optarg);
+			break;
+		case 'b':
+			cli_bind = optarg;
+			break;
+		case 't':
+			cli_threads = atoi(optarg);
+			break;
+		case 'c':
+			cli_conns = atoi(optarg);
+			break;
+		case 'l':
+			cli_log_file = optarg;
+			break;
+		case 'v':
+			cli_verbose = 1;
+			break;
+		case 'h':
+			usage(argv[0]);
+			exit(0);
+		default:
+			usage(argv[0]);
+			exit(1);
 		}
 	}
 
@@ -713,90 +768,99 @@ parse_args(int argc, char *argv[])
 		exit(1);
 
 	/* 3. CLI flags (highest priority — overwrite everything) */
-	conf_apply_cli(&config, cli_port, cli_bind,
-				   cli_threads, cli_conns, cli_log_file, cli_verbose);
+	conf_apply_cli(&config, cli_port, cli_bind, cli_threads, cli_conns,
+		       cli_log_file, cli_verbose);
 
 	/* Clamp to hard limits */
-	if (config.threads  < 1)               config.threads  = 1;
-	if (config.threads  > THREAD_POOL_SIZE) config.threads  = THREAD_POOL_SIZE;
-	if (config.max_conns > MAX_CONNECTIONS) config.max_conns = MAX_CONNECTIONS;
+	if (config.threads < 1)
+		config.threads = 1;
+	if (config.threads > THREAD_POOL_SIZE)
+		config.threads = THREAD_POOL_SIZE;
+	if (config.max_conns > MAX_CONNECTIONS)
+		config.max_conns = MAX_CONNECTIONS;
 	if (config.max_req_size > REQUEST_BUFFER_SIZE)
 		config.max_req_size = REQUEST_BUFFER_SIZE;
 
 	/* Propagate config to global values consulted by other modules */
 	config_verbose = config.verbose;
-	strlcpy(config_static_dir, config.static_dir, sizeof(config_static_dir));
-	strlcpy(config_templates_dir, config.templates_dir, sizeof(config_templates_dir));
+	strlcpy(config_static_dir, config.static_dir,
+		sizeof(config_static_dir));
+	strlcpy(config_templates_dir, config.templates_dir,
+		sizeof(config_templates_dir));
 
 	if (config.verbose)
 		conf_dump(&config);
 }
 
-/* -- OpenBSD security ------------------------------------------------------- */
+/* -- OpenBSD security -------------------------------------------------------
+ */
 /**
  * @brief Apply openbsd security.
  */
 static void
 apply_openbsd_security(void)
 {
-	#ifdef __OpenBSD__
+#ifdef __OpenBSD__
 	log_info("Applying OpenBSD security features...");
 
 	/* Filesystem paths from config */
 	unveil(config.templates_dir, "r");
-	unveil(config.static_dir,    "rwc");
+	unveil(config.static_dir, "rwc");
 
 	/* Man page infrastructure */
-	unveil("/usr/share/man",    "r");
-	unveil("/usr/local/man",    "r");
-	unveil("/usr/X11R6/man",    "r");
-	unveil(config.mandoc_path,  "x");
-	unveil("/usr/bin/man",      "x");
-	unveil("/usr/bin/apropos",  "x");
-	unveil("/usr/bin/netstat",  "x");
-	unveil("/bin/sh",           "x");
-	unveil("/etc/man.conf",     "r");
-	unveil("/dev/null",        "rw");
-	unveil("/usr/sbin/pkg_info","x");
+	unveil("/usr/share/man", "r");
+	unveil("/usr/local/man", "r");
+	unveil("/usr/X11R6/man", "r");
+	unveil(config.mandoc_path, "x");
+	unveil("/usr/bin/man", "x");
+	unveil("/usr/bin/apropos", "x");
+	unveil("/usr/bin/netstat", "x");
+	unveil("/bin/sh", "x");
+	unveil("/etc/man.conf", "r");
+	unveil("/dev/null", "rw");
+	unveil("/usr/sbin/pkg_info", "x");
 
 	/* pkg_info needs read access to the package database and to stat()
 	 * the file paths passed to -E (which package owns this file).
 	 * Without /var/db/pkg pkg_info exits immediately with no output. */
-	unveil("/var/db/pkg",       "r");  /* installed package database    */
-	unveil("/usr/local",        "r");  /* packages install prefix       */
-	unveil("/usr/bin",          "r");  /* -E lookups on base binaries   */
-	unveil("/usr/sbin",         "r");  /* idem                          */
-	unveil("/bin",              "r");  /* idem                          */
-	unveil("/sbin",             "r");  /* idem                          */
-	unveil("/usr/local/bin",    "r");
+	unveil("/var/db/pkg", "r"); /* installed package database    */
+	unveil("/usr/local", "r");  /* packages install prefix       */
+	unveil("/usr/bin", "r");    /* -E lookups on base binaries   */
+	unveil("/usr/sbin", "r");   /* idem                          */
+	unveil("/bin", "r");	    /* idem                          */
+	unveil("/sbin", "r");	    /* idem                          */
+	unveil("/usr/local/bin", "r");
 
 	/* User/group lookups */
-	unveil("/etc/passwd",       "r");
-	unveil("/etc/group",        "r");
-	unveil("/etc/resolv.conf",  "r");
+	unveil("/etc/passwd", "r");
+	unveil("/etc/group", "r");
+	unveil("/etc/resolv.conf", "r");
 
 	unveil(NULL, NULL);
 
 	const char *promises =
-	"stdio rpath wpath cpath inet route proc exec vminfo ps getpw";
+	    "stdio rpath wpath cpath inet route proc exec vminfo ps getpw";
 	if (pledge(promises, NULL) == -1) {
 		log_errno("pledge");
 		log_error("Continuing without pledge...");
 	} else if (config.verbose) {
 		log_debug("Pledge promises set: %s", promises);
 	}
-	#else
+#else
 	if (config.verbose)
-		log_debug("OpenBSD security features disabled on this platform.");
-	#endif
+		log_debug(
+		    "OpenBSD security features disabled on this platform.");
+#endif
 }
 
-/* -- main ------------------------------------------------------------------- */
+/* -- main -------------------------------------------------------------------
+ */
 /**
  * @brief Main.
  * @param argc Argument count from the command line.
  * @param argv[] Parameter for main.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 int
 main(int argc, char *argv[])
@@ -813,18 +877,21 @@ main(int argc, char *argv[])
 	}
 	init_routes();
 
-	signal(SIGINT,  handle_signal);
+	signal(SIGINT, handle_signal);
 	signal(SIGTERM, handle_signal);
-	#ifdef SIGPIPE
+#ifdef SIGPIPE
 	signal(SIGPIPE, SIG_IGN);
-	#endif
+#endif
 
-	printf("Starting MiniWeb (kqueue) on %s:%d\n",
-		   config.bind_addr, config.port);
+	printf("Starting MiniWeb (kqueue) on %s:%d\n", config.bind_addr,
+	       config.port);
 
 	/* -- Listen socket -- */
 	listen_fd = socket(AF_INET, SOCK_STREAM, 0);
-	if (listen_fd < 0) { log_errno("socket"); return 1; }
+	if (listen_fd < 0) {
+		log_errno("socket");
+		return 1;
+	}
 
 	int on = 1;
 	setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
@@ -833,24 +900,36 @@ main(int argc, char *argv[])
 	struct sockaddr_in sa;
 	memset(&sa, 0, sizeof(sa));
 	sa.sin_family = AF_INET;
-	sa.sin_port   = htons(config.port);
+	sa.sin_port = htons(config.port);
 	if (inet_pton(AF_INET, config.bind_addr, &sa.sin_addr) != 1) {
 		log_error("Invalid bind address: %s", config.bind_addr);
 		return 1;
 	}
 
-	if (bind(listen_fd,   (struct sockaddr *)&sa, sizeof(sa)) < 0) { log_errno("bind"); return 1; }
-	if (listen(listen_fd, LISTEN_BACKLOG) < 0) { log_errno("listen"); return 1; }
+	if (bind(listen_fd, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
+		log_errno("bind");
+		return 1;
+	}
+	if (listen(listen_fd, LISTEN_BACKLOG) < 0) {
+		log_errno("listen");
+		return 1;
+	}
 
 	/* -- kqueue -- */
 	kq_fd = kqueue();
-	if (kq_fd < 0) { log_errno("kqueue"); return 1; }
+	if (kq_fd < 0) {
+		log_errno("kqueue");
+		return 1;
+	}
 
-	/* Register listen socket. EV_CLEAR resets the backlog counter after each
-	 * kevent() return so we don't accumulate stale counts. */
+	/* Register listen socket. EV_CLEAR resets the backlog counter after
+	 * each kevent() return so we don't accumulate stale counts. */
 	struct kevent chg;
 	EV_SET(&chg, listen_fd, EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, NULL);
-	if (kevent(kq_fd, &chg, 1, NULL, 0, NULL) < 0) { log_errno("kevent: add listen"); return 1; }
+	if (kevent(kq_fd, &chg, 1, NULL, 0, NULL) < 0) {
+		log_errno("kevent: add listen");
+		return 1;
+	}
 
 	/* -- Work queue + worker threads -- */
 	queue_init(&wq);
@@ -858,26 +937,32 @@ main(int argc, char *argv[])
 
 	pthread_t threads[THREAD_POOL_SIZE];
 	for (int i = 0; i < config.threads; i++) {
-		if (pthread_create(&threads[i], NULL, worker_thread, NULL) != 0) { log_errno("pthread_create"); return 1; }
+		if (pthread_create(&threads[i], NULL, worker_thread, NULL) !=
+		    0) {
+			log_errno("pthread_create");
+			return 1;
+		}
 	}
 
 	apply_openbsd_security();
 	spare_fd = open("/dev/null", O_RDONLY);
 
 	printf("Server started. Workers: %d  MaxConns: %d  Port: %d\n"
-	"Press Ctrl+C to stop.\n\n",
-	config.threads, config.max_conns, config.port);
+	       "Press Ctrl+C to stop.\n\n",
+	       config.threads, config.max_conns, config.port);
 
 	/* -- Main event loop (dispatcher only) -- */
 	struct kevent events[MAX_EVENTS];
 	time_t last_sweep = time(NULL);
 
 	while (running) {
-		struct timespec timeout = {1, 0};   /* wake up at least once/second */
+		struct timespec timeout = {
+		    1, 0}; /* wake up at least once/second */
 		int n = kevent(kq_fd, NULL, 0, events, MAX_EVENTS, &timeout);
 
 		if (n < 0) {
-			if (errno == EINTR) continue;
+			if (errno == EINTR)
+				continue;
 			log_errno("kevent");
 			break;
 		}
@@ -902,22 +987,24 @@ main(int argc, char *argv[])
 			if (fd < 0 || fd >= MAX_CONNECTIONS)
 				continue;
 
-			/* -- Validate udata pointer against generation counter -- */
+			/* -- Validate udata pointer against generation counter
+			 * -- */
 			connection_t *conn = (connection_t *)ev->udata;
 
 			pthread_mutex_lock(&conn_mutex);
-			int stale = (!conn ||
-			connections[fd] != conn ||
-			conn->gen != conn_gen[fd]);
+			int stale = (!conn || connections[fd] != conn ||
+				     conn->gen != conn_gen[fd]);
 			pthread_mutex_unlock(&conn_mutex);
 
 			if (stale) {
-				/* fd was recycled; the kevent will be removed automatically
-				 * when the fd was closed, nothing else to do. */
+				/* fd was recycled; the kevent will be removed
+				 * automatically when the fd was closed, nothing
+				 * else to do. */
 				continue;
 			}
 
-			/* -- EOF or error: close immediately, don't bother queuing -- */
+			/* -- EOF or error: close immediately, don't bother
+			 * queuing -- */
 			if (ev->flags & (EV_EOF | EV_ERROR)) {
 				close_connection(fd);
 				continue;
@@ -927,11 +1014,13 @@ main(int argc, char *argv[])
 				continue;
 
 			/* -- Dispatch to worker pool --
-			 * EV_DISPATCH already auto-disabled the event; the worker will
-			 * re-enable it via EV_ENABLE if it needs more data, or close the
-			 * fd when done (which removes the kevent automatically). */
+			 * EV_DISPATCH already auto-disabled the event; the
+			 * worker will re-enable it via EV_ENABLE if it needs
+			 * more data, or close the fd when done (which removes
+			 * the kevent automatically). */
 			if (queue_push(&wq, conn) < 0) {
-				/* Queue full: server overloaded, drop the connection */
+				/* Queue full: server overloaded, drop the
+				 * connection */
 				send_error_response(fd, 503, "Server busy");
 				close_connection(fd);
 			}

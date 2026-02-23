@@ -1,4 +1,4 @@
-/* http_handler.c - HTTP handler utilities */
+/* response.c - HTTP handler utilities */
 
 #include <miniweb/core/config.h>
 #include <miniweb/http/handler.h>

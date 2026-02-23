@@ -1,3 +1,4 @@
+/* router.c - minimal routing */
 #include <miniweb/router/router.h>
 
 int

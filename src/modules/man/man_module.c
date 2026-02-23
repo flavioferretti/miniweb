@@ -1,3 +1,5 @@
+/* man_module.c - man generation implementation */
+
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
