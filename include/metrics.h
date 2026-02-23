@@ -3,6 +3,8 @@
 
 #include "http_handler.h"
 
+struct router;
+
 /* --- Data Structures --- */
 
 typedef struct {
@@ -173,5 +175,7 @@ int metrics_get_network_interfaces(NetworkInterface *interfaces, int max_interfa
  * @return Number of entries written.
  */
 int metrics_get_top_cpu_processes(ProcessInfo *processes, int max_processes);
+
+int metrics_module_attach_routes(struct router *r);
 
 #endif /* METRICS_H */

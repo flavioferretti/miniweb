@@ -1,10 +1,15 @@
 /* urls.c - URL routing table */
 
-#include <string.h>
 #include <stdio.h>
+#include <string.h>
 
-#include "../include/miniweb/router/module_attach.h"
-#include "../include/urls.h"
+#include "../../include/man.h"
+#include "../../include/metrics.h"
+#include "../../include/networking.h"
+#include "../../include/pkg_manager.h"
+#include "../../include/routes.h"
+#include "../../include/miniweb/router/module_attach.h"
+#include "../../include/urls.h"
 
 static struct route routes[MAX_ROUTES];
 static size_t route_count = 0;
@@ -36,7 +41,16 @@ url_registry_register(void *ctx, const char *method, const char *path,
 }
 
 static int
-views_attach_routes(struct router *r)
+url_registry_register_prefix(void *ctx, const char *method,
+	const char *prefix, int min_slashes, route_handler_t handler)
+{
+	(void)ctx;
+	register_prefix_route(method, prefix, min_slashes, handler);
+	return 0;
+}
+
+int
+views_module_attach_routes(struct router *r)
 {
 	for (size_t i = 0; i < sizeof(view_routes) / sizeof(view_routes[0]); i++) {
 		if (router_register(r, view_routes[i].method,
@@ -45,45 +59,12 @@ views_attach_routes(struct router *r)
 	}
 	if (router_register(r, "GET", "/favicon.ico", favicon_handler) != 0)
 		return -1;
+	if (router_register_prefix(r, "GET", "/static/", 0,
+	    static_handler) != 0)
+		return -1;
 	return 0;
 }
 
-static int
-metrics_attach_routes(struct router *r)
-{
-	return router_register(r, "GET", "/api/metrics", metrics_handler);
-}
-
-static int
-networking_attach_routes(struct router *r)
-{
-	return router_register(r, "GET", "/api/networking", networking_api_handler);
-}
-
-static int
-packages_attach_routes(struct router *r)
-{
-	static const char *const pkg_paths[] = {
-		"/api/packages/search",
-		"/api/packages/info",
-		"/api/packages/which",
-		"/api/packages/files",
-		"/api/packages/list",
-	};
-
-	for (size_t i = 0; i < sizeof(pkg_paths) / sizeof(pkg_paths[0]); i++) {
-		if (router_register(r, "GET", pkg_paths[i], pkg_api_handler) != 0)
-			return -1;
-	}
-	return 0;
-}
-
-/**
- * @brief Register route.
- * @param method HTTP method string.
- * @param path Request or filesystem path to evaluate.
- * @param handler Route handler callback.
- */
 void
 register_route(const char *method, const char *path, route_handler_t handler)
 {
@@ -109,12 +90,6 @@ register_prefix_route(const char *method, const char *prefix,
 	prefix_route_count++;
 }
 
-/**
- * @brief Find view route.
- * @param method HTTP method string.
- * @param path Request or filesystem path to evaluate.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
- */
 const struct view_route *
 find_view_route(const char *method, const char *path)
 {
@@ -127,35 +102,38 @@ find_view_route(const char *method, const char *path)
 	return NULL;
 }
 
-/**
- * @brief Init routes.
- */
 void
 init_routes(void)
 {
 	struct router r = {
 		.register_fn = url_registry_register,
+		.register_prefix_fn = url_registry_register_prefix,
 		.ctx = NULL,
 	};
 	struct miniweb_module modules[] = {
 		{
 			.name = "views",
-			.attach_routes = views_attach_routes,
+			.attach_routes = views_module_attach_routes,
 			.enabled_by_default = 1,
 		},
 		{
 			.name = "metrics",
-			.attach_routes = metrics_attach_routes,
+			.attach_routes = metrics_module_attach_routes,
 			.enabled_by_default = 1,
 		},
 		{
 			.name = "networking",
-			.attach_routes = networking_attach_routes,
+			.attach_routes = networking_module_attach_routes,
+			.enabled_by_default = 1,
+		},
+		{
+			.name = "man",
+			.attach_routes = man_module_attach_routes,
 			.enabled_by_default = 1,
 		},
 		{
 			.name = "packages",
-			.attach_routes = packages_attach_routes,
+			.attach_routes = packages_module_attach_routes,
 			.enabled_by_default = 1,
 		},
 	};
@@ -165,30 +143,17 @@ init_routes(void)
 
 	(void)miniweb_module_attach_enabled(&r, modules,
 	    sizeof(modules) / sizeof(modules[0]), NULL);
-
-	register_prefix_route("GET", "/man/", 2, man_render_handler);
-	register_prefix_route("GET", "/api/man", 0, man_api_handler);
-	register_prefix_route("GET", "/api/packages", 0, pkg_api_handler);
-	register_prefix_route("GET", "/static/", 0, static_handler);
 }
 
-/**
- * @brief Route match.
- * @param method HTTP method string.
- * @param path Request or filesystem path to evaluate.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
- */
 route_handler_t
 route_match(const char *method, const char *path)
 {
-	/* 1. Exact match */
 	for (size_t i = 0; i < route_count; i++) {
 		if (strcmp(routes[i].method, method) == 0 &&
 		    strcmp(routes[i].path, path) == 0)
 			return routes[i].handler;
 	}
 
-	/* 2. Prefix match */
 	for (size_t i = 0; i < prefix_route_count; i++) {
 		const struct prefix_route *pr = &prefix_routes[i];
 		const char *p;
@@ -211,7 +176,6 @@ route_match(const char *method, const char *path)
 
 	return NULL;
 }
-
 
 int
 route_allow_methods(const char *path, char *buf, size_t buf_len)
@@ -239,9 +203,7 @@ route_allow_methods(const char *path, char *buf, size_t buf_len)
 			continue;
 
 		int wrote = snprintf(buf + used, buf_len - used,
-			"%s%s",
-			count > 0 ? ", " : "",
-			routes[i].method);
+		    "%s%s", count > 0 ? ", " : "", routes[i].method);
 		if (wrote < 0 || (size_t)wrote >= buf_len - used)
 			return count;
 
@@ -254,8 +216,7 @@ route_allow_methods(const char *path, char *buf, size_t buf_len)
 		    strlen(prefix_routes[i].prefix)) != 0)
 			continue;
 		if (count == 0 && buf_len > 3)
-			(void)snprintf(buf, buf_len, "%s",
-			    prefix_routes[i].method);
+			(void)snprintf(buf, buf_len, "%s", prefix_routes[i].method);
 		if (count == 0)
 			count = 1;
 		break;

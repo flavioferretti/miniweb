@@ -10,9 +10,6 @@
 
 #include "../include/http_handler.h"
 #include "../include/config.h"
-#include "../include/man.h"
-#include "../include/metrics.h"
-#include "../include/networking.h"
 #include "../include/routes.h"
 #include "../include/urls.h"
 

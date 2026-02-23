@@ -14,6 +14,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <ifaddrs.h>
+#include "../../../include/miniweb/router/router.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -627,4 +628,10 @@ networking_api_handler(http_request_t *req)
 	int ret = http_response_send(req, resp);
 	http_response_free(resp);
 	return ret;
+}
+
+int
+networking_module_attach_routes(struct router *r)
+{
+	return router_register(r, "GET", "/api/networking", networking_api_handler);
 }

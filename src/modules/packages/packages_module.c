@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include "../../../include/miniweb/router/router.h"
 
 #include "../include/http_handler.h"
 #include "../include/http_utils.h"
@@ -517,4 +518,10 @@ pkg_api_handler(http_request_t *req)
 	int ret = http_response_send(req, resp);
 	http_response_free(resp);
 	return ret;
+}
+
+int
+packages_module_attach_routes(struct router *r)
+{
+	return router_register_prefix(r, "GET", "/api/packages", 0, pkg_api_handler);
 }
