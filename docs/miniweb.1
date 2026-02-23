@@ -115,7 +115,7 @@ The default is
 Each worker independently dequeues and processes connections.
 A value matching the CPU core count is a reasonable starting point.
 The maximum is
-.Cm 4
+.Cm 32
 as compiled; recompile with a higher
 .Dv THREAD_POOL_SIZE
 to increase it.
@@ -221,8 +221,10 @@ paths.
 .El
 .Pp
 Anything not matched returns an HTML 404 page.
-All routes are GET-only in the current implementation;
-non-GET requests return 404 rather than 405.
+All routes are GET-only in the current implementation.
+If a request path is known but the method is unsupported,
+.Nm
+returns 405 Method Not Allowed; unknown paths return 404 Not Found.
 .Ss Web Interface
 .Bl -tag -width "/networking"
 .It Pa /
@@ -380,9 +382,15 @@ all files under
 .Pa templates/
 are read at startup and retained in memory for the lifetime of the
 process.
-There is no runtime invalidation; restart
-.Nm
-to pick up template changes.
+The cache is protected by a mutex and refreshed with TTL-based
+invalidation.
+After
+.Dv TEMPLATE_CACHE_TTL_SEC
+seconds
+.Pq 5 ,
+the next template lookup reloads the templates directory, so on-disk
+changes are picked up without restarting
+.Nm .
 .It
 In-memory static payload cache
 .Pq Pa src/http_handler.c ,
@@ -547,8 +555,9 @@ for cached payload copies.
 objects come from a fixed pool of
 .Dv RESPONSE_POOL_ITEMS
 entries
-.Pq 256 ,
-guarded by a mutex.
+.Pq 1024 ,
+guarded by a mutex, with heap allocation fallback when the pool is
+temporarily exhausted.
 .El
 .Sh PERFORMANCE
 Benchmarks collected on OpenBSD 7.8 using
@@ -620,22 +629,22 @@ objects, and rate-limited static cache admission to reduce allocator bursts.
 .Xr kevent 2
 wait cycle.
 .It Dv MAX_CONNECTIONS
-1280 active connections.
+4096 active connections.
 .It Dv THREAD_POOL_SIZE
-4 worker threads.
+32 worker threads.
 .It Dv REQUEST_BUFFER_SIZE
 16384 bytes receive buffer hard cap.
 .It Dv LISTEN_BACKLOG
 128 pending connection backlog hint.
 .It Dv QUEUE_CAPACITY
-512 dispatched connections queued before overload drop.
+4096 dispatched connections queued before overload drop.
 .It Dv MAX_KEEPALIVE_REQUESTS
 64 requests per keep-alive connection before forced close.
 .It Dv WRITE_RETRY_LIMIT
-256 write retry cycles on
+20 write retry cycles on
 .Dv EAGAIN .
 .It Dv WRITE_WAIT_MS
-100 ms poll wait per write retry cycle.
+10 ms poll wait per write retry cycle.
 .It Dv FILE_CACHE_SLOTS
 32 in-memory static file cache entries.
 .It Dv FILE_CACHE_MAX_BYTES
@@ -646,18 +655,19 @@ wait cycle.
 .It Dv FILE_CACHE_MAX_AGE_SEC
 120 seconds before cache entry or candidate eviction.
 .It Dv RESPONSE_POOL_ITEMS
-256 reusable HTTP response objects.
+1024 reusable HTTP response objects
+plus heap fallback when the pool is exhausted.
 .El
 .Ss Effective Runtime Ranges
 .Bl -tag -width "max_req_size"
 .It Cm threads
 Parser range 1\(en64;
-effective runtime 1\(en4,
+effective runtime 1\(en32,
 hard-capped by
 .Dv THREAD_POOL_SIZE .
 .It Cm max_conns
 Parser range 1\(en65535;
-effective runtime 1\(en1280,
+effective runtime 1\(en4096,
 hard-capped by
 .Dv MAX_CONNECTIONS .
 .It Cm max_req_size
@@ -687,7 +697,6 @@ static/             rwc
 /usr/bin/mandoc     x
 /usr/bin/man        x
 /usr/bin/apropos    x
-/bin/ps             x
 /usr/bin/netstat    x
 /bin/sh             x
 /etc/man.conf       r
@@ -832,7 +841,7 @@ Default:
 .Cm 4 .
 .It Cm max_conns Ar n
 Maximum concurrent connections.
-Parser range 1\(en65535; effective runtime range 1\(en1280,
+Parser range 1\(en65535; effective runtime range 1\(en4096,
 hard-capped by
 .Dv MAX_CONNECTIONS .
 Default:
@@ -936,10 +945,9 @@ Unveiled for execution.
 .It Pa /usr/bin/mandoc
 Manual page formatter.
 Unveiled for execution.
-.It Pa /bin/ps
 .It Pa /bin/sh
 .It Pa /usr/bin/netstat
-Unveiled for execution by metric and networking collectors.
+Unveiled for execution by runtime helpers and networking collectors.
 .It Pa /usr/sbin/pkg_info
 Package information tool.
 Unveiled for execution by the packages API.
@@ -983,7 +991,7 @@ Production configuration behind
 .Xr relayd 8
 with the maximum connection limit:
 .Bd -literal -offset indent
-$ miniweb -b 127.0.0.1 -p 9001 -c 1280 -t 4
+$ miniweb -b 127.0.0.1 -p 9001 -c 4096 -t 8
 .Ed
 .Pp
 Write logs to a file for service-style runs:
@@ -1265,10 +1273,9 @@ IPv6 requires changes to the socket creation and address handling code.
 .Sh ROADMAP
 .Bl -bullet
 .It
-Add explicit 405 handling for non-GET requests on known endpoints,
-including
+Add
 .Cm Allow
-response headers.
+header emission for existing 405 responses on known endpoints.
 .It
 Add conditional HTTP cache validators
 .Po

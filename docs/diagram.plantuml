@@ -19,14 +19,14 @@ skinparam component {
 ' =========================
 package "<&layers*1> Project functions" #EAF4FF {
   component "main.c\n(queue_*, worker_thread,\nconnection slab/free-stack, main)" as Main #A8D8FF
-  component "http_handler.c\n(http_response_* pool,\nhttp_send_file with memory cache,\nhttp_send_error/http_render_template)" as HTTP #9ED9FF
+  component "http_handler.c\n(http_response_* pooled allocator,\nhttp_send_file with memory cache,\nhttp_send_error/http_render_template)" as HTTP #9ED9FF
   component "urls.c\n(init_routes, route_match,\nregister_route, find_view_route)" as URLS #B8E0FF
   component "routes.c\n(view/static/favicon handlers,\nrender_template_response)" as Routes #C4E8FF
   component "metrics.c\n(get_system_metrics_json, metrics_*)" as Metrics #D6EFFF
   component "networking.c\n(networking_get_*, networking_*_handler)" as Net #CFE6FF
   component "man.c\n(man_api_handler, man_render_handler,\non-disk man cache)" as Man #E3F2FF
   component "pkg_manager.c\n(pkg_*_json, pkg_api_handler)" as Pkg #D9F7FF
-  component "template_engine.c\n(template cache preload +\ntemplate_render*)" as Template #FFF2B2
+  component "template_engine.c\n(template cache preload + TTL refresh,\ntemplate_render*)" as Template #FFF2B2
   component "http_utils.c\n(json_escape_string, safe_popen_read*)" as Utils #FFE6B2
   component "conf.c\n(conf_defaults/load/dump)" as Conf #DFF7E2
 }
@@ -123,10 +123,10 @@ Utils --> LibStd : malloc/strdup/strlen/isalnum\n(<stdlib.h>, <string.h>, <ctype
 
 note right of Main
   Hard caps (compiled):
-  MAX_CONNECTIONS=1280
-  THREAD_POOL_SIZE=4
+  MAX_CONNECTIONS=4096
+  THREAD_POOL_SIZE=32
   REQUEST_BUFFER_SIZE=16384
-  QUEUE_CAPACITY=512
+  QUEUE_CAPACITY=4096
   MAX_KEEPALIVE_REQUESTS=64
 end note
 
@@ -136,7 +136,7 @@ note right of HTTP
   - 2-hit admission candidate table
   - insertion token budget: 8/sec
   - age eviction: 120s entries/candidates
-  Response pool: 256 objects
+  Response pool: 1024 pooled objects\n  + heap fallback on exhaustion
 end note
 
 note bottom of URLS
@@ -145,7 +145,7 @@ note bottom of URLS
   2) /man/... (GET)
   3) /api/man...
   4) /api/packages...
-  5) /static/...
+  5) /static/...\n  Known path + wrong method -> 405
 end note
 
 note right of Man
@@ -157,6 +157,8 @@ end note
 note right of Template
   templates_dir files are preloaded
   at startup by template_cache_init()
+  and refreshed after TTL expiry
+  (TEMPLATE_CACHE_TTL_SEC=5)
 end note
 
 ' ----------------------
