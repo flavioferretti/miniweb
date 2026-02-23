@@ -37,6 +37,7 @@ typedef struct http_response {
 	char *body;
 	size_t body_len;
 	int free_body;
+	int pool_shard_idx;
 	char headers[2048];
 	size_t headers_len;
 } http_response_t;
