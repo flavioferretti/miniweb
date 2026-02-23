@@ -30,6 +30,12 @@ static time_t template_cache_last_refresh = 0;
 #define TEMPLATE_CACHE_TTL_SEC 60
 
 /**
+ * @brief TODO: Describe read_file_content.
+ * @param path TODO: Describe this parameter.
+ * @param content TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
+/**
  * @brief Read an entire file into a newly allocated NUL-terminated buffer.
  * @param path Filesystem path of the file to read.
  * @param content Output pointer that receives the allocated buffer on success.
@@ -81,6 +87,9 @@ read_file_content(const char *path, char **content)
 }
 
 /**
+ * @brief TODO: Describe template_cache_cleanup.
+ */
+/**
  * @brief Free all cached templates.
  */
 void
@@ -100,6 +109,9 @@ template_cache_cleanup(void)
 	pthread_mutex_unlock(&template_cache_lock);
 }
 
+/**
+ * @brief TODO: Describe template_cache_cleanup_locked.
+ */
 static void
 template_cache_cleanup_locked(void)
 {
@@ -112,6 +124,13 @@ template_cache_cleanup_locked(void)
 	template_cache_count = 0;
 }
 
+/**
+ * @brief TODO: Describe add_template_to_cache.
+ * @param filename TODO: Describe this parameter.
+ * @param path TODO: Describe this parameter.
+ * @param mtime TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 /**
  * @brief Add one file to the in-memory template cache.
  * @param filename Basename of the template file.
@@ -148,6 +167,10 @@ add_template_to_cache(const char *filename, const char *path, time_t mtime)
 	return 0;
 }
 
+/**
+ * @brief TODO: Describe template_cache_reload_locked.
+ * @return TODO: Describe the return value.
+ */
 /**
  * @brief Preload template files from configured directory into memory.
  * @return Returns 0 on success or -1 on failure.
@@ -201,6 +224,10 @@ template_cache_reload_locked(void)
 	return loaded ? 0 : -1;
 }
 
+/**
+ * @brief TODO: Describe template_cache_init.
+ * @return TODO: Describe the return value.
+ */
 int
 template_cache_init(void)
 {
@@ -213,6 +240,10 @@ template_cache_init(void)
 	return rc;
 }
 
+/**
+ * @brief TODO: Describe template_cache_refresh_locked.
+ * @return TODO: Describe the return value.
+ */
 static int
 template_cache_refresh_locked(void)
 {
@@ -225,6 +256,12 @@ template_cache_refresh_locked(void)
 	return template_cache_reload_locked();
 }
 
+/**
+ * @brief TODO: Describe read_template_file.
+ * @param filename TODO: Describe this parameter.
+ * @param content TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 /**
  * @brief Load a template file from the in-memory cache.
  * @param filename Template filename relative to the templates directory.
@@ -258,6 +295,15 @@ out:
 static char *replace_single(const char *str, const char *needle,
 			    const char *value);
 
+/**
+ * @brief TODO: Describe replace_all.
+ * @param template_str TODO: Describe this parameter.
+ * @param title TODO: Describe this parameter.
+ * @param page_content TODO: Describe this parameter.
+ * @param extra_head TODO: Describe this parameter.
+ * @param extra_js TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 /**
  * @brief Replace all supported placeholders in the base template string.
  * @param template_str Base template text containing placeholders.
@@ -323,6 +369,13 @@ replace_all(const char *template_str, const char *title,
 }
 
 /**
+ * @brief TODO: Describe replace_single.
+ * @param str TODO: Describe this parameter.
+ * @param needle TODO: Describe this parameter.
+ * @param value TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
+/**
  * @brief Replace the first occurrence of a token in a string.
  * @param str Source string to search.
  * @param needle Placeholder token to replace.
@@ -356,6 +409,12 @@ replace_single(const char *str, const char *needle, const char *value)
 	return result;
 }
 
+/**
+ * @brief TODO: Describe template_render_with_data.
+ * @param data TODO: Describe this parameter.
+ * @param output TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 /**
  * @brief Render a full HTML page using base and content templates.
  * @param data Template metadata and optional fragment filenames.
@@ -428,6 +487,11 @@ cleanup:
 	return ret;
 }
 
+/**
+ * @brief TODO: Describe template_render_with_data.
+ * @param output TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 /**
  * @brief Backward-compatible wrapper around template_render_with_data().
  */

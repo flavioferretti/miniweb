@@ -84,6 +84,12 @@ static void networking_ring_bootstrap(void);
  * ======================================================================== */
 
 /**
+ * @brief TODO: Describe networking_get_routes.
+ * @param routes TODO: Describe this parameter.
+ * @param max_routes TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
+/**
  * @brief Collect kernel routing table entries.
  * @param routes Output array that receives route entries.
  * @param max_routes Maximum number of entries that can be written.
@@ -227,6 +233,11 @@ networking_get_routes(RouteEntry *routes, int max_routes)
  * ======================================================================== */
 
 /**
+ * @brief TODO: Describe networking_get_dns_config.
+ * @param config TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
+/**
  * @brief Parse DNS resolver settings from /etc/resolv.conf.
  * @param config Output structure populated with resolver configuration.
  * @return Returns 0 on success or -1 on failure.
@@ -302,6 +313,12 @@ networking_get_dns_config(DnsConfig *config)
  * INTERFACE STATISTICS
  * ======================================================================== */
 
+/**
+ * @brief TODO: Describe networking_get_if_stats.
+ * @param stats TODO: Describe this parameter.
+ * @param max_interfaces TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 /**
  * @brief Collect per-interface IPv4/IPv6 and traffic statistics.
  * @param stats Output array for interface statistics entries.
@@ -379,6 +396,12 @@ networking_get_if_stats(NetStats *stats, int max_interfaces)
  * ======================================================================== */
 
 /**
+ * @brief TODO: Describe networking_get_connections.
+ * @param conns TODO: Describe this parameter.
+ * @param max_conns TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
+/**
  * @brief Return a snapshot of network connections.
  * @param conns Output array for connection records.
  * @param max_conns Maximum number of records to populate.
@@ -397,6 +420,11 @@ networking_get_connections(NetworkConnection *conns, int max_conns)
 	return 0;
 }
 
+/**
+ * @brief TODO: Describe networking_ring_init.
+ * @param r TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 static int
 networking_ring_init(NetworkingRing *r)
 {
@@ -409,6 +437,11 @@ networking_ring_init(NetworkingRing *r)
 	return 0;
 }
 
+/**
+ * @brief TODO: Describe networking_ring_push.
+ * @param r TODO: Describe this parameter.
+ * @param s TODO: Describe this parameter.
+ */
 static void
 networking_ring_push(NetworkingRing *r, const NetworkingSample *s)
 {
@@ -420,6 +453,12 @@ networking_ring_push(NetworkingRing *r, const NetworkingSample *s)
 	pthread_mutex_unlock(&r->lock);
 }
 
+/**
+ * @brief TODO: Describe networking_ring_last.
+ * @param r TODO: Describe this parameter.
+ * @param out TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 static int
 networking_ring_last(NetworkingRing *r, NetworkingSample *out)
 {
@@ -438,6 +477,10 @@ networking_ring_last(NetworkingRing *r, NetworkingSample *out)
 	return 1;
 }
 
+/**
+ * @brief TODO: Describe networking_collect_sample.
+ * @param sample TODO: Describe this parameter.
+ */
 static void
 networking_collect_sample(NetworkingSample *sample)
 {
@@ -453,6 +496,10 @@ networking_collect_sample(NetworkingSample *sample)
 		sample->interface_count = 0;
 }
 
+/**
+ * @brief TODO: Describe networking_heartbeat_cb.
+ * @param ctx TODO: Describe this parameter.
+ */
 static void
 networking_heartbeat_cb(void *ctx)
 {
@@ -463,6 +510,9 @@ networking_heartbeat_cb(void *ctx)
 	networking_ring_push(&g_networking_ring, &sample);
 }
 
+/**
+ * @brief TODO: Describe networking_ring_bootstrap.
+ */
 static void
 networking_ring_bootstrap(void)
 {
@@ -497,6 +547,10 @@ networking_ring_bootstrap(void)
  * JSON GENERATION
  * ======================================================================== */
 
+/**
+ * @brief TODO: Describe networking_get_json.
+ * @return TODO: Describe the return value.
+ */
 /**
  * @brief Build a JSON payload containing networking diagnostics.
  * @return Newly allocated JSON string, or NULL on failure.
@@ -591,6 +645,11 @@ networking_get_json(void)
 
 /* Handler for the networking dashboard page. */
 /**
+ * @brief TODO: Describe networking_handler.
+ * @param req TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
+/**
  * @brief Networking handler.
  * @param req Request context for response generation.
  * @return Returns 0 on success or a negative value on failure unless documented otherwise.
@@ -607,6 +666,11 @@ networking_handler(http_request_t *req)
 	return http_render_template(req, &data, NULL);
 }
 
+/**
+ * @brief TODO: Describe networking_api_handler.
+ * @param req TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 /**
  * @brief Networking api handler.
  * @param req Request context for response generation.
@@ -630,6 +694,11 @@ networking_api_handler(http_request_t *req)
 	return ret;
 }
 
+/**
+ * @brief TODO: Describe networking_module_attach_routes.
+ * @param r TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 int
 networking_module_attach_routes(struct router *r)
 {

@@ -14,6 +14,11 @@ static FILE            *log_fp      = NULL;
 static int              log_verbose = 0;
 static pthread_mutex_t  log_mutex   = PTHREAD_MUTEX_INITIALIZER;
 
+/**
+ * @brief TODO: Describe log_timestamp.
+ * @param buf TODO: Describe this parameter.
+ * @param len TODO: Describe this parameter.
+ */
 static void
 log_timestamp(char *buf, size_t len)
 {
@@ -24,6 +29,12 @@ log_timestamp(char *buf, size_t len)
     strftime(buf, len, "%Y-%m-%d %H:%M:%S", &tm);
 }
 
+/**
+ * @brief TODO: Describe log_init.
+ * @param path TODO: Describe this parameter.
+ * @param verbose TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 int
 log_init(const char *path, int verbose)
 {
@@ -43,6 +54,9 @@ log_init(const char *path, int verbose)
     return 0;
 }
 
+/**
+ * @brief TODO: Describe log_close.
+ */
 void
 log_close(void)
 {
@@ -54,12 +68,22 @@ log_close(void)
     pthread_mutex_unlock(&log_mutex);
 }
 
+/**
+ * @brief TODO: Describe log_set_verbose.
+ * @param verbose TODO: Describe this parameter.
+ */
 void
 log_set_verbose(int verbose)
 {
     log_verbose = verbose;
 }
 
+/**
+ * @brief TODO: Describe log_write.
+ * @param level TODO: Describe this parameter.
+ * @param fmt TODO: Describe this parameter.
+ * @param ap TODO: Describe this parameter.
+ */
 static void
 log_write(const char *level, const char *fmt, va_list ap)
 {
@@ -77,6 +101,11 @@ log_write(const char *level, const char *fmt, va_list ap)
     pthread_mutex_unlock(&log_mutex);
 }
 
+/**
+ * @brief TODO: Describe log_info.
+ * @param fmt TODO: Describe this parameter.
+ * @param param TODO: Describe this parameter.
+ */
 void
 log_info(const char *fmt, ...)
 {
@@ -86,6 +115,11 @@ log_info(const char *fmt, ...)
     va_end(ap);
 }
 
+/**
+ * @brief TODO: Describe log_debug.
+ * @param fmt TODO: Describe this parameter.
+ * @param param TODO: Describe this parameter.
+ */
 void
 log_debug(const char *fmt, ...)
 {
@@ -97,6 +131,11 @@ log_debug(const char *fmt, ...)
     va_end(ap);
 }
 
+/**
+ * @brief TODO: Describe log_error.
+ * @param fmt TODO: Describe this parameter.
+ * @param param TODO: Describe this parameter.
+ */
 void
 log_error(const char *fmt, ...)
 {
@@ -106,6 +145,10 @@ log_error(const char *fmt, ...)
     va_end(ap);
 }
 
+/**
+ * @brief TODO: Describe log_errno.
+ * @param context TODO: Describe this parameter.
+ */
 void
 log_errno(const char *context)
 {

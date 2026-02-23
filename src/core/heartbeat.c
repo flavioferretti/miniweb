@@ -31,6 +31,10 @@ static pthread_mutex_t g_hb_lock = PTHREAD_MUTEX_INITIALIZER;
 static void *heartbeat_thread(void *arg);
 
 /**
+ * @brief TODO: Describe heartbeat_init.
+ * @return TODO: Describe the return value.
+ */
+/**
  * @brief Initialize global heartbeat state.
  * @return Always returns 0.
  */
@@ -46,6 +50,11 @@ heartbeat_init(void)
 	return 0;
 }
 
+/**
+ * @brief TODO: Describe heartbeat_register.
+ * @param task TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 /**
  * @brief Register a new periodic callback.
  * @param task Task descriptor containing name, period, callback and context.
@@ -86,6 +95,10 @@ heartbeat_register(const struct hb_task *task)
 }
 
 /**
+ * @brief TODO: Describe heartbeat_start.
+ * @return TODO: Describe the return value.
+ */
+/**
  * @brief Start the heartbeat thread if it is not already running.
  * @return 0 on success, -1 on thread creation failure.
  */
@@ -112,6 +125,9 @@ heartbeat_start(void)
 }
 
 /**
+ * @brief TODO: Describe heartbeat_stop.
+ */
+/**
  * @brief Stop the heartbeat scheduler loop.
  */
 void
@@ -122,6 +138,11 @@ heartbeat_stop(void)
 	pthread_mutex_unlock(&g_hb_lock);
 }
 
+/**
+ * @brief TODO: Describe heartbeat_thread.
+ * @param arg TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 /**
  * @brief Thread entry-point that dispatches due heartbeat tasks.
  * @param arg Unused thread argument.

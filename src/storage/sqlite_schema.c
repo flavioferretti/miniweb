@@ -2,6 +2,13 @@
 #include <miniweb/storage/sqlite_schema.h>
 
 /**
+ * @brief TODO: Describe mw_db_migrate.
+ * @param db TODO: Describe this parameter.
+ * @param migrations TODO: Describe this parameter.
+ * @param count TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
+/**
  * @brief Apply an ordered migration list to the database.
  * @param db Open database handle.
  * @param migrations Array of migration descriptors.
@@ -19,6 +26,11 @@ mw_db_migrate(struct mw_db *db,
 }
 
 /**
+ * @brief TODO: Describe mw_tx_begin.
+ * @param db TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
+/**
  * @brief Start a transaction.
  * @param db Open database handle.
  * @return 0 on success, -1 on failure.
@@ -31,6 +43,11 @@ mw_tx_begin(struct mw_db *db)
 }
 
 /**
+ * @brief TODO: Describe mw_tx_commit.
+ * @param db TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
+/**
  * @brief Commit the active transaction.
  * @param db Open database handle.
  * @return 0 on success, -1 on failure.
@@ -42,6 +59,11 @@ mw_tx_commit(struct mw_db *db)
 	return 0;
 }
 
+/**
+ * @brief TODO: Describe mw_tx_rollback.
+ * @param db TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 /**
  * @brief Roll back the active transaction.
  * @param db Open database handle.

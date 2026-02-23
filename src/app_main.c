@@ -87,6 +87,9 @@ static int connection_free_stack[MAX_CONNECTIONS];
 static int connection_free_top = 0;
 
 /**
+ * @brief TODO: Describe init_connection_pool.
+ */
+/**
  * @brief Init connection pool.
  */
 static void
@@ -115,6 +118,10 @@ typedef struct {
 static work_queue_t wq;
 
 /**
+ * @brief TODO: Describe queue_init.
+ * @param q TODO: Describe this parameter.
+ */
+/**
  * @brief Queue init.
  * @param q Work queue instance.
  */
@@ -126,6 +133,11 @@ queue_init(work_queue_t *q)
 	pthread_cond_init(&q->not_empty, NULL);
 }
 
+/**
+ * @brief TODO: Describe full.
+ * @param conn TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 /* Enqueue from the main thread. Non-blocking: returns 0 on success, -1 if
  * the queue is full (connection will be dropped). */
 /**
@@ -151,6 +163,11 @@ queue_push(work_queue_t *q, connection_t *conn)
 	return 0;
 }
 
+/**
+ * @brief TODO: Describe queue_pop.
+ * @param q TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 /* Dequeue in a worker thread. Blocks until an item is available or
  * running becomes 0. Returns NULL on shutdown. */
 /**
@@ -179,6 +196,10 @@ queue_pop(work_queue_t *q)
 
 /* Wake all workers so they can notice running == 0 and exit cleanly. */
 /**
+ * @brief TODO: Describe queue_broadcast_shutdown.
+ * @param q TODO: Describe this parameter.
+ */
+/**
  * @brief Queue broadcast shutdown.
  * @param q Work queue instance.
  */
@@ -190,6 +211,12 @@ queue_broadcast_shutdown(work_queue_t *q)
 	pthread_mutex_unlock(&q->lock);
 }
 
+/**
+ * @brief TODO: Describe alloc_connection.
+ * @param fd TODO: Describe this parameter.
+ * @param addr TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 /* -- Connection pool helpers ------------------------------------------------
  */
 /**
@@ -236,6 +263,10 @@ alloc_connection(int fd, struct sockaddr_in *addr)
 }
 
 /**
+ * @brief TODO: Describe free_connection.
+ * @param fd TODO: Describe this parameter.
+ */
+/**
  * @brief Free connection.
  * @param fd File descriptor to operate on.
  */
@@ -263,6 +294,10 @@ free_connection(int fd)
 	pthread_mutex_unlock(&conn_mutex);
 }
 
+/**
+ * @brief TODO: Describe set_nonblock.
+ * @param fd TODO: Describe this parameter.
+ */
 /* -- Helpers ----------------------------------------------------------------
  */
 /**
@@ -278,6 +313,14 @@ set_nonblock(int fd)
 	fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
+/**
+ * @brief TODO: Describe parse_request_line.
+ * @param buf TODO: Describe this parameter.
+ * @param method TODO: Describe this parameter.
+ * @param url TODO: Describe this parameter.
+ * @param version TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 /**
  * @brief Parse request line.
  * @param buf Input buffer containing textual data.
@@ -320,6 +363,11 @@ parse_request_line(const char *buf, char *method, char *url, char *version)
 }
 
 /**
+ * @brief TODO: Describe find_header_end.
+ * @param buf TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
+/**
  * @brief Find header end.
  * @param buf Input buffer containing textual data.
  * @return Returns 0 on success or a negative value on failure unless documented
@@ -331,6 +379,12 @@ find_header_end(const char *buf)
 	return strstr(buf, "\r\n\r\n");
 }
 
+/**
+ * @brief TODO: Describe request_keep_alive.
+ * @param buf TODO: Describe this parameter.
+ * @param version TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 /**
  * @brief Request keep alive.
  * @param buf Input buffer containing textual data.
@@ -368,6 +422,12 @@ request_keep_alive(const char *buf, const char *version)
 }
 
 /**
+ * @brief TODO: Describe send_error_response.
+ * @param fd TODO: Describe this parameter.
+ * @param code TODO: Describe this parameter.
+ * @param msg TODO: Describe this parameter.
+ */
+/**
  * @brief Send error response.
  * @param fd File descriptor to operate on.
  * @param code HTTP status code to send.
@@ -388,6 +448,11 @@ send_error_response(int fd, int code, const char *msg)
 }
 
 /**
+ * @brief TODO: Describe close_connection.
+ * @param fd TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
+/**
  * @brief close_connection.
  */
 static void
@@ -404,6 +469,11 @@ close_connection(int fd)
 	free_connection(fd);
 }
 
+/**
+ * @brief TODO: Describe try_rearm_keepalive.
+ * @param conn TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 /**
  * @brief Try rearm keepalive.
  * @param conn Connection object.
@@ -428,6 +498,11 @@ try_rearm_keepalive(connection_t *conn)
 	return kevent(kq_fd, &ev, 1, NULL, 0, NULL) == 0;
 }
 
+/**
+ * @brief TODO: Describe worker_thread.
+ * @param arg TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 /* -- Worker thread ----------------------------------------------------------
  */
 /**
@@ -573,6 +648,11 @@ worker_thread(void *arg)
 	return NULL;
 }
 
+/**
+ * @brief TODO: Describe helper.
+ * @param handle_accept TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 /* -- Accept helper (called from main loop) ----------------------------------
  */
 /**
@@ -647,6 +727,9 @@ handle_accept(void)
 	}
 }
 
+/**
+ * @brief TODO: Describe sweep_idle_connections.
+ */
 /* -- Idle timeout sweep -----------------------------------------------------
  */
 /**
@@ -674,6 +757,10 @@ sweep_idle_connections(void)
 	}
 }
 
+/**
+ * @brief TODO: Describe handle_signal.
+ * @param sig TODO: Describe this parameter.
+ */
 /* -- Signal handler ---------------------------------------------------------
  */
 /**
@@ -687,6 +774,11 @@ handle_signal(int sig)
 	running = 0;
 }
 
+/**
+ * @brief TODO: Describe usage.
+ * @param prog TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 /* -- CLI --------------------------------------------------------------------
  */
 /**
@@ -710,6 +802,12 @@ usage(const char *prog)
 		THREAD_POOL_SIZE, config.max_conns);
 }
 
+/**
+ * @brief TODO: Describe parse_args.
+ * @param argc TODO: Describe this parameter.
+ * @param argv TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 /**
  * @brief Parse args.
  * @param argc Argument count from the command line.
@@ -792,6 +890,9 @@ parse_args(int argc, char *argv[])
 		conf_dump(&config);
 }
 
+/**
+ * @brief TODO: Describe apply_openbsd_security.
+ */
 /* -- OpenBSD security -------------------------------------------------------
  */
 /**
@@ -853,6 +954,12 @@ apply_openbsd_security(void)
 #endif
 }
 
+/**
+ * @brief TODO: Describe main.
+ * @param argc TODO: Describe this parameter.
+ * @param argv TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 /* -- main -------------------------------------------------------------------
  */
 /**

@@ -18,6 +18,10 @@
 
 #include <miniweb/core/conf.h>
 
+/**
+ * @brief TODO: Describe conf_defaults.
+ * @param conf TODO: Describe this parameter.
+ */
 void
 conf_defaults(miniweb_conf_t *conf)
 {
@@ -50,6 +54,11 @@ conf_defaults(miniweb_conf_t *conf)
 }
 
 /* Strip leading whitespace; return pointer into s. */
+/**
+ * @brief TODO: Describe ltrim.
+ * @param s TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 static char *
 ltrim(char *s)
 {
@@ -59,6 +68,10 @@ ltrim(char *s)
 }
 
 /* Strip trailing whitespace in-place. */
+/**
+ * @brief TODO: Describe rtrim.
+ * @param s TODO: Describe this parameter.
+ */
 static void
 rtrim(char *s)
 {
@@ -67,6 +80,13 @@ rtrim(char *s)
         s[--n] = '\0';
 }
 
+/**
+ * @brief TODO: Describe conf_apply_kv.
+ * @param conf TODO: Describe this parameter.
+ * @param key TODO: Describe this parameter.
+ * @param val TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 /* Apply one key=value pair to conf.
  * Returns 0 on success, -1 if the key is unknown. */
 static int
@@ -110,6 +130,12 @@ conf_apply_kv(miniweb_conf_t *conf, const char *key, const char *val)
     return 0;
 }
 
+/**
+ * @brief TODO: Describe exist.
+ * @param fatal TODO: Describe this parameter.
+ * @param conf TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 /* Try to open and parse a single config file.
  * Returns  1  if the file does not exist (non-fatal, keep looking).
  * Returns  0  on success.
@@ -161,6 +187,12 @@ conf_parse_file(const char *path, miniweb_conf_t *conf)
     return 0;
 }
 
+/**
+ * @brief TODO: Describe conf_load.
+ * @param path TODO: Describe this parameter.
+ * @param conf TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 int
 conf_load(const char *path, miniweb_conf_t *conf)
 {
@@ -205,6 +237,16 @@ conf_load(const char *path, miniweb_conf_t *conf)
     return 0;
 }
 
+/**
+ * @brief TODO: Describe conf_apply_cli.
+ * @param conf TODO: Describe this parameter.
+ * @param cli_port TODO: Describe this parameter.
+ * @param cli_bind TODO: Describe this parameter.
+ * @param cli_threads TODO: Describe this parameter.
+ * @param cli_max_conns TODO: Describe this parameter.
+ * @param cli_log_file TODO: Describe this parameter.
+ * @param cli_verbose TODO: Describe this parameter.
+ */
 void
 conf_apply_cli(miniweb_conf_t *conf,
                int cli_port,
@@ -222,6 +264,10 @@ conf_apply_cli(miniweb_conf_t *conf,
     if (cli_verbose)        conf->verbose   = cli_verbose;
 }
 
+/**
+ * @brief TODO: Describe conf_dump.
+ * @param conf TODO: Describe this parameter.
+ */
 void
 conf_dump(const miniweb_conf_t *conf)
 {

@@ -14,6 +14,13 @@ struct mw_db {
 };
 
 /**
+ * @brief TODO: Describe mw_db_open.
+ * @param path TODO: Describe this parameter.
+ * @param flags TODO: Describe this parameter.
+ * @param out_db TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
+/**
  * @brief Allocate and initialize a database handle.
  * @param path Database file path.
  * @param flags Open flags interpreted by the backend implementation.
@@ -37,6 +44,11 @@ mw_db_open(const char *path, int flags, struct mw_db **out_db)
 }
 
 /**
+ * @brief TODO: Describe mw_db_open.
+ * @param db TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
+/**
  * @brief Release a database handle.
  * @param db Database handle returned by mw_db_open().
  */
@@ -49,6 +61,12 @@ mw_db_close(struct mw_db *db)
 	free(db);
 }
 
+/**
+ * @brief TODO: Describe mw_db_exec_schema.
+ * @param db TODO: Describe this parameter.
+ * @param schema_sql TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 /**
  * @brief Execute schema bootstrap SQL on an opened database.
  * @param db Open database handle.

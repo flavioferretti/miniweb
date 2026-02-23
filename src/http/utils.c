@@ -18,6 +18,11 @@
 
 /* JSON string escaping — caller must free() */
 /**
+ * @brief TODO: Describe json_escape_string.
+ * @param src TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
+/**
  * @brief Json escape string.
  * @param src Parameter used by this function.
  * @return Returns 0 on success or a negative value on failure unless documented otherwise.
@@ -51,6 +56,10 @@ json_escape_string(const char *src)
 	return dest;
 }
 
+/**
+ * @brief TODO: Describe sanitize_string.
+ * @param s TODO: Describe this parameter.
+ */
 /* Replace characters unsafe for filesystem use with '_'.
  * Permits: alphanumeric, '.', '-', '_', '+' */
 /**
@@ -84,6 +93,15 @@ sanitize_string(char *s)
  * @return Malloc'd NUL-terminated output buffer, or NULL on failure.
  */
 /* src/http_utils.c */
+/**
+ * @brief TODO: Describe safe_popen_read_argv.
+ * @param path TODO: Describe this parameter.
+ * @param argv TODO: Describe this parameter.
+ * @param max_size TODO: Describe this parameter.
+ * @param timeout_seconds TODO: Describe this parameter.
+ * @param out_len TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 char *
 safe_popen_read_argv(const char *path, char *const argv[],
 					 size_t max_size, int timeout_seconds, size_t *out_len)
@@ -192,6 +210,12 @@ safe_popen_read_argv(const char *path, char *const argv[],
 }
 
 /* Convenience wrapper: run cmd through /bin/sh -c */
+/**
+ * @brief TODO: Describe safe_popen_read.
+ * @param cmd TODO: Describe this parameter.
+ * @param max_size TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 /**
  * @brief Safe popen read.
  * @param cmd Parameter used by this function.
