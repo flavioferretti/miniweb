@@ -27,7 +27,7 @@ static size_t template_cache_count = 0;
 static pthread_mutex_t template_cache_lock = PTHREAD_MUTEX_INITIALIZER;
 static time_t template_cache_last_refresh = 0;
 
-#define TEMPLATE_CACHE_TTL_SEC 5
+#define TEMPLATE_CACHE_TTL_SEC 60
 
 /**
  * @brief Read an entire file into a newly allocated NUL-terminated buffer.

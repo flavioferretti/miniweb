@@ -25,22 +25,22 @@ set -A ENDPOINT_IDS -- \
     "STATIC_HTML"    "STATIC_CSS"      "STATIC_JS"       "STATIC_IMG" \
     "PAGE_HOME"      "PAGE_DOCS"       "PAGE_NETWORKING" "PACKAGES_UI"    "API_ROOT" \
     "API_METRICS"    "API_NETWORKING" \
-    "API_PKG_SEARCH" "API_PKG_INFO"    "API_PKG_FILES" \
-    "MAN_SEARCH"     "MAN_HTML"        "MAN_HTML_EXT"    "MAN_MD"
+    "API_PKG_SEARCH" \
+    "MAN_HTML"        "MAN_HTML_EXT"    "MAN_MD"
 
 set -A ENDPOINT_URLS -- \
     "/static/test.html"                    "/static/css/custom.css"            "/static/js/theme_toggler.js"  "/static/assets/favicon.svg" \
     "/"                                    "/docs"                             "/networking"                  "/packages"                  "/apiroot" \
     "/api/metrics"                         "/api/networking" \
-    "/api/packages/search?q=curl"          "/api/packages/info?name=curl"      "/api/packages/files?name=curl" \
-    "/api/man/search?q=pledge"             "/man/system/1/ls"             "/man/system/1/ls.html"             "/man/system/1/ls.md"
+    "/api/packages/search?q=curl"    \
+    "/man/system/1/ls"             "/man/system/1/ls.html"             "/man/system/1/ls.md"
 
 set -A ENDPOINT_NAMES -- \
     "Static HTML"         "Static CSS"           "Static JS"             "Static Image" \
     "Home Dashboard"      "Documentation"        "Networking"            "Packages UI"          "API Index" \
     "System Metrics API"  "Network Info API" \
-    "Package Search"      "Package Info"         "Package Files" \
-    "Man Search"          "Man Page (HTML)"      "Man Page (.html)"      "Man Page (Markdown)"
+    "Package Search"      \
+    "Man Page (HTML)"      "Man Page (.html)"      "Man Page (Markdown)"
 
 # ---------------------------------------------------------------------------
 # Helper functions
