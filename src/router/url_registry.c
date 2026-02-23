@@ -3,13 +3,15 @@
 #include <string.h>
 #include <stdio.h>
 
-#include "../include/man.h"
-#include "../include/metrics.h"
-#include "../include/networking.h"
+#include "../include/miniweb/router/module_attach.h"
 #include "../include/urls.h"
 
 static struct route routes[MAX_ROUTES];
 static size_t route_count = 0;
+
+#define MAX_PREFIX_ROUTES 16
+static struct prefix_route prefix_routes[MAX_PREFIX_ROUTES];
+static size_t prefix_route_count = 0;
 
 static const struct view_route view_routes[] = {
 	{"GET", "/", "MiniWeb - Dashboard", "dashboard.html",
@@ -24,23 +26,42 @@ static const struct view_route view_routes[] = {
 	 "packages_extra_head.html", "packages_extra_js.html"},
 };
 
-/**
- * @brief Register view routes.
- */
-static void
-register_view_routes(void)
+static int
+url_registry_register(void *ctx, const char *method, const char *path,
+	route_handler_t handler)
 {
-	for (size_t i = 0; i < sizeof(view_routes) / sizeof(view_routes[0]); i++) {
-		register_route(view_routes[i].method, view_routes[i].path,
-				       view_template_handler);
-	}
+	(void)ctx;
+	register_route(method, path, handler);
+	return 0;
 }
 
-/**
- * @brief Register pkg api routes.
- */
-static void
-register_pkg_api_routes(void)
+static int
+views_attach_routes(struct router *r)
+{
+	for (size_t i = 0; i < sizeof(view_routes) / sizeof(view_routes[0]); i++) {
+		if (router_register(r, view_routes[i].method,
+		    view_routes[i].path, view_template_handler) != 0)
+			return -1;
+	}
+	if (router_register(r, "GET", "/favicon.ico", favicon_handler) != 0)
+		return -1;
+	return 0;
+}
+
+static int
+metrics_attach_routes(struct router *r)
+{
+	return router_register(r, "GET", "/api/metrics", metrics_handler);
+}
+
+static int
+networking_attach_routes(struct router *r)
+{
+	return router_register(r, "GET", "/api/networking", networking_api_handler);
+}
+
+static int
+packages_attach_routes(struct router *r)
 {
 	static const char *const pkg_paths[] = {
 		"/api/packages/search",
@@ -50,8 +71,11 @@ register_pkg_api_routes(void)
 		"/api/packages/list",
 	};
 
-	for (size_t i = 0; i < sizeof(pkg_paths) / sizeof(pkg_paths[0]); i++)
-		register_route("GET", pkg_paths[i], pkg_api_handler);
+	for (size_t i = 0; i < sizeof(pkg_paths) / sizeof(pkg_paths[0]); i++) {
+		if (router_register(r, "GET", pkg_paths[i], pkg_api_handler) != 0)
+			return -1;
+	}
+	return 0;
 }
 
 /**
@@ -69,6 +93,20 @@ register_route(const char *method, const char *path, route_handler_t handler)
 		routes[route_count].handler = handler;
 		route_count++;
 	}
+}
+
+void
+register_prefix_route(const char *method, const char *prefix,
+	int min_slashes, route_handler_t handler)
+{
+	if (prefix_route_count >= MAX_PREFIX_ROUTES)
+		return;
+
+	prefix_routes[prefix_route_count].method = method;
+	prefix_routes[prefix_route_count].prefix = prefix;
+	prefix_routes[prefix_route_count].min_slashes = min_slashes;
+	prefix_routes[prefix_route_count].handler = handler;
+	prefix_route_count++;
 }
 
 /**
@@ -95,12 +133,43 @@ find_view_route(const char *method, const char *path)
 void
 init_routes(void)
 {
-	register_view_routes();
+	struct router r = {
+		.register_fn = url_registry_register,
+		.ctx = NULL,
+	};
+	struct miniweb_module modules[] = {
+		{
+			.name = "views",
+			.attach_routes = views_attach_routes,
+			.enabled_by_default = 1,
+		},
+		{
+			.name = "metrics",
+			.attach_routes = metrics_attach_routes,
+			.enabled_by_default = 1,
+		},
+		{
+			.name = "networking",
+			.attach_routes = networking_attach_routes,
+			.enabled_by_default = 1,
+		},
+		{
+			.name = "packages",
+			.attach_routes = packages_attach_routes,
+			.enabled_by_default = 1,
+		},
+	};
 
-	register_route("GET", "/favicon.ico", favicon_handler);
-	register_route("GET", "/api/metrics", metrics_handler);
-	register_route("GET", "/api/networking", networking_api_handler);
-	register_pkg_api_routes();
+	route_count = 0;
+	prefix_route_count = 0;
+
+	(void)miniweb_module_attach_enabled(&r, modules,
+	    sizeof(modules) / sizeof(modules[0]), NULL);
+
+	register_prefix_route("GET", "/man/", 2, man_render_handler);
+	register_prefix_route("GET", "/api/man", 0, man_api_handler);
+	register_prefix_route("GET", "/api/packages", 0, pkg_api_handler);
+	register_prefix_route("GET", "/static/", 0, static_handler);
 }
 
 /**
@@ -119,30 +188,25 @@ route_match(const char *method, const char *path)
 			return routes[i].handler;
 	}
 
-	/* 2. Dynamic routes (GET only) */
-	if (strcmp(method, "GET") == 0) {
-		/* /man/{area}/{section}/{page}[.fmt] */
-		if (strncmp(path, "/man/", 5) == 0) {
-			const char *p = path + 5;
-			int slashes = 0;
-			while (*p)
-				if (*p++ == '/')
-					slashes++;
-			if (slashes >= 2)
-				return man_render_handler;
-		}
+	/* 2. Prefix match */
+	for (size_t i = 0; i < prefix_route_count; i++) {
+		const struct prefix_route *pr = &prefix_routes[i];
+		const char *p;
+		int slashes = 0;
 
-		/* /api/man/... */
-		if (strncmp(path, "/api/man", 8) == 0)
-			return man_api_handler;
+		if (strcmp(pr->method, method) != 0)
+			continue;
+		if (strncmp(path, pr->prefix, strlen(pr->prefix)) != 0)
+			continue;
+		if (pr->min_slashes <= 0)
+			return pr->handler;
 
-		/* /api/packages/... */
-		if (strncmp(path, "/api/packages", 13) == 0)
-			return pkg_api_handler;
-
-		/* /static/... */
-		if (strncmp(path, "/static/", 8) == 0)
-			return static_handler;
+		p = path + strlen(pr->prefix);
+		while (*p)
+			if (*p++ == '/')
+				slashes++;
+		if (slashes >= pr->min_slashes)
+			return pr->handler;
 	}
 
 	return NULL;
@@ -175,9 +239,9 @@ route_allow_methods(const char *path, char *buf, size_t buf_len)
 			continue;
 
 		int wrote = snprintf(buf + used, buf_len - used,
-								 "%s%s",
-								 count > 0 ? ", " : "",
-								 routes[i].method);
+			"%s%s",
+			count > 0 ? ", " : "",
+			routes[i].method);
 		if (wrote < 0 || (size_t)wrote >= buf_len - used)
 			return count;
 
@@ -185,14 +249,16 @@ route_allow_methods(const char *path, char *buf, size_t buf_len)
 		count++;
 	}
 
-	if (strncmp(path, "/man/", 5) == 0 ||
-	    strncmp(path, "/api/man", 8) == 0 ||
-	    strncmp(path, "/api/packages", 13) == 0 ||
-	    strncmp(path, "/static/", 8) == 0) {
-		if (count == 0 && buf_len > 3) {
-			strlcpy(buf, "GET", buf_len);
+	for (size_t i = 0; i < prefix_route_count; i++) {
+		if (strncmp(path, prefix_routes[i].prefix,
+		    strlen(prefix_routes[i].prefix)) != 0)
+			continue;
+		if (count == 0 && buf_len > 3)
+			(void)snprintf(buf, buf_len, "%s",
+			    prefix_routes[i].method);
+		if (count == 0)
 			count = 1;
-		}
+		break;
 	}
 
 	return count;
@@ -209,24 +275,21 @@ route_path_known(const char *path)
 			return 1;
 	}
 
-	if (strncmp(path, "/man/", 5) == 0) {
-		const char *p = path + 5;
+	for (size_t i = 0; i < prefix_route_count; i++) {
+		if (strncmp(path, prefix_routes[i].prefix,
+		    strlen(prefix_routes[i].prefix)) != 0)
+			continue;
+		if (prefix_routes[i].min_slashes <= 0)
+			return 1;
+
+		const char *p = path + strlen(prefix_routes[i].prefix);
 		int slashes = 0;
 		while (*p)
 			if (*p++ == '/')
 				slashes++;
-		if (slashes >= 2)
+		if (slashes >= prefix_routes[i].min_slashes)
 			return 1;
 	}
-
-	if (strncmp(path, "/api/man", 8) == 0)
-		return 1;
-
-	if (strncmp(path, "/api/packages", 13) == 0)
-		return 1;
-
-	if (strncmp(path, "/static/", 8) == 0)
-		return 1;
 
 	return 0;
 }

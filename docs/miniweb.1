@@ -719,6 +719,11 @@ wrapper.
 .It Pa src/router/url_registry.c
 Route table, view routes,
 .Fn init_routes .
+Route initialization uses a module attach API backed by
+.Vt struct miniweb_module
+and
+.Fn router_register
+so each module owns its endpoint bindings.
 .It Pa src/modules/man/
 Man page rendering and JSON API.
 .It Pa src/modules/metrics/
@@ -738,21 +743,19 @@ Schema migration and transaction stubs.
 Prepared statement stubs.
 .El
 .Sh ENTERPRISE REFACTOR ROADMAP
-.Bl -tag -width "Phase 5"
-.It Phase 0
-Test freeze / safety net.
+.Bl -tag -width "Phase 6"
 .It Phase 1
-Extract core infrastructure (conf, log, heartbeat).
-Completed.
-.It Phase 2
 Module attach API and router separation.
-In progress.
-.It Phase 3
+In progress (module-driven route attachment is now active).
+.It Phase 2
 Single global heartbeat scheduler.
-API is ready; modules are not yet migrated.
-.It Phase 4
+API is ready; metrics and networking migration completion is pending.
+.It Phase 3
 Domain decomposition of metrics, networking, man, packages.
 Ongoing.
+.It Phase 4
+Documentation and architecture transition (docs/miniweb.1 + README.md, module porting to enterprise paradigm).
+In progress.
 .It Phase 5
 SQLite3 storage integration.
 Stub interfaces are defined.
