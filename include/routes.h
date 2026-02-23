@@ -5,6 +5,8 @@
 
 #include "http_handler.h"
 
+struct router;
+
 /* route_handler_t is an alias for http_handler_t — same signature,
  * one canonical type defined in http_handler.h. */
 typedef http_handler_t route_handler_t;
@@ -38,5 +40,7 @@ int man_api_handler(http_request_t *req);
 
 /** Serve /api/packages JSON endpoints. */
 int pkg_api_handler(http_request_t *req);
+
+int views_module_attach_routes(struct router *r);
 
 #endif /* ROUTES_H */

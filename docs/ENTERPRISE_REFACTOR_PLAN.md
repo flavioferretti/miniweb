@@ -321,18 +321,19 @@ You can declare miniweb "enterprise-ready" when:
 
 ### Completed in this stage
 
-1. **Module attach contract is active** via `router` abstraction and `miniweb_module` wiring.
-2. **Heartbeat scheduler abstraction exists** and is used as the single periodic task control plane.
+1. **Module attach contract is active and migrated**: views, metrics, networking, man, and packages now attach routes via module callbacks (`router_register` / `router_register_prefix`) instead of central hard-coded route lists.
+2. **Heartbeat scheduler is active as the single periodic control plane** for 1-second metrics and networking sampling tasks.
 3. **SQLite storage facade scaffolding exists** under `src/storage` and `include/miniweb/storage`.
-4. **Source tree is now capability-oriented** (`core`, `http`, `router`, `modules`, `render`, `storage`).
+4. **Source tree is capability-oriented** (`core`, `http`, `router`, `modules`, `render`, `storage`) with router/module boundaries now enforced in route initialization.
 
 ### Remaining gaps before enterprise completion
 
 1. Move remaining legacy includes to `include/miniweb/**` only and remove compatibility headers.
 2. Complete SQLite backend implementation (`sqlite3_open_v2`, prepared statement execution, error mapping).
 3. Add module-level enable/disable flags loaded from config and persisted in SQLite.
-4. Add integration tests for module toggles and heartbeat task lifecycle semantics.
-5. Finish Doxygen coverage and enforce via CI gate.
+4. Expand domain decomposition inside each module (split collector/service/json files for metrics, networking, man, and packages).
+5. Add integration tests for module toggles and heartbeat task lifecycle semantics.
+6. Finish Doxygen coverage and enforce via CI gate.
 
 ### Code review (focus areas)
 

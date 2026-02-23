@@ -9,6 +9,7 @@
 #include <sys/proc.h>
 #include <sys/swap.h>
 #include <sys/utsname.h>  /* Required for uname() and struct utsname. */
+#include "../../../include/miniweb/router/router.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -1387,4 +1388,10 @@ metrics_handler(http_request_t *req)
 	http_response_free(resp);
 
 	return ret;
+}
+
+int
+metrics_module_attach_routes(struct router *r)
+{
+	return router_register(r, "GET", "/api/metrics", metrics_handler);
 }

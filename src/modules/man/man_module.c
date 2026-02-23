@@ -9,6 +9,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <time.h>
+#include "../../../include/miniweb/router/router.h"
 
 #include "../include/config.h"
 #include "../include/http_handler.h"
@@ -963,4 +964,12 @@ man_render_handler(http_request_t *req)
 	http_response_free(resp);
 
 	return ret;
+}
+
+int
+man_module_attach_routes(struct router *r)
+{
+	if (router_register_prefix(r, "GET", "/man/", 2, man_render_handler) != 0)
+		return -1;
+	return router_register_prefix(r, "GET", "/api/man", 0, man_api_handler);
 }

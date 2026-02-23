@@ -319,11 +319,13 @@ Allowed` with an `Allow` header built by `route_allow_methods`. Otherwise a
 
 ### Adding an API endpoint
 
-Register a new handler function in `src/router/url_registry.c` inside
-`init_routes()`:
+Add an `attach_routes` callback in the relevant module and register the route through the router facade:
 
 ```c
-register_route("GET", "/api/myfeature", my_feature_handler);
+int my_module_attach_routes(struct router *r)
+{
+    return router_register(r, "GET", "/api/myfeature", my_feature_handler);
+}
 ```
 
 The handler must have the signature `int handler(http_request_t *req)` and
@@ -362,10 +364,8 @@ The route will simply stop matching and requests to it will receive 404.
 The module attach API (`src/router/module_attach.c`) provides
 `miniweb_module_attach_enabled()`, which iterates a `miniweb_module` array
 and, for each entry with `enabled_by_default` set to non-zero, calls the
-module's `init()` and `attach_routes()` callbacks. This is the foundation for
-the planned plug-in architecture: a module declares its routes at attach time
-rather than in `init_routes()`. The API is currently wired but modules are not
-yet migrated onto it.
+module's `init()` and `attach_routes()` callbacks. Metrics, networking, man,
+packages, and views are now attached through this contract.
 
 ---
 
@@ -440,10 +440,8 @@ static assets:
 - `heartbeat_stop()` sets a stop flag; the thread exits on the next iteration.
 - The heartbeat thread is detached and does not need to be joined.
 
-The scheduler is designed to replace per-module sampler threads (currently
-used by the metrics and networking modules) with a single coordinated loop
-in a future refactor phase. It is present in the codebase and ready for use
-but modules have not yet been migrated onto it.
+The scheduler is active and currently drives the 1-second samplers used by
+the metrics and networking modules through heartbeat task registration.
 
 ---
 

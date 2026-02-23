@@ -3,6 +3,8 @@
 #define MAN_H
 
 #include "http_handler.h"
+
+struct router;
 #include <stddef.h>
 
 /* --- Core API Functions --- */
@@ -38,5 +40,7 @@ int man_render_handler(http_request_t *req);
 
 /** Handle JSON API requests for manual page discovery/search. */
 int man_api_handler(http_request_t *req);
+
+int man_module_attach_routes(struct router *r);
 
 #endif /* MAN_H */

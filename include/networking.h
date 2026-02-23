@@ -6,6 +6,8 @@
 #include <netinet/in.h>
 #include "http_handler.h"
 
+struct router;
+
 /* --- Data Structures --- */
 
 typedef struct {
@@ -83,5 +85,7 @@ int networking_api_handler(http_request_t *req);
 
 /* Optional compatibility alias. */
 #define networking_page_handler networking_handler
+
+int networking_module_attach_routes(struct router *r);
 
 #endif /* NETWORKING_H */
