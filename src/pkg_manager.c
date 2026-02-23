@@ -1,7 +1,9 @@
 #include <ctype.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "../include/http_handler.h"
 #include "../include/http_utils.h"
@@ -10,6 +12,58 @@
 #define PKG_JSON_MAX (1024 * 1024)
 #define PKG_CMD_MAX_OUTPUT  (8 * 1024 * 1024)
 #define PKG_WHICH_TIMEOUT   60   /* pkg_info -E scans all packages: can take ~30s */
+#define PKG_SEARCH_CACHE_SIZE 64
+#define PKG_SEARCH_CACHE_TTL_SEC 30
+
+typedef struct {
+	char *query;
+	char *json;
+	time_t created_at;
+	time_t last_used_at;
+} pkg_search_cache_entry_t;
+
+static pkg_search_cache_entry_t g_pkg_search_cache[PKG_SEARCH_CACHE_SIZE];
+static pthread_mutex_t g_pkg_search_cache_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static void
+pkg_search_cache_store_locked(const char *query, const char *json, time_t now)
+{
+	int slot = -1;
+	time_t oldest = now;
+
+	for (int i = 0; i < PKG_SEARCH_CACHE_SIZE; i++) {
+		if (g_pkg_search_cache[i].query &&
+			strcmp(g_pkg_search_cache[i].query, query) == 0) {
+			slot = i;
+			break;
+		}
+		if (!g_pkg_search_cache[i].query) {
+			slot = i;
+			break;
+		}
+		if (g_pkg_search_cache[i].last_used_at <= oldest) {
+			oldest = g_pkg_search_cache[i].last_used_at;
+			slot = i;
+		}
+	}
+
+	if (slot < 0)
+		return;
+
+	free(g_pkg_search_cache[slot].query);
+	free(g_pkg_search_cache[slot].json);
+	g_pkg_search_cache[slot].query = strdup(query);
+	g_pkg_search_cache[slot].json = strdup(json);
+	if (!g_pkg_search_cache[slot].query || !g_pkg_search_cache[slot].json) {
+		free(g_pkg_search_cache[slot].query);
+		free(g_pkg_search_cache[slot].json);
+		memset(&g_pkg_search_cache[slot], 0, sizeof(g_pkg_search_cache[slot]));
+		return;
+	}
+	g_pkg_search_cache[slot].created_at = now;
+	g_pkg_search_cache[slot].last_used_at = now;
+}
+
 
 /**
  * @brief Is safe pkg name.
@@ -137,15 +191,32 @@ pkg_search_json(const char *query)
 	char *json;
 	size_t offset = 0;
 	int first = 1;
+	time_t now = time(NULL);
 
 	if (!query || strlen(query) < 1)
 		return strdup("{\"query\":\"\",\"packages\":[]}");
+
+	pthread_mutex_lock(&g_pkg_search_cache_lock);
+	for (int i = 0; i < PKG_SEARCH_CACHE_SIZE; i++) {
+		if (!g_pkg_search_cache[i].query || !g_pkg_search_cache[i].json)
+			continue;
+		if (strcmp(g_pkg_search_cache[i].query, query) != 0)
+			continue;
+		if ((now - g_pkg_search_cache[i].created_at) >
+			PKG_SEARCH_CACHE_TTL_SEC)
+			break;
+		g_pkg_search_cache[i].last_used_at = now;
+		char *cached = strdup(g_pkg_search_cache[i].json);
+		pthread_mutex_unlock(&g_pkg_search_cache_lock);
+		return cached;
+	}
+	pthread_mutex_unlock(&g_pkg_search_cache_lock);
 
 	output = NULL;
 	if (is_safe_pkg_name(query)) {
 		char *const argv[] = {"pkg_info", "-Q", (char *)query, NULL};
 		output = safe_popen_read_argv("/usr/sbin/pkg_info", argv,
-									  PKG_CMD_MAX_OUTPUT, 5, NULL);
+							  PKG_CMD_MAX_OUTPUT, 5, NULL);
 	}
 
 	json = malloc(PKG_JSON_MAX);
@@ -159,7 +230,7 @@ pkg_search_json(const char *query)
 		query_escaped = strdup("");
 
 	offset += snprintf(json + offset, PKG_JSON_MAX - offset,
-					   "{\"query\":\"%s\",\"packages\":[", query_escaped);
+				   "{\"query\":\"%s\",\"packages\":[", query_escaped);
 	free(query_escaped);
 
 	if (output) {
@@ -168,13 +239,13 @@ pkg_search_json(const char *query)
 
 		while (line && offset < PKG_JSON_MAX - 256) {
 			line[strcspn(line, "\r")] = '\0';
-			/* pkg_info -Q appends " (installed)" — strip it */
 			char *tag = strstr(line, " (installed)");
-			if (tag) *tag = '\0';
+			if (tag)
+				*tag = '\0';
 			if (*line != '\0') {
 				char *line_escaped = json_escape_string(line);
 				offset += snprintf(json + offset, PKG_JSON_MAX - offset,
-								   "%s\"%s\"", first ? "" : ",",
+							   "%s\"%s\"", first ? "" : ",",
 					   line_escaped ? line_escaped : "");
 				free(line_escaped);
 				first = 0;
@@ -185,6 +256,10 @@ pkg_search_json(const char *query)
 
 	offset += snprintf(json + offset, PKG_JSON_MAX - offset, "]}");
 	free(output);
+
+	pthread_mutex_lock(&g_pkg_search_cache_lock);
+	pkg_search_cache_store_locked(query, json, now);
+	pthread_mutex_unlock(&g_pkg_search_cache_lock);
 
 	return json;
 }
