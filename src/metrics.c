@@ -25,6 +25,7 @@
 #include "../include/http_handler.h"
 #include "../include/http_utils.h"
 #include "../include/log.h"
+#include "../include/heartbeat.h"
 
 #define JSON_BUFFER_SIZE 65536
 #define MB (1024 * 1024)
@@ -75,7 +76,6 @@ typedef struct {
 } MetricRing;
 
 static MetricRing g_metrics_ring;
-static pthread_t g_metrics_thread;
 static pthread_once_t g_metrics_once = PTHREAD_ONCE_INIT;
 static int g_metrics_ring_ready = 0;
 
@@ -84,7 +84,7 @@ static void ring_push(MetricRing *r, const MetricSample *s);
 static size_t ring_last(MetricRing *r, size_t n, MetricSample *out);
 static void ring_free(MetricRing *r);
 static void metrics_ring_bootstrap(void);
-static void *metrics_sampler_thread(void *arg);
+static void metrics_heartbeat_cb(void *ctx);
 static void metrics_take_sample(MetricSample *sample);
 static int metrics_read_cpu_ticks(uint64_t *total_ticks, uint64_t *idle_ticks);
 static void append_metrics_history_json(char *buffer, size_t size,
@@ -255,22 +255,18 @@ metrics_take_sample(MetricSample *sample)
 }
 
 /**
- * @brief Background thread entrypoint that samples metrics every second.
- * @param arg Unused thread argument.
- * @return Always returns NULL.
+ * @brief Heartbeat callback that samples metrics and refreshes snapshot.
+ * @param ctx Unused callback context.
  */
-static void *
-metrics_sampler_thread(void *arg)
+static void
+metrics_heartbeat_cb(void *ctx)
 {
-	(void)arg;
-	for (;;) {
-		MetricSample sample;
-		metrics_take_sample(&sample);
-		ring_push(&g_metrics_ring, &sample);
-		metrics_snapshot_update();
-		sleep(1);
-	}
-	return NULL;
+	MetricSample sample;
+
+	(void)ctx;
+	metrics_take_sample(&sample);
+	ring_push(&g_metrics_ring, &sample);
+	metrics_snapshot_update();
 }
 
 /**
@@ -283,15 +279,24 @@ metrics_ring_bootstrap(void)
 		LOG("Failed to allocate 1MB metrics ring");
 		return;
 	}
-	if (pthread_create(&g_metrics_thread, NULL,
-		metrics_sampler_thread, NULL) != 0) {
-		LOG("Failed to start metrics sampler thread");
+	if (heartbeat_register(&(struct hb_task){
+		.name = "metrics.sample",
+		.period_sec = 1,
+		.initial_delay_sec = 0,
+		.cb = metrics_heartbeat_cb,
+		.ctx = NULL,
+	}) != 0) {
+		LOG("Failed to register metrics heartbeat task");
+		ring_free(&g_metrics_ring);
+		return;
+	}
+	if (heartbeat_start() != 0) {
+		LOG("Failed to start heartbeat scheduler");
 		ring_free(&g_metrics_ring);
 		return;
 	}
 	g_metrics_ring_ready = 1;
 	metrics_snapshot_update();
-	pthread_detach(g_metrics_thread);
 }
 
 /**
