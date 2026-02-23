@@ -175,6 +175,51 @@ Default:
 Log file path.
 Empty or absent means stderr.
 .El
+
+.Sh PERFORMANCE
+For best throughput and tail latency, tune worker and cache settings together.
+.Pp
+Recommended tuning order:
+.Bl -enum -compact
+.It
+Increase
+.Cm threads
+incrementally while observing latency and CPU saturation.
+.It
+Set
+.Cm max_conns
+below host descriptor/memory limits to avoid overload collapse.
+.It
+Prefer cache-friendly assets and templates:
+.Bl -bullet -compact
+.It
+Template cache and hot-view cache reduce repeated render costs.
+.It
+Sharded static file cache reduces disk I/O for hot assets.
+.It
+Metrics/networking periodic snapshots avoid expensive rebuild on every request.
+.It
+Packages and man endpoints use query/result caches to reduce subprocess load.
+.El
+.It
+Move periodic collectors into heartbeat tasks with explicit periods.
+.It
+When SQLite backend is enabled, reuse prepared statements and group writes in
+transactions to reduce fsync overhead.
+.El
+.Pp
+Current SQLite facade functions are:
+.Fn mw_db_open ,
+.Fn mw_db_exec_schema ,
+.Fn mw_stmt_prepare ,
+.Fn mw_stmt_step ,
+and transaction helpers
+.Fn mw_tx_begin /
+.Fn mw_tx_commit /
+.Fn mw_tx_rollback .
+These APIs are designed for migration of feature flags, warm caches, and
+historical snapshots.
+
 .Sh RUNTIME ARCHITECTURE
 .Nm
 uses a two-tier threading model.

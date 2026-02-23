@@ -37,9 +37,10 @@ describes the **current implemented state**.
 16. [OpenBSD security hardening](#openbsd-security-hardening)
 17. [Logging](#logging)
 18. [Endpoints reference](#endpoints-reference)
-19. [Source layout](#source-layout)
-20. [Enterprise refactor roadmap](#enterprise-refactor-roadmap)
-21. [Development standards](#development-standards)
+19. [Performance tuning guide](#performance-tuning-guide)
+20. [Source layout](#source-layout)
+21. [Enterprise refactor roadmap](#enterprise-refactor-roadmap)
+22. [Development standards](#development-standards)
 
 ---
 
@@ -593,6 +594,50 @@ All log lines are prefixed with a local-time timestamp and a level tag:
 | GET | `/favicon.ico` | Favicon (served from `static/assets/favicon.svg`) |
 
 ---
+
+
+## Performance tuning guide
+
+MiniWeb already uses multiple caching layers and bounded worker concurrency. For
+enterprise workloads, tune performance in this order:
+
+1. **Connection and worker sizing**
+   - Increase `threads` gradually and monitor request latency.
+   - Keep `max_conns` below system fd and memory limits.
+2. **Cache efficiency**
+   - Template cache: keep `templates_dir` on fast local storage; avoid excessive
+     template churn so TTL refreshes are infrequent.
+   - Hot-view cache (`g_hot_view_cache`): add only truly hot views to avoid
+     wasting memory on low-hit pages.
+   - Static file cache (`src/http/response.c`): keep frequently requested assets
+     below `FILE_CACHE_MAX_BYTES` to maximize cache hit rate.
+   - Metrics snapshot cache: avoid serializing large JSON payloads on every API
+     call by reusing periodic snapshots.
+   - Package/man query caches: normalize query strings to increase reuse.
+3. **Heartbeat scheduling**
+   - Run expensive samplers at >=1s and lighter maintenance at 30s/60s.
+   - Avoid long callbacks in heartbeat tasks; split heavy work into smaller
+     independent callbacks.
+4. **SQLite3 facilities (current and target usage)**
+   - Use one opened handle per subsystem and reuse prepared statements.
+   - Group writes with transactions (`mw_tx_begin/commit`) to reduce fsync cost.
+   - Keep schema SQL versioned in `sqlite_schema` migrations.
+   - Enable WAL mode and tuned busy timeout once the runtime backend is fully
+     wired (planned migration step).
+   - Persist module flags and warm caches so restarts avoid cold-start penalties.
+
+### Caching facilities summary
+
+- **Template cache**: file content cache for HTML fragments with TTL refresh.
+- **Hot-view cache**: short-lived rendered HTML cache for top pages.
+- **Static file cache**: sharded cache for static assets with size and admission
+  control.
+- **Metrics cache**: periodic snapshot/ring data to decouple collection from API
+  request rate.
+- **Networking cache**: periodic ring snapshots for networking endpoints.
+- **Package search cache**: query-result cache with TTL and recency-based
+  replacement.
+- **Man hot cache**: short-lived cache to avoid repeated heavy mandoc/man calls.
 
 ## Source layout
 

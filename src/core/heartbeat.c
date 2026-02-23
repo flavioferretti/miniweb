@@ -8,8 +8,11 @@
 #define HB_MAX_TASKS 32
 
 typedef struct {
+	/** Registered task metadata copied at registration time. */
 	struct hb_task task;
+	/** Next absolute execution time for this task. */
 	time_t next_run;
+	/** Slot activity flag. */
 	int active;
 } hb_slot_t;
 
@@ -19,8 +22,17 @@ static int g_hb_running;
 static pthread_t g_hb_thread;
 static pthread_mutex_t g_hb_lock = PTHREAD_MUTEX_INITIALIZER;
 
+/**
+ * @brief Run the periodic scheduler loop.
+ * @param arg Unused thread argument.
+ * @return Always returns NULL when the scheduler exits.
+ */
 static void *heartbeat_thread(void *arg);
 
+/**
+ * @brief Initialize global heartbeat state.
+ * @return Always returns 0.
+ */
 int
 heartbeat_init(void)
 {
@@ -33,6 +45,11 @@ heartbeat_init(void)
 	return 0;
 }
 
+/**
+ * @brief Register a new periodic callback.
+ * @param task Task descriptor containing name, period, callback and context.
+ * @return 0 on success, -1 on invalid input or when no slot is available.
+ */
 int
 heartbeat_register(const struct hb_task *task)
 {
@@ -67,6 +84,10 @@ heartbeat_register(const struct hb_task *task)
 	return -1;
 }
 
+/**
+ * @brief Start the heartbeat thread if it is not already running.
+ * @return 0 on success, -1 on thread creation failure.
+ */
 int
 heartbeat_start(void)
 {
@@ -89,6 +110,9 @@ heartbeat_start(void)
 	return 0;
 }
 
+/**
+ * @brief Stop the heartbeat scheduler loop.
+ */
 void
 heartbeat_stop(void)
 {
@@ -97,6 +121,11 @@ heartbeat_stop(void)
 	pthread_mutex_unlock(&g_hb_lock);
 }
 
+/**
+ * @brief Thread entry-point that dispatches due heartbeat tasks.
+ * @param arg Unused thread argument.
+ * @return Always NULL.
+ */
 static void *
 heartbeat_thread(void *arg)
 {
