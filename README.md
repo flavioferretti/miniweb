@@ -644,7 +644,7 @@ make DEBUG=1
 
 ## Roadmap
 
-- [ ] Add `Allow` header generation for `405 Method Not Allowed` responses on known paths.
+- [x] Add `Allow` header generation for `405 Method Not Allowed` responses on known paths.
 - [ ] Add conditional HTTP caching support (`ETag`/`If-None-Match`, `Last-Modified`/`If-Modified-Since`) for static and cached man assets.
 - [ ] Add cache observability counters (static cache hit/miss/admission/eviction and man cache hit/miss) under `/api/metrics`.
 - [ ] Add live streaming endpoint for metrics updates (SSE or WebSocket) to reduce polling overhead.
