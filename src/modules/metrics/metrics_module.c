@@ -1605,5 +1605,9 @@ metrics_handler(http_request_t *req)
 int
 metrics_module_attach_routes(struct router *r)
 {
-	return router_register(r, "GET", "/api/metrics", metrics_handler);
+	if (router_register(r, "GET", "/api/metrics", metrics_handler) != 0)
+		return -1;
+
+	/* Compatibility alias for clients that call singular form. */
+	return router_register(r, "GET", "/api/metric", metrics_handler);
 }
