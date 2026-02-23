@@ -146,3 +146,36 @@ route_match(const char *method, const char *path)
 
 	return NULL;
 }
+
+int
+route_path_known(const char *path)
+{
+	if (!path)
+		return 0;
+
+	for (size_t i = 0; i < route_count; i++) {
+		if (strcmp(routes[i].path, path) == 0)
+			return 1;
+	}
+
+	if (strncmp(path, "/man/", 5) == 0) {
+		const char *p = path + 5;
+		int slashes = 0;
+		while (*p)
+			if (*p++ == '/')
+				slashes++;
+		if (slashes >= 2)
+			return 1;
+	}
+
+	if (strncmp(path, "/api/man", 8) == 0)
+		return 1;
+
+	if (strncmp(path, "/api/packages", 13) == 0)
+		return 1;
+
+	if (strncmp(path, "/static/", 8) == 0)
+		return 1;
+
+	return 0;
+}

@@ -487,46 +487,50 @@ worker_thread(void *arg)
 			if (parse_request_line(conn->buffer,
 				method, path, version) == 0) {
 				int keep_alive = request_keep_alive(conn->buffer, version);
+				int path_known = route_path_known(path);
 
 				/* We must advertise "Connection: close" on the final request
 				 * we are willing to serve on this socket, otherwise clients can
 				 * wait a long time before retrying follow-up static assets. */
 				if (conn->requests_served >= MAX_KEEPALIVE_REQUESTS)
 					keep_alive = 0;
-			http_handler_t handler = route_match(method, path);
-			if (handler) {
-				http_request_t req = {
-					.fd          = fd,
-					.method      = method,
-					.url         = path,
-					.version     = version,
-					.keep_alive  = keep_alive,
-					.buffer      = conn->buffer,
-					.buffer_len  = conn->bytes_read,
-					.client_addr = &conn->addr,
-				};
-				handler(&req);
-				keep_alive = req.keep_alive;
-				if (keep_alive && try_rearm_keepalive(conn))
-					close_conn = 0;
-			} else {
-				http_request_t req = {
-					.fd          = fd,
-					.method      = method,
-					.url         = path,
-					.version     = version,
-					.keep_alive  = keep_alive,
-					.buffer      = conn->buffer,
-					.buffer_len  = conn->bytes_read,
-					.client_addr = &conn->addr,
-				};
-				http_send_error(&req, 404, "Not Found");
-				if (req.keep_alive && try_rearm_keepalive(conn))
-					close_conn = 0;
-			}
+				http_handler_t handler = route_match(method, path);
+				if (handler) {
+					http_request_t req = {
+						.fd          = fd,
+						.method      = method,
+						.url         = path,
+						.version     = version,
+						.keep_alive  = keep_alive,
+						.buffer      = conn->buffer,
+						.buffer_len  = conn->bytes_read,
+						.client_addr = &conn->addr,
+					};
+					handler(&req);
+					keep_alive = req.keep_alive;
+					if (keep_alive && try_rearm_keepalive(conn))
+						close_conn = 0;
 				} else {
-					send_error_response(fd, 400, "Bad Request");
+					http_request_t req = {
+						.fd          = fd,
+						.method      = method,
+						.url         = path,
+						.version     = version,
+						.keep_alive  = keep_alive,
+						.buffer      = conn->buffer,
+						.buffer_len  = conn->bytes_read,
+						.client_addr = &conn->addr,
+					};
+					if (path_known)
+						http_send_error(&req, 405, "Method Not Allowed");
+					else
+						http_send_error(&req, 404, "Not Found");
+					if (req.keep_alive && try_rearm_keepalive(conn))
+						close_conn = 0;
 				}
+			} else {
+					send_error_response(fd, 400, "Bad Request");
+			}
 		}
 
 		if (close_conn) {

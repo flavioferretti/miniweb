@@ -31,6 +31,9 @@ void init_routes(void);
 /** Return the matching handler for method/path, or NULL when not found. */
 route_handler_t route_match(const char *method, const char *path);
 
+/** Return non-zero when the path exists for any supported method. */
+int route_path_known(const char *path);
+
 /** Register one method/path to handler mapping into the route table. */
 void register_route(const char *method, const char *path,
                                route_handler_t handler);

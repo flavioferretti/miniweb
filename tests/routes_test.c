@@ -41,6 +41,10 @@ int main(void)
 
 	/* Negative cases */
 	assert(route_match("POST", "/")        == NULL);
+	assert(route_path_known("/")             == 1);
+	assert(route_path_known("/api/man/search") == 1);
+	assert(route_path_known("/static/css/custom.css") == 1);
+	assert(route_path_known("/missing")      == 0);
 	assert(route_match("GET",  "/missing") == NULL);
 	assert(route_match("GET",  "/man/x")   == NULL);
 

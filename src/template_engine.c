@@ -5,7 +5,9 @@
 #include <string.h>
 #include <dirent.h>
 #include <limits.h>
+#include <pthread.h>
 #include <sys/stat.h>
+#include <time.h>
 
 #include "../include/template_engine.h"
 #include "../include/config.h"
@@ -17,10 +19,15 @@ typedef struct template_entry {
 	char *filename;
 	char *content;
 	size_t len;
+	time_t mtime;
 } template_entry_t;
 
 static template_entry_t *template_cache = NULL;
 static size_t template_cache_count = 0;
+static pthread_mutex_t template_cache_lock = PTHREAD_MUTEX_INITIALIZER;
+static time_t template_cache_last_refresh = 0;
+
+#define TEMPLATE_CACHE_TTL_SEC 5
 
 /**
  * @brief Read an entire file into a newly allocated NUL-terminated buffer.
@@ -79,6 +86,23 @@ read_file_content(const char *path, char **content)
 void
 template_cache_cleanup(void)
 {
+	pthread_mutex_lock(&template_cache_lock);
+
+	for (size_t i = 0; i < template_cache_count; i++) {
+		free(template_cache[i].filename);
+		free(template_cache[i].content);
+	}
+	free(template_cache);
+	template_cache = NULL;
+	template_cache_count = 0;
+	template_cache_last_refresh = 0;
+
+	pthread_mutex_unlock(&template_cache_lock);
+}
+
+static void
+template_cache_cleanup_locked(void)
+{
 	for (size_t i = 0; i < template_cache_count; i++) {
 		free(template_cache[i].filename);
 		free(template_cache[i].content);
@@ -95,7 +119,7 @@ template_cache_cleanup(void)
  * @return Returns 0 on success or -1 on failure.
  */
 static int
-add_template_to_cache(const char *filename, const char *path)
+add_template_to_cache(const char *filename, const char *path, time_t mtime)
 {
 	char *content = NULL;
 	template_entry_t *new_cache;
@@ -118,6 +142,7 @@ add_template_to_cache(const char *filename, const char *path)
 	}
 	template_cache[template_cache_count].content = content;
 	template_cache[template_cache_count].len = strlen(content);
+	template_cache[template_cache_count].mtime = mtime;
 	template_cache_count++;
 
 	return 0;
@@ -127,14 +152,14 @@ add_template_to_cache(const char *filename, const char *path)
  * @brief Preload template files from configured directory into memory.
  * @return Returns 0 on success or -1 on failure.
  */
-int
-template_cache_init(void)
+static int
+template_cache_reload_locked(void)
 {
 	DIR *dir;
 	struct dirent *entry;
 	int loaded = 0;
 
-	template_cache_cleanup();
+	template_cache_cleanup_locked();
 
 	dir = opendir(config_templates_dir);
 	if (!dir)
@@ -153,7 +178,7 @@ template_cache_init(void)
 			     entry->d_name);
 		if (n < 0 || (size_t)n >= sizeof(path)) {
 			closedir(dir);
-			template_cache_cleanup();
+			template_cache_cleanup_locked();
 			return -1;
 		}
 
@@ -162,16 +187,41 @@ template_cache_init(void)
 		if (!S_ISREG(st.st_mode))
 			continue;
 
-		if (add_template_to_cache(entry->d_name, path) != 0) {
+		if (add_template_to_cache(entry->d_name, path, st.st_mtime) != 0) {
 			closedir(dir);
-			template_cache_cleanup();
+			template_cache_cleanup_locked();
 			return -1;
 		}
 		loaded = 1;
 	}
 
 	closedir(dir);
+	template_cache_last_refresh = time(NULL);
 	return loaded ? 0 : -1;
+}
+
+int
+template_cache_init(void)
+{
+	int rc;
+
+	pthread_mutex_lock(&template_cache_lock);
+	rc = template_cache_reload_locked();
+	pthread_mutex_unlock(&template_cache_lock);
+
+	return rc;
+}
+
+static int
+template_cache_refresh_locked(void)
+{
+	time_t now = time(NULL);
+
+	if (template_cache_last_refresh != 0 &&
+	    (now - template_cache_last_refresh) < TEMPLATE_CACHE_TTL_SEC)
+		return 0;
+
+	return template_cache_reload_locked();
 }
 
 /**
@@ -183,13 +233,24 @@ template_cache_init(void)
 static int
 read_template_file(const char *filename, char **content)
 {
+	int ret = -1;
+
+	pthread_mutex_lock(&template_cache_lock);
+
+	if (template_cache_refresh_locked() != 0)
+		goto out;
+
 	for (size_t i = 0; i < template_cache_count; i++) {
 		if (strcmp(template_cache[i].filename, filename) == 0) {
 			*content = strdup(template_cache[i].content);
-			return *content ? 0 : -1;
+			ret = *content ? 0 : -1;
+			goto out;
 		}
 	}
-	return -1;
+
+out:
+	pthread_mutex_unlock(&template_cache_lock);
+	return ret;
 }
 
 /* Forward declaration for the single placeholder replacement logic */
