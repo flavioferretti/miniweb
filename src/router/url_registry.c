@@ -31,6 +31,14 @@ static const struct view_route view_routes[] = {
      "packages_extra_head.html", "packages_extra_js.html"},
 };
 
+/**
+ * @brief TODO: Describe url_registry_register.
+ * @param ctx TODO: Describe this parameter.
+ * @param method TODO: Describe this parameter.
+ * @param path TODO: Describe this parameter.
+ * @param handler TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 static int
 url_registry_register(void *ctx, const char *method, const char *path,
 		      route_handler_t handler)
@@ -40,6 +48,15 @@ url_registry_register(void *ctx, const char *method, const char *path,
 	return 0;
 }
 
+/**
+ * @brief TODO: Describe url_registry_register_prefix.
+ * @param ctx TODO: Describe this parameter.
+ * @param method TODO: Describe this parameter.
+ * @param prefix TODO: Describe this parameter.
+ * @param min_slashes TODO: Describe this parameter.
+ * @param handler TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 static int
 url_registry_register_prefix(void *ctx, const char *method, const char *prefix,
 			     int min_slashes, route_handler_t handler)
@@ -49,6 +66,11 @@ url_registry_register_prefix(void *ctx, const char *method, const char *prefix,
 	return 0;
 }
 
+/**
+ * @brief TODO: Describe views_module_attach_routes.
+ * @param r TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 int
 views_module_attach_routes(struct router *r)
 {
@@ -67,6 +89,12 @@ views_module_attach_routes(struct router *r)
 	return 0;
 }
 
+/**
+ * @brief TODO: Describe register_route.
+ * @param method TODO: Describe this parameter.
+ * @param path TODO: Describe this parameter.
+ * @param handler TODO: Describe this parameter.
+ */
 void
 register_route(const char *method, const char *path, route_handler_t handler)
 {
@@ -78,6 +106,13 @@ register_route(const char *method, const char *path, route_handler_t handler)
 	}
 }
 
+/**
+ * @brief TODO: Describe register_prefix_route.
+ * @param method TODO: Describe this parameter.
+ * @param prefix TODO: Describe this parameter.
+ * @param min_slashes TODO: Describe this parameter.
+ * @param handler TODO: Describe this parameter.
+ */
 void
 register_prefix_route(const char *method, const char *prefix, int min_slashes,
 		      route_handler_t handler)
@@ -92,6 +127,12 @@ register_prefix_route(const char *method, const char *prefix, int min_slashes,
 	prefix_route_count++;
 }
 
+/**
+ * @brief TODO: Describe find_view_route.
+ * @param method TODO: Describe this parameter.
+ * @param path TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 const struct view_route *
 find_view_route(const char *method, const char *path)
 {
@@ -105,6 +146,9 @@ find_view_route(const char *method, const char *path)
 	return NULL;
 }
 
+/**
+ * @brief TODO: Describe init_routes.
+ */
 void
 init_routes(void)
 {
@@ -148,6 +192,12 @@ init_routes(void)
 	    &r, modules, sizeof(modules) / sizeof(modules[0]), NULL);
 }
 
+/**
+ * @brief TODO: Describe route_match.
+ * @param method TODO: Describe this parameter.
+ * @param path TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 route_handler_t
 route_match(const char *method, const char *path)
 {
@@ -180,6 +230,13 @@ route_match(const char *method, const char *path)
 	return NULL;
 }
 
+/**
+ * @brief TODO: Describe route_allow_methods.
+ * @param path TODO: Describe this parameter.
+ * @param buf TODO: Describe this parameter.
+ * @param buf_len TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 int
 route_allow_methods(const char *path, char *buf, size_t buf_len)
 {
@@ -229,6 +286,11 @@ route_allow_methods(const char *path, char *buf, size_t buf_len)
 	return count;
 }
 
+/**
+ * @brief TODO: Describe route_path_known.
+ * @param path TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 int
 route_path_known(const char *path)
 {

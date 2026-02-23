@@ -8,6 +8,10 @@
 char config_templates_dir[] = "templates";
 
 /**
+ * @brief TODO: Describe main.
+ * @return TODO: Describe the return value.
+ */
+/**
  * @brief Validate template rendering with baseline template data.
  * @return Returns 0 when all assertions pass.
  */

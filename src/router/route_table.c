@@ -31,6 +31,11 @@ static hot_view_cache_entry_t g_hot_view_cache[HOT_VIEW_CACHE_MAX] = {
 };
 static pthread_mutex_t g_hot_view_cache_lock = PTHREAD_MUTEX_INITIALIZER;
 
+/**
+ * @brief TODO: Describe find_hot_view_cache_entry.
+ * @param path TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 static hot_view_cache_entry_t *
 find_hot_view_cache_entry(const char *path)
 {
@@ -42,6 +47,11 @@ find_hot_view_cache_entry(const char *path)
 }
 
 /* Generic template-backed view handler */
+/**
+ * @brief TODO: Describe view_template_handler.
+ * @param req TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 /**
  * @brief View template handler.
  * @param req Request context for response generation.
@@ -111,6 +121,11 @@ view_template_handler(http_request_t *req)
 
 /* Favicon handler */
 /**
+ * @brief TODO: Describe favicon_handler.
+ * @param req TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
+/**
  * @brief Favicon handler.
  * @param req Request context for response generation.
  * @return Returns 0 on success or a negative value on failure unless documented otherwise.
@@ -126,6 +141,11 @@ favicon_handler(http_request_t *req)
 /* Static file handler */
 /* static_handler - Serve static CSS, JS, image, and HTML assets. */
 /* routes.c - static file serving helpers. */
+/**
+ * @brief TODO: Describe static_handler.
+ * @param req TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 /**
  * @brief Static handler.
  * @param req Request context for response generation.

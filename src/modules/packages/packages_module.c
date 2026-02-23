@@ -29,6 +29,12 @@ typedef struct {
 static pkg_search_cache_entry_t g_pkg_search_cache[PKG_SEARCH_CACHE_SIZE];
 static pthread_mutex_t g_pkg_search_cache_lock = PTHREAD_MUTEX_INITIALIZER;
 
+/**
+ * @brief TODO: Describe pkg_search_cache_store_locked.
+ * @param query TODO: Describe this parameter.
+ * @param json TODO: Describe this parameter.
+ * @param now TODO: Describe this parameter.
+ */
 static void
 pkg_search_cache_store_locked(const char *query, const char *json, time_t now)
 {
@@ -70,6 +76,11 @@ pkg_search_cache_store_locked(const char *query, const char *json, time_t now)
 }
 
 /**
+ * @brief TODO: Describe is_safe_pkg_name.
+ * @param name TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
+/**
  * @brief Is safe pkg name.
  * @param name Parameter used by this function.
  * @return Returns 0 on success or a negative value on failure unless documented
@@ -89,6 +100,13 @@ is_safe_pkg_name(const char *name)
 	return 1;
 }
 
+/**
+ * @brief TODO: Describe url_decode_into.
+ * @param src TODO: Describe this parameter.
+ * @param dst TODO: Describe this parameter.
+ * @param dst_size TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 /**
  * @brief Url decode into.
  * @param src Parameter used by this function.
@@ -129,6 +147,14 @@ url_decode_into(const char *src, char *dst, size_t dst_size)
 	return 0;
 }
 
+/**
+ * @brief TODO: Describe get_query_value.
+ * @param url TODO: Describe this parameter.
+ * @param key TODO: Describe this parameter.
+ * @param out TODO: Describe this parameter.
+ * @param out_size TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 /**
  * @brief Get query value.
  * @param url Request URL path.
@@ -188,6 +214,11 @@ get_query_value(const char *url, const char *key, char *out, size_t out_size)
 	return 0;
 }
 
+/**
+ * @brief TODO: Describe pkg_search_json.
+ * @param query TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 /**
  * @brief Pkg search json.
  * @param query Parameter used by this function.
@@ -277,6 +308,11 @@ pkg_search_json(const char *query)
 
 /* Validate filesystem path for pkg_info -E: must be absolute, no shell chars */
 /**
+ * @brief TODO: Describe is_safe_path.
+ * @param path TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
+/**
  * @brief Is safe path.
  * @param path Request or filesystem path to evaluate.
  * @return Returns 0 on success or a negative value on failure unless documented
@@ -298,6 +334,11 @@ is_safe_path(const char *path)
 	return 1;
 }
 
+/**
+ * @brief TODO: Describe end.
+ * @param output TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 /* Build {"raw":"<escaped output>"} — same idea as Node's
  * res.end(JSON.stringify({ info: stdout.trim() })) */
 /**
@@ -338,6 +379,11 @@ make_raw_json(const char *output)
 }
 
 /**
+ * @brief TODO: Describe pkg_info_json.
+ * @param package_name TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
+/**
  * @brief Pkg info json.
  * @param package_name Parameter used by this function.
  * @return Returns 0 on success or a negative value on failure unless documented
@@ -358,6 +404,11 @@ pkg_info_json(const char *package_name)
 	return json ? json : strdup("{\"found\":false,\"raw\":\"\"}");
 }
 
+/**
+ * @brief TODO: Describe pkg_files_json.
+ * @param package_name TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 /**
  * @brief Pkg files json.
  * @param package_name Parameter used by this function.
@@ -424,6 +475,10 @@ pkg_files_json(const char *package_name)
 }
 
 /**
+ * @brief TODO: Describe pkg_list_json.
+ * @return TODO: Describe the return value.
+ */
+/**
  * @brief Pkg list json.
  * @return Returns 0 on success or a negative value on failure unless documented
  * otherwise.
@@ -470,6 +525,11 @@ pkg_list_json(void)
 }
 
 /**
+ * @brief TODO: Describe pkg_which_json.
+ * @param file_path TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
+/**
  * @brief Pkg which json.
  * @param file_path Parameter used by this function.
  * @return Returns 0 on success or a negative value on failure unless documented
@@ -492,6 +552,11 @@ pkg_which_json(const char *file_path)
 	return json ? json : strdup("{\"found\":false,\"raw\":\"\"}");
 }
 
+/**
+ * @brief TODO: Describe pkg_api_handler.
+ * @param req TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 /**
  * @brief Pkg api handler.
  * @param req Request context for response generation.
@@ -550,6 +615,11 @@ pkg_api_handler(http_request_t *req)
 	return ret;
 }
 
+/**
+ * @brief TODO: Describe packages_module_attach_routes.
+ * @param r TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 int
 packages_module_attach_routes(struct router *r)
 {

@@ -2,6 +2,14 @@
 #include <miniweb/router/module_attach.h>
 
 /**
+ * @brief TODO: Describe miniweb_module_attach_enabled.
+ * @param r TODO: Describe this parameter.
+ * @param modules TODO: Describe this parameter.
+ * @param count TODO: Describe this parameter.
+ * @param ctx TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
+/**
  * @brief Initialize and attach every enabled module to the router.
  * @param r Router facade used by module attach callbacks.
  * @param modules Array of module descriptors.

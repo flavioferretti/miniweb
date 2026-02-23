@@ -1,6 +1,11 @@
 #include <miniweb/http/handler.h>
 #include <miniweb/router/router.h>
 
+/**
+ * @brief TODO: Describe metrics_handler.
+ * @param req TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 int
 metrics_handler(http_request_t *req)
 {
@@ -8,6 +13,11 @@ metrics_handler(http_request_t *req)
 	return 0;
 }
 
+/**
+ * @brief TODO: Describe networking_api_handler.
+ * @param req TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 int
 networking_api_handler(http_request_t *req)
 {
@@ -15,6 +25,11 @@ networking_api_handler(http_request_t *req)
 	return 0;
 }
 
+/**
+ * @brief TODO: Describe man_api_handler.
+ * @param req TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 int
 man_api_handler(http_request_t *req)
 {
@@ -22,6 +37,11 @@ man_api_handler(http_request_t *req)
 	return 0;
 }
 
+/**
+ * @brief TODO: Describe man_render_handler.
+ * @param req TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 int
 man_render_handler(http_request_t *req)
 {
@@ -29,6 +49,11 @@ man_render_handler(http_request_t *req)
 	return 0;
 }
 
+/**
+ * @brief TODO: Describe pkg_api_handler.
+ * @param req TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 int
 pkg_api_handler(http_request_t *req)
 {
@@ -36,12 +61,22 @@ pkg_api_handler(http_request_t *req)
 	return 0;
 }
 
+/**
+ * @brief TODO: Describe metrics_module_attach_routes.
+ * @param r TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 int
 metrics_module_attach_routes(struct router *r)
 {
 	return router_register(r, "GET", "/api/metrics", metrics_handler);
 }
 
+/**
+ * @brief TODO: Describe networking_module_attach_routes.
+ * @param r TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 int
 networking_module_attach_routes(struct router *r)
 {
@@ -51,6 +86,11 @@ networking_module_attach_routes(struct router *r)
 	    networking_api_handler);
 }
 
+/**
+ * @brief TODO: Describe man_module_attach_routes.
+ * @param r TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 int
 man_module_attach_routes(struct router *r)
 {
@@ -60,6 +100,11 @@ man_module_attach_routes(struct router *r)
 	    man_render_handler);
 }
 
+/**
+ * @brief TODO: Describe packages_module_attach_routes.
+ * @param r TODO: Describe this parameter.
+ * @return TODO: Describe the return value.
+ */
 int
 packages_module_attach_routes(struct router *r)
 {

@@ -11,6 +11,10 @@ char config_static_dir[] = "static";
 char config_templates_dir[] = "templates";
 
 /**
+ * @brief TODO: Describe main.
+ * @return TODO: Describe the return value.
+ */
+/**
  * @brief Validate route registration and route matching behavior.
  * @return Returns 0 when all assertions pass.
  */
