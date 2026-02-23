@@ -67,6 +67,31 @@ Target layered architecture:
 
 ---
 
+
+## Source layout (implemented after phase-1/phase-2 groundwork)
+
+Current `src/` organization is now capability-oriented:
+
+```text
+src/
+  app_main.c
+  core/{config.c,heartbeat.c,log.c}
+  http/{response.c,utils.c}
+  router/{module_attach.c,route_table.c,router.c,url_registry.c}
+  modules/
+    man/man_module.c
+    metrics/metrics_module.c
+    networking/networking_module.c
+    packages/packages_module.c
+  render/template_render.c
+  storage/{sqlite_db.c,sqlite_schema.c,sqlite_stmt.c}
+```
+
+This keeps URL behavior stable while moving feature implementation toward the
+enterprise module boundaries described in the refactor plan.
+
+---
+
 ## Feature status matrix
 
 | Area | Current state | Enterprise target |
