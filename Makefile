@@ -158,9 +158,10 @@ ${BUILDDIR}/log.o: ${SRCDIR}/core/log.c
 	@mkdir -p ${BUILDDIR}
 	${CC} ${CFLAGS} -c ${SRCDIR}/core/log.c -o $@
 
-unit-tests: ${BUILDDIR}/routes_test ${BUILDDIR}/template_test
+unit-tests: ${BUILDDIR}/routes_test ${BUILDDIR}/template_test ${BUILDDIR}/heartbeat_test
 	./${BUILDDIR}/routes_test
 	./${BUILDDIR}/template_test
+	./${BUILDDIR}/heartbeat_test
 
 integration-test: ${BUILDDIR}/${PROG}
 	bash ${TESTDIR}/integration_endpoints.sh
@@ -172,5 +173,9 @@ ${BUILDDIR}/routes_test: ${TESTDIR}/routes_test.c ${TESTDIR}/routes_test_stubs.c
 ${BUILDDIR}/template_test: ${TESTDIR}/template_test.c ${SRCDIR}/render/template_render.c
 	@mkdir -p ${BUILDDIR}
 	${CC} ${CFLAGS} -I${INCDIR} -o $@ ${TESTDIR}/template_test.c ${SRCDIR}/render/template_render.c
+
+${BUILDDIR}/heartbeat_test: ${TESTDIR}/heartbeat_test.c ${SRCDIR}/core/heartbeat.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} ${LDFLAGS} -I${INCDIR} -o $@ ${TESTDIR}/heartbeat_test.c ${SRCDIR}/core/heartbeat.c ${LDADD}
 
 .PHONY: all clean run debug install man unit-tests integration-test
