@@ -289,6 +289,8 @@ All pool operations are protected by `conn_mutex`.
 
 ## Routing
 
+Routing is now split into two layers: a low-level route registry (`src/router/url_registry.c`) and a lightweight module attach contract (`include/miniweb/router/module_attach.h`). `init_routes()` builds a `miniweb_module` list and lets each enabled module attach its own endpoints through `router_register()`. Dynamic endpoints (for example `/man/*` and `/static/*`) are tracked as prefix routes in the registry.
+
 Routes are registered in a flat array of `struct route` (up to `MAX_ROUTES`
 = 32 entries) in `src/router/url_registry.c`. `init_routes()` is called once
 at startup from `main()`.
@@ -649,10 +651,10 @@ include/
 | Phase | Description | Status |
 |---|---|---|
 | 0 | Test freeze / safety net | Planned |
-| 1 | Extract core infrastructure (conf, log, heartbeat) | Done |
-| 2 | Module attach API + router separation | In progress |
-| 3 | Single global heartbeat scheduler | API ready, modules not migrated |
-| 4 | Domain decomposition (metrics, networking, man, packages) | Ongoing |
+| 1 | Module attach API + router separation | In progress (module-driven route attachment enabled) |
+| 2 | Single global heartbeat scheduler | API ready; metrics/networking migration pending completion |
+| 3 | Domain decomposition (metrics, networking, man, packages) | Ongoing |
+| 4 | Documentation and architecture transition (docs/miniweb.1 + README.md, port modules to enterprise paradigm) | In progress |
 | 5 | SQLite3 storage integration | Stub interfaces defined |
 | 6 | Performance and observability hardening | Planned |
 
