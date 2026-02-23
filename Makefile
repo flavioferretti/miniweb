@@ -107,6 +107,7 @@ clean:
 
 # --- Individual Compilation Rules ---
 # These rules handle the compilation of each .c file into its .o counterpart
+# Keep explicit per-file rules for BSD make portability (avoid GNU-specific $< usage).
 
 ${BUILDDIR}/conf.o: ${SRCDIR}/conf.c
 	@mkdir -p ${BUILDDIR}
