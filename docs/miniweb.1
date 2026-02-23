@@ -1,7 +1,7 @@
 .\" Copyright (c) 2026 Flavio Ferretti <flavio@flvbox.org>
 .\" BSD 3-Clause License
 .\"
-.Dd February 21, 2026
+.Dd February 23, 2026
 .Dt MINIWEB 1
 .Os
 .Sh NAME
@@ -294,6 +294,23 @@ and process counts
 .Pp
 Metrics are collected on request from native interfaces
 without invoking external commands.
+.Pp
+Implementation details:
+.Bl -bullet -compact
+.It
+A detached sampler thread stores one sample per second in a 1 MiB ring
+buffer.
+.It
+The handler serves a mutex-protected JSON snapshot string that is
+updated once per second.
+.It
+If a snapshot is not yet available, the handler performs an immediate
+refresh and returns the first available payload.
+.It
+The endpoint includes
+.Cm Access-Control-Allow-Origin: *
+to support cross-origin dashboard embedding.
+.El
 .It Pa /api/networking
 Returns a JSON object with network interface details,
 routing table entries, and DNS resolver configuration.
@@ -373,7 +390,7 @@ as
 .El
 .Ss Caching
 .Nm
-implements three cache layers:
+implements six cache layers/buffers:
 .Bl -enum
 .It
 Template cache
@@ -387,16 +404,38 @@ invalidation.
 After
 .Dv TEMPLATE_CACHE_TTL_SEC
 seconds
-.Pq 5 ,
+.Pq 60 ,
 the next template lookup reloads the templates directory, so on-disk
 changes are picked up without restarting
 .Nm .
+.It
+Hot view cache for template-backed pages
+.Pq Pa src/routes.c :
+the routes
+.Pa /
+,
+.Pa /docs
+,
+.Pa /networking
+,
+.Pa /packages
+and
+.Pa /apiroot
+store fully-rendered HTML in memory for
+.Dv HOT_VIEW_CACHE_TTL_SEC
+seconds
+.Pq 10 .
+Cache hits bypass template rendering for non-query requests.
 .It
 In-memory static payload cache
 .Pq Pa src/http_handler.c ,
 with the following parameters:
 .Bl -bullet -compact
 .It
+.Dv FILE_CACHE_SHARDS
+shards
+.Pq 16 ,
+each with
 .Dv FILE_CACHE_SLOTS
 slots
 .Pq 32 .
@@ -418,6 +457,9 @@ Age-based eviction after
 seconds
 .Pq 120 .
 .It
+Per-shard hit/miss/insert/throttle counters are tracked and emitted via
+debug logs each second.
+.It
 Validation key is
 .Pq path, mtime ;
 an
@@ -437,7 +479,31 @@ and
 are stored under
 .Pa {static_dir}/man/{area}/{section}/{page}.{format}
 and served from the static-file path on cache hits.
+.It
+Metrics snapshot cache
+.Pq Pa src/metrics.c :
+the 1-second background sampler refreshes a shared JSON snapshot string,
+which is duplicated for each
+.Pa /api/metrics
+response.
+.It
+Networking sample ring
+.Pq Pa src/networking.c :
+a detached sampler stores routes, DNS state and interface counters every
+second in a 1 MiB ring; the API usually serializes the latest cached
+sample.
 .El
+.Pp
+Package search also includes a dedicated query cache in
+.Pa src/pkg_manager.c
+with
+.Dv PKG_SEARCH_CACHE_SIZE
+entries
+.Pq 64
+and
+.Dv PKG_SEARCH_CACHE_TTL_SEC
+seconds
+.Pq 30 .
 .Sh ARCHITECTURE
 .Ss Request Lifecycle
 .Bd -literal -offset indent
@@ -563,38 +629,48 @@ temporarily exhausted.
 Benchmarks collected on OpenBSD 7.8 using
 .Xr wrk 1
 with 4 threads and 20-second runs.
-Only representative endpoints are listed.
+Latest report generated 2026-02-23 11:38:19 and compared against the
+baseline report in
+.Pa static/benchmark_baseline.html .
 .Ss Overall Summary
 .Bl -bullet -compact
 .It
-Peak throughput: 35,462.49 requests/s.
+Peak throughput: 35,341.94 requests/s
+.Pq baseline 34,949.62; +1.1% .
 .It
-Average throughput: 11,678.0 requests/s.
+Average throughput: 15,908.6 requests/s
+.Pq baseline 13,071.1; +21.7% .
 .It
-Best average latency: 0.160 ms.
+Best average latency: 0.119 ms
+.Pq baseline 0.156; 23.7% lower .
 .It
-Worst max latency: 1950.000 ms.
+Worst max latency: 1580.000 ms
+.Pq baseline 2000.000; 21.0% lower .
 .It
-Grand average latency: 108.58 ms.
+Grand average latency: 10.64 ms
+.Pq baseline 68.07; 84.4% lower .
 .El
-.Ss Representative Endpoints
-.Bl -tag -width "/api/packages/search?q=curl (4 connections)"
-.It Pa /static/js/theme_toggler.js Pq 256 connections
-34,833.8 requests/s; average latency 36.95 ms.
-.It Pa /networking Pq 32 connections
-24,331.2 requests/s; average latency 1.09 ms.
-.It Pa /api/metrics Pq 256 connections
-1,683.9 requests/s; average latency 71.94 ms.
-.It Pa /api/packages/search?q=curl Pq 4 connections
-11.0 requests/s; average latency 361.52 ms.
-.It Pa /api/packages/info?name=curl Pq all tested connection levels
-0.0 requests/s; endpoint health failed in this benchmark run.
+.Ss Endpoint Behavior Notes
+.Bl -bullet -compact
+.It
+Static assets and lightweight API endpoints generally peak around 32 to
+128 concurrent connections.
+.It
+Dynamic/manual-page workloads show stronger latency growth at 128 to
+256 connections.
+.It
+Some 256-connection rows report
+.Cm HTTP=000000
+while row status remains
+.Cm OK ;
+these should be treated as high-pressure artifacts and validated against
+server logs during saturation analysis.
 .El
 .Pp
 Static and template routes remain fast at high concurrency.
 System-snapshot and subprocess-backed endpoints
 .Pq Pa /api/metrics
-and package APIs remain the dominant bottlenecks in this run.
+and package APIs remain the dominant bottlenecks for tail latency.
 .Ss PR-63 Static HTML Benchmark Snapshot
 Measured with
 .Xr wrk 1

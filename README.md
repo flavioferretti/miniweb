@@ -166,7 +166,14 @@ To remove a page, remove the corresponding `view_routes[]` entry and rebuild.
 | `GET /api/metrics` | Full JSON system snapshot |
 | `GET /api/networking` | Interfaces, routes, resolver JSON |
 
-`/api/metrics` includes hostname, OS version, uptime, load averages, memory, swap, per-filesystem disk usage, network status, top process lists (CPU/memory), and process counters.
+`/api/metrics` includes hostname, OS version, uptime, load averages, memory, swap, per-filesystem disk usage, network status, top process lists (CPU/memory), process counters, and a short in-memory history window for charting.
+
+Implementation details (current):
+
+- A detached sampler thread stores one sample/second in a 1 MiB ring buffer.
+- `get_system_metrics_json()` serves a mutex-protected JSON snapshot string that is refreshed every second by the sampler.
+- If no snapshot is available yet, the handler triggers an immediate build and returns the first available snapshot.
+- `GET /api/metrics` adds `Access-Control-Allow-Origin: *` to simplify dashboard embedding.
 
 ### Packages API
 
@@ -194,26 +201,45 @@ Rendered manual pages are cached for reuse under `static/man/{area}/{section}/{p
 
 ## Caching facilities (implemented)
 
-MiniWeb currently uses three distinct caches:
+MiniWeb currently uses six distinct caches/buffers with different goals:
 
 1. **Template cache (`template_engine.c`)**
    - Preloaded at startup by `template_cache_init()` by reading every regular file under `templates_dir`.
    - Protected by `template_cache_lock` for concurrent reads/refreshes.
-   - TTL-based invalidation: once `TEMPLATE_CACHE_TTL_SEC=5` expires, the next template read triggers a full reload (`template_cache_refresh_locked()`), so template edits are picked up without restart.
+   - TTL-based invalidation: once `TEMPLATE_CACHE_TTL_SEC=60` expires, the next template read triggers a full reload (`template_cache_refresh_locked()`), so template edits are picked up without restart.
    - Rendering looks up template fragments in memory and duplicates strings per request.
 
-2. **In-memory static file cache (`http_handler.c`)**
-   - Fixed-size cache with `FILE_CACHE_SLOTS=32` and per-object max payload `FILE_CACHE_MAX_BYTES=256 KiB`.
+2. **Hot view cache for HTML pages (`routes.c`)**
+   - In-memory fast path for five hot template-backed pages: `/`, `/docs`, `/networking`, `/packages`, `/apiroot`.
+   - Cache TTL is `HOT_VIEW_CACHE_TTL_SEC=10`.
+   - Stores fully rendered page body per path and bypasses template rendering on a fresh hit.
+   - Writes are mutex-protected and only used for non-query-string requests.
+
+3. **In-memory static file cache (`http_handler.c`)**
+   - Sharded cache (`FILE_CACHE_SHARDS=16`), each shard with `FILE_CACHE_SLOTS=32` and per-object max payload `FILE_CACHE_MAX_BYTES=256 KiB`.
    - Admission is **two-hit**: first hit enters candidate table, second hit allows insertion.
    - Insertion is **rate-limited** by token budget (`FILE_CACHE_INSERTS_PER_SEC=8`).
    - Both cache entries and candidates are evicted by age (`FILE_CACHE_MAX_AGE_SEC=120`).
    - Validation key is `(path, mtime)`; stale-on-disk changes invalidate hits automatically when mtime differs.
+   - Hit/miss/throttle counters are tracked per shard and emitted through debug logs each second.
 
-3. **On-disk man render cache (`man.c`)**
+4. **On-disk man render cache (`man.c`)**
    - Cache path: `{static_dir}/man/{area}/{section}/{page}.{format}`.
    - Supported cached formats: `html`, `txt`, `md`, `ps`, `pdf`.
    - Request flow checks the cache first; on miss it renders via `mandoc`, writes cache file, then prefers serving back through static-file path.
    - Cached man files can also benefit from the in-memory static cache after repeated access.
+
+5. **Metrics snapshot cache (`metrics.c`)**
+   - A detached background sampler updates one shared JSON snapshot string once per second.
+   - `/api/metrics` serves a copy of this latest snapshot, avoiding full synchronous data collection on every request.
+
+6. **Networking sample ring (`networking.c`)**
+   - A detached sampler collects routes, DNS, and interface counters every second into a 1 MiB ring buffer.
+   - `/api/networking` usually serializes the latest cached sample; if ring bootstrap is not ready, it falls back to immediate collection.
+
+Additionally, package search has a dedicated micro-cache:
+
+- `/api/packages/search` uses an in-memory query cache (`PKG_SEARCH_CACHE_SIZE=64`, TTL `30s`) to avoid repeated `pkg_info -Q` subprocess calls for repeated queries.
 
 ### Static Files
 
@@ -276,27 +302,21 @@ Internal refactoring keeps connection teardown logic in one path (`free_connecti
 
 ## Performance
 
-Updated from `static/benchmark.html` (OpenBSD 7.8, `wrk` with 4 threads, 20 s runs).
+Latest benchmark report (provided run generated `2026-02-23 11:38:19`, OpenBSD 7.8, `wrk`, 4 threads, 20s) compared against `static/benchmark_baseline.html`:
 
-Overall run summary:
+- Peak throughput: **35,341.94 req/s** (baseline 34,949.62, **+1.1%**)
+- Average throughput: **15,908.6 req/s** (baseline 13,071.1, **+21.7%**)
+- Best average latency: **0.119 ms** (baseline 0.156, **23.7% lower**)
+- Worst max latency: **1580.000 ms** (baseline 2000.000, **21.0% lower**)
+- Grand average latency: **10.64 ms** (baseline 68.07, **84.4% lower**)
 
-- Peak throughput: **35,462.49 req/s**
-- Average throughput: **11,678.0 req/s**
-- Best average latency: **0.160 ms**
-- Worst max latency: **1950.000 ms**
-- Grand average latency: **108.58 ms**
+Per-endpoint behavior in this run:
 
-Representative endpoints from this run:
+- Static assets and lightweight API endpoints peak around 32–128 connections with very high req/s.
+- Dynamic/manual-page endpoints show higher latency growth at 128–256 concurrency.
+- Several 256-connection rows still report `HTTP=000000` while row status remains `OK`; treat these as high-pressure artifacts and validate against server logs when interpreting saturation behavior.
 
-| Endpoint | Conns | Req/s | Avg latency |
-|---|---:|---:|---:|
-| `/static/js/theme_toggler.js` | 256 | **34,833.8** | 36.95 ms |
-| `/networking` | 32 | **24,331.2** | 1.09 ms |
-| `/api/metrics` | 256 | **1,683.9** | 71.94 ms |
-| `/api/packages/search?q=curl` | 4 | **11.0** | 361.52 ms |
-| `/api/packages/info?name=curl` | any tested | **0.0** | HEALTH_FAILED |
-
-Takeaways: static and template routes remain fast at high concurrency; `/api/metrics` scales better at higher concurrency in this run, while package subprocess endpoints are the primary bottleneck (with `/api/packages/info` failing health checks throughout this benchmark).
+This pattern is consistent with the architecture: hot static/template paths are now heavily cache-assisted, while subprocess- or render-heavy paths (`mandoc`, package queries) remain the dominant tail-latency sources.
 
 ### PR-63 static HTML benchmark snapshot
 
