@@ -400,6 +400,9 @@ http_response_create(void)
 		resp = calloc(1, sizeof(*resp));
 		if (!resp)
 			return NULL;
+		resp->pool_shard_idx = -1;
+	} else {
+		resp->pool_shard_idx = shard_idx;
 	}
 
 	resp->status_code = 200;
@@ -628,6 +631,20 @@ http_response_free(http_response_t *resp)
 	 * from fread). */
 	if (resp->free_body && resp->body) {
 		free(resp->body);
+	}
+
+	if (resp->pool_shard_idx >= 0 &&
+	    resp->pool_shard_idx < RESPONSE_POOL_SHARDS) {
+		response_pool_t *pool = &response_pools[resp->pool_shard_idx];
+		if (resp >= pool->items && resp < (pool->items + 1024)) {
+			ptrdiff_t idx = resp - pool->items;
+			pthread_mutex_lock(&pool->lock);
+			memset(resp, 0, sizeof(*resp));
+			if (pool->free_top < 1024)
+				pool->free_stack[pool->free_top++] = (int)idx;
+			pthread_mutex_unlock(&pool->lock);
+			return;
+		}
 	}
 
 	for (int shard_idx = 0; shard_idx < RESPONSE_POOL_SHARDS; shard_idx++) {
