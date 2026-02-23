@@ -3,46 +3,39 @@
 .Os OpenBSD
 .Sh NAME
 .Nm miniweb
-.Nd OpenBSD-native C99 web server on enterprise refactor track
+.Nd OpenBSD-native C99 HTTP server
 .Sh SYNOPSIS
 .Nm
 .Op Fl hv
 .Op Fl b Ar address
 .Op Fl c Ar connections
 .Op Fl f Ar file
+.Op Fl l Ar logfile
 .Op Fl p Ar port
 .Op Fl t Ar threads
-.Op Fl l Ar file
 .Sh DESCRIPTION
 .Nm
 is a lightweight HTTP server written in C99 for OpenBSD.
-It provides a web dashboard and JSON APIs for metrics, networking,
-manual page browsing, and package management.
+It exposes a system dashboard and JSON APIs for metrics, networking
+diagnostics, manual page browsing, and package management.
 .Pp
-The current runtime uses a single
+The runtime uses a single
 .Xr kqueue 2
-dispatcher thread and a worker pool.
-Expensive telemetry is sampled through feature-local samplers,
-and cached payloads are served to reduce handler latency.
+dispatcher thread and a configurable worker-thread pool.
+Template-backed HTML views are served from an in-memory template cache.
+Static assets are served from a sharded file cache.
+A generic heartbeat scheduler fires periodic background tasks.
 .Pp
 .Nm
-is now under an enterprise refactor program that preserves all existing
-features while introducing modular architecture, centralized heartbeat
-scheduling, and a reusable sqlite3 storage interface.
+does not implement TLS directly.
+Run it behind
+.Xr relayd 8
+for TLS termination.
 .Pp
-The implementation must remain strictly C99 and follow OpenBSD KNF.
-.Pp
-The current source tree has already moved to capability-oriented folders under
-.Pa src/
-(e.g.\~\c
-.Pa core/ ,
-.Pa http/ ,
-.Pa router/ ,
-.Pa modules/ ,
-.Pa render/ ,
-.Pa storage/ ), while preserving endpoint compatibility.
+The codebase is under an enterprise refactor program that adds modular
+boundaries, a module attach/detach API, a centralised heartbeat scheduler,
+and a reusable SQLite3 storage layer, while preserving all existing endpoints.
 .Sh OPTIONS
-The options are as follows:
 .Bl -tag -width Ds
 .It Fl b Ar address
 Bind to an IPv4 address.
@@ -50,108 +43,722 @@ Default is
 .Cm 127.0.0.1 .
 .It Fl c Ar connections
 Maximum concurrent connections.
+Clamped to the compile-time limit of
+.Cm 4096 .
 Default is
 .Cm 1280 .
 .It Fl f Ar file
 Load configuration from
 .Ar file .
+A parse error in an explicitly supplied file is fatal.
 .It Fl h
 Print usage and exit.
-.It Fl l Ar file
-Append logs to
-.Ar file
+.It Fl l Ar logfile
+Append log output to
+.Ar logfile
 instead of stderr.
 .It Fl p Ar port
-Listen TCP port.
+TCP listen port.
 Default is
 .Cm 9001 .
 .It Fl t Ar threads
 Worker thread count.
+Clamped to the range 1\(en32.
 Default is
 .Cm 4 .
-Current compile-time maximum is
-.Cm 32 .
 .It Fl v
 Enable verbose logging.
+Equivalent to setting
+.Cm verbose yes
+in the configuration file.
 .El
-.Sh CURRENT ENDPOINTS
+.Sh CONFIGURATION FILE
+On startup
+.Nm
+searches for a configuration file in the following order (first file found
+wins):
+.Pp
+.Bl -enum -compact
+.It
+Explicit path from the
+.Fl f
+flag.
+.It
+.Pa ./miniweb.conf
+.It
+.Pa $HOME/.miniweb.conf
+.It
+.Pa /etc/miniweb.conf
+.El
+.Pp
+If no file is found, compiled-in defaults are used and startup continues
+normally.
+CLI flags always override file values.
+.Pp
+The file format is one directive per line:
+.Pp
+.Dl key value
+.Pp
+Keys are case-insensitive.
+Lines beginning with
+.Ql #
+and blank lines are ignored.
+.Pp
+Supported keys:
+.Bl -tag -width "mandoc_timeout"
+.It Cm port
+TCP listen port.
+Default:
+.Cm 9001 .
+.It Cm bind , bind_addr
+IPv4 address to bind to.
+Default:
+.Cm 127.0.0.1 .
+Use
+.Cm 0.0.0.0
+to listen on all interfaces.
+.It Cm threads
+Worker thread count.
+Clamped to 1\(en32.
+Default:
+.Cm 4 .
+.It Cm max_conns
+Maximum concurrent connections.
+Default:
+.Cm 1280 .
+.It Cm conn_timeout
+Idle connection timeout in seconds.
+Default:
+.Cm 30 .
+.It Cm max_req_size
+Maximum HTTP request size in bytes.
+Must not exceed the compile-time limit of
+.Cm 16384 .
+Default:
+.Cm 16384 .
+.It Cm mandoc_timeout
+Timeout for
+.Xr mandoc 1
+subprocess invocations, in seconds.
+Default:
+.Cm 10 .
+.It Cm static_dir
+Path to the static assets directory.
+Default:
+.Pa static .
+.It Cm templates_dir
+Path to the HTML templates directory.
+Default:
+.Pa templates .
+.It Cm mandoc_path
+Path to the
+.Xr mandoc 1
+binary.
+Default:
+.Pa /usr/bin/mandoc .
+.It Cm trusted_proxy
+IPv4 address of a reverse proxy whose
+.Dv X-Forwarded-For ,
+.Dv X-Forwarded-Proto ,
+and
+.Dv X-Real-IP
+headers are honoured.
+Default:
+.Cm 127.0.0.1 .
+.It Cm verbose
+Enable verbose logging.
+Accepted values:
+.Cm yes , no , true , false , 1 , 0 .
+Default:
+.Cm no .
+.It Cm log_file
+Log file path.
+Empty or absent means stderr.
+.El
+.Sh RUNTIME ARCHITECTURE
+.Nm
+uses a two-tier threading model.
+.Pp
+The
+.Em dispatcher thread
+(main) owns the
+.Xr kqueue 2
+file descriptor, runs the accept loop, and enqueues ready connections into a
+ring-buffer work queue.
+It never calls a route handler.
+.Pp
+The
+.Em worker pool
+(N threads, configurable via
+.Fl t )
+dequeues connections, reads the full HTTP request, parses the request line
+and headers, dispatches the matching route handler, and either closes the
+socket or re-arms it for keep-alive.
+.Pp
+Compile-time hard limits:
+.Bl -tag -width "REQUEST_BUFFER_SIZE"
+.It Dv MAX_EVENTS
+256 \(em
+.Xr kevent 2
+batch size per iteration.
+.It Dv MAX_CONNECTIONS
+4096 \(em connection pool size.
+.It Dv THREAD_POOL_SIZE
+32 \(em maximum worker threads.
+.It Dv REQUEST_BUFFER_SIZE
+16384 \(em per-connection receive buffer.
+.It Dv LISTEN_BACKLOG
+1024 \(em
+.Xr listen 2
+backlog.
+.It Dv QUEUE_CAPACITY
+4096 \(em work queue ring-buffer capacity.
+.It Dv MAX_KEEPALIVE_REQUESTS
+64 \(em requests per keep-alive connection.
+.El
+.Sh KQUEUE DISPATCHER
+The listening socket is registered with
+.Dv EVFILT_READ | EV_CLEAR
+so that the backlog counter resets after every
+.Xr kevent 2
+return.
+.Pp
+Client sockets are registered with
+.Dv EV_ADD | EV_DISPATCH .
+.Dv EV_DISPATCH
+automatically disables the event after the first delivery, eliminating the
+race where multiple workers could receive the same file descriptor.
+.Pp
+Each main-loop iteration uses a 1-second timeout so that idle connection
+sweeping runs at least once per second regardless of traffic.
+The sweep closes connections whose
+.Dv last_activity
+timestamp is older than
+.Cm conn_timeout .
+.Pp
+When the OS file descriptor table is full
+.Pq Dv EMFILE / ENFILE ,
+the dispatcher closes a reserved
+.Pa /dev/null
+spare descriptor, accepts and immediately drops one pending client to prevent
+the listen socket from busy-looping, then reopens the spare.
+.Pp
+The
+.Dv udata
+pointer in each
+.Xr kevent 2
+structure is validated against a per-file-descriptor generation counter before
+dispatching.
+Stale pointers from recycled descriptors are silently ignored.
+.Sh WORKER POOL AND WORK QUEUE
+Workers are identical POSIX threads sharing a single ring-buffer work queue
+protected by a mutex and a condition variable.
+.Pp
+The dispatcher enqueues connections non-blocking; if the queue is full the
+connection is dropped with a
+.Cm 503
+response.
+Workers block on
+.Fn pthread_cond_wait
+until a connection is available or the server shuts down.
+.Pp
+Within a worker, the read loop accumulates data from the non-blocking socket
+until the HTTP header terminator
+.Pq Dv \er\en\er\en
+is found.
+If
+.Dv EAGAIN
+is returned before headers are complete, the
+.Xr kqueue 2
+event is re-enabled with
+.Dv EV_ENABLE
+and the worker returns without closing the connection.
+.Pp
+Keep-alive connections are re-armed after each request.
+A connection is closed unconditionally after
+.Dv MAX_KEEPALIVE_REQUESTS
+(64) requests on the same socket.
+.Sh CONNECTION POOL
+The connection pool is a flat array of
+.Vt connection_t
+structs indexed by file descriptor.
+Allocation and deallocation are O(1) via a LIFO free-stack.
+Each slot carries the client socket, peer address, receive buffer,
+activity timestamps, request count, and a generation counter.
+The generation counter allows the dispatcher to detect stale
+.Xr kevent 2
+.Dv udata
+pointers: if the counter in the event does not match the current counter for
+that file descriptor, the event is a stale reference to a recycled socket and
+is ignored.
+.Sh HTTP LAYER
+.Ss Response pool
+.Fn http_response_create
+allocates a response object from a per-thread shard of a static response pool
+(16 shards, 1024 slots each) to avoid a
+.Xr malloc 3
+call on every request.
+If the pool is exhausted it falls back to
+.Xr calloc 3 .
+.Ss Serialisation
+.Fn http_response_send
+serialises the status line, standard headers
+.Pq Content-Type , Content-Length , Connection , Server ,
+optional custom headers, and the body using a single
+.Xr writev 2
+call when a body is present, or
+.Xr write 2
+for header-only responses.
+Write retries handle
+.Dv EAGAIN / EWOULDBLOCK
+on non-blocking sockets.
+.Ss Subprocess execution
+.Fn safe_popen_read_argv
+forks, redirects stdout to a pipe, redirects stderr to
+.Pa /dev/null ,
+and reads up to
+.Ar max_size
+bytes with a wall-clock timeout enforced by
+.Xr poll 2 .
+On timeout the child is sent
+.Dv SIGKILL
+before
+.Xr waitpid 2 .
+.Sh ROUTING
+Routes are stored in a flat array (up to
+.Dv MAX_ROUTES
+= 32 entries) registered at startup by
+.Fn init_routes
+in
+.Pa src/router/url_registry.c .
+.Pp
+.Fn route_match
+resolves a handler in two passes:
+.Bl -enum
+.It
+Exact match: linear scan comparing method and path strings.
+.It
+Dynamic prefix match (GET only):
+.Bl -bullet -compact
+.It
+.Pa /man/{area}/{section}/{page}[.fmt]
+\(em matched when the path begins with
+.Pa /man/
+and contains at least two additional slashes.
+.It
+.Pa /api/man/...
+\(em prefix match.
+.It
+.Pa /api/packages/...
+\(em prefix match.
+.It
+.Pa /static/...
+\(em prefix match.
+.El
+.El
+.Pp
+When a path is known but the method is wrong, a
+.Cm 405 Method Not Allowed
+response is sent with an
+.Dv Allow
+header.
+Unknown paths receive
+.Cm 404 Not Found .
+.Sh ADDING AND REMOVING ROUTES, MODULES, AND WEB VIEWS
+.Ss Adding an API endpoint
+Register a handler in
+.Fn init_routes
+inside
+.Pa src/router/url_registry.c :
+.Bd -literal -offset indent
+register_route("GET", "/api/myfeature", my_feature_handler);
+.Ed
+.Pp
+The handler must have the signature
+.Ft int Fn handler "http_request_t *req"
+and call one of the HTTP send helpers before returning.
+Raise
+.Dv MAX_ROUTES
+in
+.Pa include/urls.h
+if more than 32 routes are needed.
+.Ss Adding a web view
+.Bl -enum
+.It
+Add an entry to the
+.Vt view_routes[]
+table in
+.Pa src/router/url_registry.c :
+.Bd -literal -offset indent
+{"GET", "/mypage", "MiniWeb - My Page",
+ "mypage.html",
+ "mypage_extra_head.html",
+ "mypage_extra_js.html"},
+.Ed
+.It
+Create
+.Pa templates/mypage.html
+with the page body content.
+The base layout
+.Pa templates/base.html
+is injected automatically.
+The optional fragment files are silently skipped if absent.
+.It
+The URL is automatically registered by
+.Fn register_view_routes
+at startup.
+Add the path to
+.Va g_hot_view_cache
+in
+.Pa src/router/route_table.c
+if the rendered HTML should be cached.
+.El
+.Ss Removing a route or view
+Remove the
+.Fn register_route
+call or delete the entry from
+.Va view_routes[] .
+Requests to that path will receive
+.Cm 404 .
+.Ss Module attach API
+.Fn miniweb_module_attach_enabled
+in
+.Pa src/router/module_attach.c
+iterates a
+.Vt miniweb_module
+array and calls each enabled module's
+.Fn init
+and
+.Fn attach_routes
+callbacks.
+This is the foundation for plug-in module registration and is ready for use,
+but existing modules are not yet migrated onto it.
+.Sh TEMPLATE ENGINE AND VIEW CACHE
+.Ss Template engine
+All HTML files in
+.Cm templates_dir
+are preloaded into a heap-allocated in-memory cache at startup by
+.Fn template_cache_init .
+The cache is refreshed lazily every 60 seconds.
+.Pp
+.Fn template_render_with_data
+assembles a page by loading
+.Pa base.html ,
+the page-specific content file, and optional
+.Pa extra_head
+and
+.Pa extra_js
+fragments, then substituting the placeholders
+.Ql {{title}} ,
+.Ql {{page_content}} ,
+.Ql {{extra_head}} ,
+and
+.Ql {{extra_js}} .
+.Ss Hot view cache
+.Fn view_template_handler
+maintains a small cache of pre-rendered HTML for the five top-level pages
+.Pq Pa / , /docs , /networking , /packages , /apiroot .
+Entries are valid for 10 seconds.
+On a cache hit the rendered HTML is duplicated and returned without touching
+the template engine.
+.Sh STATIC FILE CACHE
+Static assets are served from a sharded in-memory cache:
+.Bl -bullet -compact
+.It
+16 independent shards, each protecting 32 slots, keyed by file path.
+.It
+Files larger than 256 KiB are never cached and are always streamed.
+.It
+A two-stage admission policy requires at least two requests before a file
+is admitted to the cache.
+.It
+Each shard limits insertions to 8 per second using a token bucket.
+.It
+Entries older than 120 seconds are evicted on the next shard access.
+.It
+Cache hits are validated against
+.Dv st_mtime .
+.El
+.Sh HEARTBEAT SCHEDULER
+.Pa src/core/heartbeat.c
+provides a generic periodic task scheduler.
+Up to 32 named tasks can be registered with
+.Fn heartbeat_register .
+Each task specifies a callback, an opaque context pointer, a period in
+seconds, and an initial delay.
+.Fn heartbeat_start
+spawns a single background thread that fires due tasks every second.
+The scheduler is designed to replace per-module sampler threads in a future
+refactor phase.
+It is present and functional but modules are not yet migrated onto it.
+.Sh MODULES
+All modules expose an HTTP handler function registered in
+.Fn init_routes .
+.Ss Metrics
+Provides
+.Pa /api/metrics
+and the
+.Pa /
+dashboard.
+Collects CPU percentages, memory and swap, load averages, OS info, uptime,
+hostname, disk usage, open ports, network interfaces, and top processes by
+CPU via
+.Xr sysctl 3 ,
+.Xr getmntinfo 3 ,
+.Xr getifaddrs 3 ,
+and subprocess calls to
+.Xr netstat 1
+and
+.Xr ps 1 .
+.Ss Networking
+Provides
+.Pa /api/networking
+and the
+.Pa /networking
+view.
+Collects routing table entries via
+.Dv NET_RT_DUMP ,
+DNS configuration from
+.Pa /etc/resolv.conf ,
+per-interface statistics via
+.Dv SIOCGIFDATA ,
+and active TCP/UDP connections via
+.Xr netstat 1 .
+.Ss Manual pages
+Provides
+.Pa /man/{area}/{section}/{page}[.fmt]
+and the
+.Pa /api/man/...
+namespace.
+Renders man pages by forking
+.Xr mandoc 1
+via
+.Fn safe_popen_read_argv
+with the configured timeout.
+Stderr from
+.Xr mandoc 1
+is discarded to prevent error messages from appearing in response bodies.
+Supported output formats:
+.Cm html , utf8 , markdown , pdf .
+.Ss Packages
+Provides
+.Pa /api/packages/...
+and the
+.Pa /packages
+view.
+Wraps
+.Xr pkg_info 1
+to implement search, info, which-file, file-list, and installed-list queries.
+.Sh STORAGE LAYER
+.Pa src/storage/
+contains stub implementations of a planned SQLite3 service layer.
+The interfaces are defined but not yet backed by SQLite3:
+.Bl -bullet -compact
+.It
+.Fn mw_db_open , mw_db_close
+\(em database lifecycle.
+.It
+.Fn mw_db_exec_schema
+\(em schema initialisation.
+.It
+.Fn mw_db_migrate , mw_tx_begin , mw_tx_commit , mw_tx_rollback
+\(em migration and transaction control.
+.It
+.Fn mw_stmt_prepare ,
+.Fn mw_bind_text ,
+.Fn mw_bind_int64 ,
+.Fn mw_bind_null ,
+.Fn mw_stmt_step ,
+.Fn mw_stmt_finalize
+\(em prepared statement lifecycle.
+.El
+.Pp
+All stubs return
+.Dv -1 .
+The interfaces are stable and intended to be implemented during the Phase 5
+storage refactor.
+.Sh OPENBSD SECURITY HARDENING
+After worker threads are started,
+.Fn apply_openbsd_security
+restricts the process with
+.Xr unveil 2
+and
+.Xr pledge 2 .
+.Pp
+.Xr unveil 2
+grants access only to:
+.Bl -bullet -compact
+.It
+.Cm templates_dir
+(read),
+.Cm static_dir
+(read/write/create).
+.It
+.Pa /usr/share/man , /usr/local/man , /usr/X11R6/man
+(read).
+.It
+.Cm mandoc_path ,
+.Pa /usr/bin/man , /usr/bin/apropos , /usr/bin/netstat , /bin/sh
+(execute).
+.It
+.Pa /usr/sbin/pkg_info
+(execute),
+.Pa /var/db/pkg , /usr/local , /usr/bin , /usr/sbin , /bin , /sbin ,
+.Pa /usr/local/bin
+(read).
+.It
+.Pa /etc/passwd , /etc/group , /etc/resolv.conf
+(read),
+.Pa /dev/null
+(read/write).
+.El
+.Pp
+.Xr pledge 2
+promises:
+.Dl stdio rpath wpath cpath inet route proc exec vminfo ps getpw
+.Pp
+On non-OpenBSD platforms both calls are compiled out.
+.Sh LOGGING
+.Pa src/core/log.c
+provides a thread-safe, mutex-protected logger.
+Log lines are formatted as:
+.Dl [YYYY-MM-DD HH:MM:SS] [LEVEL] message
+.Pp
+.Bl -tag -width "log_errno()"
+.It Fn log_init
+Opens the log file (appending) or defaults to stderr.
+.It Fn log_close
+Flushes and closes the log file.
+.It Fn log_info , log_error
+Always emitted.
+.It Fn log_debug
+Emitted only in verbose mode.
+.It Fn log_errno
+Calls
+.Fn log_error
+with
+.Xr strerror 3
+of the current
+.Va errno .
+.El
+.Sh ENDPOINTS
+.Ss Views
 .Bl -tag -width "/api/packages/search"
 .It Pa /
-Dashboard view.
+Dashboard.
 .It Pa /docs
-Manual page browser UI.
+Documentation and man page browser UI.
 .It Pa /networking
 Networking UI.
 .It Pa /packages
-Package manager UI.
+Package Manager UI.
 .It Pa /apiroot
-API index UI.
+API Index UI.
+.El
+.Ss JSON APIs
+.Bl -tag -width "/api/packages/search"
 .It Pa /api/metrics
-Metrics JSON.
+System metrics snapshot (CPU, RAM, load, disk, processes).
 .It Pa /api/networking
-Networking JSON.
+Networking diagnostics (routes, DNS, interfaces, connections).
 .It Pa /api/man/*
-Manual page JSON/text API namespace.
-.It Pa /api/packages/*
-Package manager JSON API namespace.
-.It Pa /man/{area}/{section}/{page}[.fmt]
-Rendered manual page endpoint.
+Manual page discovery and search.
+.It Pa /api/packages/search
+Search installed packages.
+.It Pa /api/packages/info
+Package details.
+.It Pa /api/packages/which
+Which package owns a file.
+.It Pa /api/packages/files
+Files installed by a package.
+.It Pa /api/packages/list
+List all installed packages.
+.El
+.Ss Manual page rendering
+.Bl -tag -width "/man/{area}/{section}/{page}.utf8"
+.It Pa /man/{area}/{section}/{page}
+Default HTML rendering.
+.It Pa /man/{area}/{section}/{page}.html
+HTML.
+.It Pa /man/{area}/{section}/{page}.utf8
+Plain UTF-8 text.
+.It Pa /man/{area}/{section}/{page}.md
+Markdown.
+.It Pa /man/{area}/{section}/{page}.pdf
+PDF.
+.El
+.Ss Static assets
+.Bl -tag -width "/api/packages/search"
 .It Pa /static/*
-Static assets.
+CSS, JavaScript, images, and other assets.
 .It Pa /favicon.ico
-Favicon.
+Favicon (served from
+.Pa static/assets/favicon.svg ) .
 .El
-.Sh ENTERPRISE REFACTOR PROGRAM
-The approved engineering direction is documented in
-.Pa docs/ENTERPRISE_REFACTOR_PLAN.md .
-.Pp
-The program introduces a capability-based layout:
-.Bl -bullet -compact
-.It
-.Pa core/
-for lifecycle, heartbeat, config, logging.
-.It
-.Pa net/
-for server accept loop, work queues, and connection ownership.
-.It
-.Pa http/
-for parser, response writer, static files, MIME policy.
-.It
-.Pa router/
-for route registry and module attach contracts.
-.It
-.Pa modules/
-for feature bundles (metrics, networking, man, packages, views).
-.It
-.Pa platform/openbsd/
-for native collectors (sysctl/getifaddrs/getmntinfo wrappers).
-.It
-.Pa render/
-for template cache and rendering logic.
-.It
-.Pa storage/
-for sqlite3 database and schema helpers.
+.Sh SOURCE LAYOUT
+.Bl -tag -width "modules/networking/"
+.It Pa src/app_main.c
+kqueue loop, worker pool, accept, idle sweep, shutdown.
+.It Pa src/core/conf.c
+Configuration file parser and CLI override logic.
+.It Pa src/core/heartbeat.c
+Periodic task scheduler.
+.It Pa src/core/log.c
+Thread-safe logger.
+.It Pa src/http/response.c
+Response pool, serialisation, file cache, HTTP send helpers.
+.It Pa src/http/utils.c
+JSON escaping, subprocess execution (fork / poll / timeout).
+.It Pa src/router/module_attach.c
+Module attach/detach API.
+.It Pa src/router/route_table.c
+Static handler, hot-view cache, favicon handler.
+.It Pa src/router/router.c
+.Fn router_register
+wrapper.
+.It Pa src/router/url_registry.c
+Route table, view routes,
+.Fn init_routes .
+.It Pa src/modules/man/
+Man page rendering and JSON API.
+.It Pa src/modules/metrics/
+System metrics collection and JSON API.
+.It Pa src/modules/networking/
+Networking diagnostics and JSON API.
+.It Pa src/modules/packages/
+.Xr pkg_info 1
+wrapper and JSON API.
+.It Pa src/render/template_render.c
+Template cache and placeholder substitution.
+.It Pa src/storage/sqlite_db.c
+SQLite3 database lifecycle stubs.
+.It Pa src/storage/sqlite_schema.c
+Schema migration and transaction stubs.
+.It Pa src/storage/sqlite_stmt.c
+Prepared statement stubs.
 .El
-.Pp
-Planned route/module extensibility uses an attach API so views and JSON
-endpoints can be enabled or disabled without central route rewrites.
-.Pp
-Planned performance model replaces multiple feature-owned samplers with
-one global 1-second heartbeat scheduler that dispatches periodic tasks.
-.Sh IMPLEMENTATION STATUS
-.Bl -tag -width "Storage layer"
-.It Routing
-Implemented with static table + dynamic prefixes.
-Module-owned attach API is planned.
-.It Sampling
-Metrics and networking each maintain their own 1-second loops.
-Unified heartbeat scheduler is planned.
-.It Storage layer
-Current caches are in-memory and filesystem based.
-Reusable sqlite3 facade is planned.
-.It File organization
-Core/http/router/render/modules/storage files are now split into subdirectories.
-Further per-domain decomposition is ongoing to reduce residual file sizes.
+.Sh ENTERPRISE REFACTOR ROADMAP
+.Bl -tag -width "Phase 5"
+.It Phase 0
+Test freeze / safety net.
+.It Phase 1
+Extract core infrastructure (conf, log, heartbeat).
+Completed.
+.It Phase 2
+Module attach API and router separation.
+In progress.
+.It Phase 3
+Single global heartbeat scheduler.
+API is ready; modules are not yet migrated.
+.It Phase 4
+Domain decomposition of metrics, networking, man, packages.
+Ongoing.
+.It Phase 5
+SQLite3 storage integration.
+Stub interfaces are defined.
+.It Phase 6
+Performance and observability hardening.
+Planned.
 .El
 .Sh DESIGN REQUIREMENTS
 .Bl -bullet -compact
@@ -160,18 +767,21 @@ C99-only codebase.
 .It
 OpenBSD KNF style.
 .It
-Small per-function decomposition.
+Small, reusable functions with strict module ownership.
 .It
-Doxygen documentation for exported APIs.
+Doxygen documentation for all exported APIs.
 .It
-Compatibility-first refactor (feature parity required).
+Compatibility-first refactor: feature parity required at every phase.
 .El
 .Sh SEE ALSO
 .Xr kqueue 2 ,
-.Xr sysctl 2 ,
 .Xr pledge 2 ,
 .Xr unveil 2 ,
-.Xr relayd 8 ,
-.Xr mandoc 1
+.Xr sysctl 3 ,
+.Xr getifaddrs 3 ,
+.Xr getmntinfo 3 ,
+.Xr mandoc 1 ,
+.Xr pkg_info 1 ,
+.Xr relayd 8
 .Sh AUTHORS
 MiniWeb contributors.
