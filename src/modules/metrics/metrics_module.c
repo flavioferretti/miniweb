@@ -95,6 +95,7 @@ static void metrics_snapshot_update(void);
 
 static pthread_mutex_t g_metrics_snapshot_lock = PTHREAD_MUTEX_INITIALIZER;
 static char *g_metrics_snapshot_json = NULL;
+static time_t g_metrics_snapshot_updated_at = 0;
 
 /**
  * @brief TODO: Describe metrics_read_cpu_ticks.
@@ -1517,6 +1518,7 @@ metrics_snapshot_update(void)
 	pthread_mutex_lock(&g_metrics_snapshot_lock);
 	free(g_metrics_snapshot_json);
 	g_metrics_snapshot_json = json;
+	g_metrics_snapshot_updated_at = time(NULL);
 	pthread_mutex_unlock(&g_metrics_snapshot_lock);
 }
 
@@ -1528,6 +1530,24 @@ char *
 get_system_metrics_json(void)
 {
 	(void)pthread_once(&g_metrics_once, metrics_ring_bootstrap);
+	time_t now = time(NULL);
+	int should_refresh = 0;
+
+	pthread_mutex_lock(&g_metrics_snapshot_lock);
+	if (g_metrics_snapshot_json == NULL) {
+		should_refresh = 1;
+	} else if (g_metrics_snapshot_updated_at == 0 ||
+		(now - g_metrics_snapshot_updated_at) > 2) {
+		/*
+		 * Fallback refresh path: if heartbeat sampling stalls for any reason,
+		 * avoid serving a permanently frozen payload.
+		 */
+		should_refresh = 1;
+	}
+	pthread_mutex_unlock(&g_metrics_snapshot_lock);
+
+	if (should_refresh)
+		metrics_snapshot_update();
 
 	pthread_mutex_lock(&g_metrics_snapshot_lock);
 	if (g_metrics_snapshot_json) {
@@ -1535,10 +1555,6 @@ get_system_metrics_json(void)
 		pthread_mutex_unlock(&g_metrics_snapshot_lock);
 		if (copy)
 			return copy;
-	} else {
-		pthread_mutex_unlock(&g_metrics_snapshot_lock);
-		metrics_snapshot_update();
-		pthread_mutex_lock(&g_metrics_snapshot_lock);
 	}
 
 	char *fallback = g_metrics_snapshot_json ? strdup(g_metrics_snapshot_json) : NULL;
