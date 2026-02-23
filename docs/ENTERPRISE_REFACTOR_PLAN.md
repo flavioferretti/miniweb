@@ -313,3 +313,31 @@ You can declare miniweb "enterprise-ready" when:
 - sqlite3 storage layer is reused by at least two modules.
 - C99 + KNF checks pass in CI and documentation is Doxygen-complete.
 
+
+
+---
+
+## 11) Migration status update (current repository snapshot)
+
+### Completed in this stage
+
+1. **Module attach contract is active** via `router` abstraction and `miniweb_module` wiring.
+2. **Heartbeat scheduler abstraction exists** and is used as the single periodic task control plane.
+3. **SQLite storage facade scaffolding exists** under `src/storage` and `include/miniweb/storage`.
+4. **Source tree is now capability-oriented** (`core`, `http`, `router`, `modules`, `render`, `storage`).
+
+### Remaining gaps before enterprise completion
+
+1. Move remaining legacy includes to `include/miniweb/**` only and remove compatibility headers.
+2. Complete SQLite backend implementation (`sqlite3_open_v2`, prepared statement execution, error mapping).
+3. Add module-level enable/disable flags loaded from config and persisted in SQLite.
+4. Add integration tests for module toggles and heartbeat task lifecycle semantics.
+5. Finish Doxygen coverage and enforce via CI gate.
+
+### Code review (focus areas)
+
+- **Documentation quality**: comments are improving but many legacy functions still use placeholder descriptions.
+- **Storage behavior**: `src/storage/*.c` are currently stubs; API shape is good, runtime behavior is incomplete.
+- **Thread lifecycle**: heartbeat thread currently uses detach semantics; consider join-based shutdown for deterministic teardown.
+- **Header organization**: enterprise headers under `include/miniweb/` are present; continue migrating all includes to this namespace.
+- **Performance observability**: add per-task heartbeat latency counters and expose them in metrics JSON.

@@ -1,5 +1,13 @@
 #include "../../include/miniweb/router/module_attach.h"
 
+/**
+ * @brief Initialize and attach every enabled module to the router.
+ * @param r Router facade used by module attach callbacks.
+ * @param modules Array of module descriptors.
+ * @param count Number of module descriptors in @p modules.
+ * @param ctx Opaque initialization context forwarded to each module.
+ * @return 0 on success, -1 if a module init or route attach callback fails.
+ */
 int
 miniweb_module_attach_enabled(struct router *r,
 	struct miniweb_module *modules, size_t count, void *ctx)
