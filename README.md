@@ -1,51 +1,92 @@
-# MiniWeb — OpenBSD System Monitoring Server
+# MiniWeb — OpenBSD C99 Web Framework (Enterprise Refactor Track)
 
 [![OpenBSD](https://img.shields.io/badge/OpenBSD-7.8-orange.svg)](https://www.openbsd.org/)
 [![License](https://img.shields.io/badge/license-BSD%203--Clause-blue.svg)](LICENSE)
 [![C](https://img.shields.io/badge/language-C99-brightgreen.svg)](https://en.wikipedia.org/wiki/C99)
 
-## Name
+## What MiniWeb is now
 
-`miniweb` — lightweight HTTP server for OpenBSD system monitoring.
+MiniWeb is a lightweight OpenBSD-native HTTP server written in C99.
+It currently ships with:
 
-## Synopsis
+- system metrics dashboard,
+- manual page browser,
+- package manager endpoints,
+- networking endpoints,
+- template-driven web views,
+- static file serving,
+- kqueue + worker-thread runtime.
 
-```sh
-./build/miniweb [-h] [-v] [-b address] [-c connections] [-f file] [-p port] [-t threads] [-l file]
-```
+## What MiniWeb is becoming
 
-## Description
+MiniWeb is being re-engineered into an enterprise-grade general-purpose web framework with:
 
-MiniWeb is a lightweight HTTP server written in C99 for OpenBSD. It provides a system monitoring dashboard, a RESTful JSON API, and an integrated manual page browser.
+- clear modular boundaries,
+- attachable/disable-able modules and routes,
+- centralized heartbeat scheduling for expensive sampling,
+- reusable sqlite3 storage facilities,
+- strict C99 + OpenBSD KNF engineering discipline.
 
-Runtime architecture is based on a single `kqueue(2)` dispatcher thread plus worker threads. Connections are accepted, enqueued once with `EV_DISPATCH`, processed by workers, then closed. This eliminates worker races on the same fd and avoids busy-waiting.
+The canonical refactor blueprint is documented in:
 
-Security hardening is enabled from startup using `pledge(2)` and `unveil(2)`. Metrics are gathered through native interfaces (`sysctl(2)`, `getloadavg(3)`, `getifaddrs(3)`, `getmntinfo(3)`) without external commands. Manual page rendering is delegated to `mandoc(1)` with a timeout.
+- `docs/ENTERPRISE_REFACTOR_PLAN.md`
 
-MiniWeb does not implement TLS directly. Production deployment is intended behind `relayd(8)` for TLS termination.
+---
 
-At startup, MiniWeb loads configuration from file (if found), then applies CLI overrides.
+## Runtime model (current implementation)
 
-![Dashboard Screenshot](docs/screenshot.png)
+- **dispatcher thread**: owns `kqueue(2)` and accept loop,
+- **worker pool**: dequeues connections, parses HTTP, dispatches routes,
+- **cache layers**: template cache, hot view cache, static file cache, metrics snapshot cache, networking sample ring,
+- **security hardening**: `pledge(2)` and `unveil(2)`.
 
-## Features
+MiniWeb intentionally does not implement TLS directly. Run behind `relayd(8)` for TLS termination.
 
-- Real-time metrics: CPU load, memory, swap, disk usage, network interfaces
-- Process monitoring: top 10 by CPU and top 10 by memory
-- Manual page browser: search via `apropos(1)` and render with `mandoc(1)`
-- OpenBSD package manager UI: search packages, inspect metadata, map file paths to owning packages, list installed files
-- Security hardening with `pledge(2)` + `unveil(2)`
-- High-performance event loop with `kqueue(2)` + worker thread pool
-- RESTful JSON API for external integrations
-- No native TLS by design (run behind `relayd(8)`)
+---
 
-## Quick Start
+## Enterprise refactor principles
+
+The refactor applies a strict **divide et impera** policy:
+
+1. one responsibility per module,
+2. one ownership location per exported function,
+3. one centralized heartbeat for periodic heavy tasks,
+4. one attach API for route/module composition,
+5. one reusable storage layer for sqlite3-backed persistence.
+
+Target layered architecture:
+
+- `core/` lifecycle, heartbeat, config, logging,
+- `net/` kqueue/server/connection-workflow,
+- `http/` request+response+static+mimetype,
+- `router/` route matching and module registration,
+- `modules/` metrics/networking/man/packages/views,
+- `platform/openbsd/` sysctl and OS collectors,
+- `render/` template cache/rendering,
+- `storage/` sqlite db/schema/statement helpers.
+
+---
+
+## Feature status matrix
+
+| Area | Current state | Enterprise target |
+|---|---|---|
+| Routing | Static table + dynamic prefixes | Module-owned route attach registry |
+| Metrics scheduling | Feature-owned sampler loop | Global 1s heartbeat task scheduler |
+| Networking scheduling | Feature-owned sampler loop | Global heartbeat-managed task |
+| Storage | In-memory + filesystem caches | Reusable sqlite3 service layer |
+| File organization | Several large source files | Capability-based modular tree |
+| API extensibility | Route edits in central code | Plug-in module attach/detach |
+
+---
+
+## Build and run
 
 ### Prerequisites
 
-- OpenBSD 7.8 or later
-- Base development tools (`clang`, `make`)
-- Optional benchmark tooling: `wrk`, `gnuplot`
+- OpenBSD 7.8+
+- base tools: `clang`, `make`
+- optional: `wrk`, `gnuplot`
 
 ### Build
 
@@ -53,13 +94,13 @@ At startup, MiniWeb loads configuration from file (if found), then applies CLI o
 make clean && make
 ```
 
-### Build man page
+### Build manual page
 
 ```sh
 make man
 ```
 
-### Run unit tests
+### Unit tests
 
 ```sh
 make unit-tests
@@ -71,671 +112,82 @@ make unit-tests
 ./build/miniweb -v
 ```
 
-Open <http://127.0.0.1:9001>.
+Open: <http://127.0.0.1:9001>
 
-## Usage
+---
+
+## CLI
 
 ```text
 ./build/miniweb [options]
 
   -f FILE   Config file path (default: auto-detect)
-  -p PORT   Port to listen on        (default: 9001)
-  -b ADDR   Address to bind to       (default: 127.0.0.1)
-  -t NUM    Worker thread count      (default: 4)
-  -c NUM    Max concurrent conns     (default: 1280)
-  -l FILE   Log file path             (default: stderr)
-  -v        Verbose logging to stderr
-  -h        Show this help
+  -p PORT   Listen port (default: 9001)
+  -b ADDR   Bind address (default: 127.0.0.1)
+  -t NUM    Worker threads (default: 4, max 32 by compile-time limit)
+  -c NUM    Max concurrent connections (default: 1280)
+  -l FILE   Log file path (default: stderr)
+  -v        Verbose logging
+  -h        Help
 ```
 
-When `log_file` is configured, runtime logs are written through the centralized
-logger (`src/log.c`) to that file; otherwise logs default to stderr.
+---
 
-## Endpoints
+## Endpoints (current)
 
-Responses follow HTTP/1.1 connection semantics: keep-alive is enabled by default for
-HTTP/1.1 unless the client sends `Connection: close`.
-Handlers may also force close behavior, and each connection is capped at 64 served
-requests before being closed.
+### Views
 
-### Route matching and response behavior (actual runtime flow)
+- `GET /`
+- `GET /docs`
+- `GET /networking`
+- `GET /packages`
+- `GET /apiroot`
 
-`route_match()` applies routing in this order:
+### APIs
 
-1. exact static registrations (`init_routes()` table),
-2. dynamic `GET /man/...` (requires at least two slashes after `/man/`),
-3. dynamic `GET /api/man...`,
-4. dynamic `GET /api/packages...`,
-5. dynamic `GET /static/...`.
+- `GET /api/metrics`
+- `GET /api/networking`
+- `GET /api/man/*`
+- `GET /api/packages/*`
 
-Anything else returns a generated HTML `404 Not Found` page.
+### Man rendering
 
-| Route kind | Match rule | Response mechanism |
-|---|---|---|
-| View pages (`/`, `/docs`, `/apiroot`, `/networking`, `/packages`) | Exact `GET` match in `view_routes[]` | `view_template_handler()` -> `http_render_template()` -> HTML response from template cache |
-| Metrics JSON (`/api/metrics`) | Exact `GET` | `metrics_handler()` builds a fresh JSON snapshot each request and replies `application/json` (+ CORS `*`) |
-| Networking JSON (`/api/networking`) | Exact `GET` | `networking_api_handler()` builds live routes/DNS/interfaces JSON and replies `application/json` |
-| Package JSON (`/api/packages/*`) | Exact listed endpoints + dynamic prefix fallback | `pkg_api_handler()` dispatches to `pkg_info(1)`-backed helpers, returns `application/json`; missing query args => `400`, unknown subpath => `404` |
-| Man API (`/api/man/*`) | Dynamic prefix (`/api/man`) | `man_api_handler()` returns JSON for sections/pages/metadata endpoints and `text/plain` for search output |
-| Man render (`/man/{area}/{section}/{page}[.fmt]`) | Dynamic prefix + slash-count guard | `man_render_handler()` validates tokens, uses disk cache when available, otherwise renders via `mandoc(1)` and replies by MIME (`html/pdf/ps/md/txt`) |
-| Static assets (`/static/*`) | Dynamic prefix (`/static/`) | `static_handler()` blocks traversal (`..`, `//`), resolves MIME by extension, then streams through `http_send_file()` |
-| Favicon (`/favicon.ico`) | Exact `GET` | `favicon_handler()` serves `{static_dir}/assets/favicon.svg` as `image/svg+xml` |
+- `GET /man/{area}/{section}/{page}[.fmt]`
 
-For known paths hit with an unsupported method, dispatch now returns `405 Method Not Allowed`; unknown paths still return `404 Not Found`.
+### Static
 
-### Web Interface
+- `GET /static/*`
+- `GET /favicon.ico`
 
-| Endpoint | Description |
-|---|---|
-| `GET /` | Dashboard with system overview |
-| `GET /docs` | Manual page browser with `apropos(1)` search |
-| `GET /networking` | Interfaces, routes, DNS configuration |
-| `GET /packages` | Package manager UI (search/info/which-owner) |
-| `GET /apiroot` | API index page |
+---
 
-### Add or Remove Regular Pages (`/`, `/docs`, ...)
+## Refactor execution roadmap
 
-Template-backed pages are declared in `view_routes[]` in `src/urls.c`.
+1. **Phase 0:** test freeze/safety net.
+2. **Phase 1:** extract core infra from monolithic files.
+3. **Phase 2:** module attach API + router separation.
+4. **Phase 3:** single heartbeat scheduler.
+5. **Phase 4:** domain decomposition (`metrics`, `networking`, `man`, `packages`).
+6. **Phase 5:** sqlite3 storage integration.
+7. **Phase 6:** performance and observability hardening.
 
-To add a page (example: `/about`):
+For detailed tasks, read:
 
-1. Create templates in `templates/`:
-   - `about.html`
-   - `about_extra_head.html` (optional)
-   - `about_extra_js.html` (optional)
-2. Add route entry in `src/urls.c`:
+- `docs/ENTERPRISE_REFACTOR_PLAN.md`
 
-```c
-{"GET", "/about", "MiniWeb - About", "about.html",
- "about_extra_head.html", "about_extra_js.html"},
-```
+---
 
-3. Rebuild:
 
-```sh
-make clean && make
-./build/miniweb -v
-```
+## Documentation alignment
 
-To remove a page, remove the corresponding `view_routes[]` entry and rebuild.
+- `README.md` and `docs/miniweb.1` now track the enterprise refactor program vocabulary and lifecycle.
+- Runtime behavior descriptions remain explicit about current implementation vs planned architecture phases.
 
-### Metrics API
+---
+## Development standards
 
-| Endpoint | Response |
-|---|---|
-| `GET /api/metrics` | Full JSON system snapshot |
-| `GET /api/networking` | Interfaces, routes, resolver JSON |
+- Language: **C99 only**
+- Style: **OpenBSD KNF**
+- Documentation: **Doxygen per exported API**
+- Direction: small reusable functions, strict module ownership, minimal coupling
 
-`/api/metrics` includes hostname, OS version, uptime, load averages, memory, swap, per-filesystem disk usage, network status, top process lists (CPU/memory), process counters, and a short in-memory history window for charting.
-
-Implementation details (current):
-
-- A detached sampler thread stores one sample/second in a 1 MiB ring buffer.
-- `get_system_metrics_json()` serves a mutex-protected JSON snapshot string that is refreshed every second by the sampler.
-- If no snapshot is available yet, the handler triggers an immediate build and returns the first available snapshot.
-- `GET /api/metrics` adds `Access-Control-Allow-Origin: *` to simplify dashboard embedding.
-
-### Packages API
-
-| Endpoint | Description |
-|---|---|
-| `GET /api/packages/search?q={query}` | Search installed packages by name pattern (`pkg_info -Q`). |
-| `GET /api/packages/info?name={package}` | Show detailed package metadata for one package (`pkg_info`). |
-| `GET /api/packages/which?path={absolute_file_path}` | Find package owning an absolute path (`pkg_info -E`). |
-| `GET /api/packages/files?name={package}` | List files installed by a package (`pkg_info -L`). |
-| `GET /api/packages/list` | List all installed packages (`pkg_info -q`). |
-
-### Manual Pages API
-
-| Endpoint | Description |
-|---|---|
-| `GET /api/man/search?q=query` | Raw `apropos(1)` output (`text/plain`) |
-| `GET /api/man/sections` | JSON list of available manual sections |
-| `GET /api/man/pages?section={n}` | JSON list of pages in a section |
-| `GET /api/man/resolve?name={page}&section={n}` | JSON with resolved `{area}`, `{section}`, and filesystem path for a page via `man -w` |
-| `GET /api/man/{area}/{section}` | JSON list of pages for a given area and section |
-| `GET /man/{area}/{section}/{page}` | HTML (default) |
-| `GET /man/{area}/{section}/{page}.html` | HTML |
-| `GET /man/{area}/{section}/{page}.md` | Markdown |
-| `GET /man/{area}/{section}/{page}.pdf` | PDF |
-| `GET /man/{area}/{section}/{page}.ps` | PostScript |
-| `GET /man/{area}/{section}/{page}.txt` | ASCII text |
-
-Rendered pages are cached on disk under `{static_dir}/man/{area}/{section}/{page}.{format}`. For `html` and `md`, a hot-cache TTL (`MAN_HOT_CACHE_TTL_SEC=30` s) skips re-rendering on hits within the window. For `txt`, `ps`, and `pdf`, the file is re-rendered on every request, immediately written to the cache path, and then served via the static-file handler. All cached files are eligible for promotion into the in-memory static cache on repeated access.
-
-## Caching facilities (implemented)
-
-MiniWeb currently uses six distinct caches/buffers with different goals:
-
-1. **Template cache (`template_engine.c`)**
-   - Preloaded at startup by `template_cache_init()` by reading every regular file under `templates_dir`.
-   - Protected by `template_cache_lock` for concurrent reads/refreshes.
-   - TTL-based invalidation: once `TEMPLATE_CACHE_TTL_SEC=60` expires, the next template read triggers a full reload (`template_cache_refresh_locked()`), so template edits are picked up without restart.
-   - Rendering looks up template fragments in memory and duplicates strings per request.
-
-2. **Hot view cache for HTML pages (`routes.c`)**
-   - In-memory fast path for five hot template-backed pages: `/`, `/docs`, `/networking`, `/packages`, `/apiroot`.
-   - Cache TTL is `HOT_VIEW_CACHE_TTL_SEC=10`.
-   - Stores fully rendered page body per path and bypasses template rendering on a fresh hit.
-   - Writes are mutex-protected and only used for non-query-string requests.
-
-3. **In-memory static file cache (`http_handler.c`)**
-   - Sharded cache (`FILE_CACHE_SHARDS=16`), each shard with `FILE_CACHE_SLOTS=32` and per-object max payload `FILE_CACHE_MAX_BYTES=256 KiB`.
-   - Admission is **two-hit**: first hit enters candidate table, second hit allows insertion.
-   - Insertion is **rate-limited** by token budget (`FILE_CACHE_INSERTS_PER_SEC=8`).
-   - Both cache entries and candidates are evicted by age (`FILE_CACHE_MAX_AGE_SEC=120`).
-   - Validation key is `(path, mtime)`; stale-on-disk changes invalidate hits automatically when mtime differs.
-   - Hit/miss/throttle counters are tracked per shard and emitted through debug logs each second.
-
-4. **On-disk man render cache (`man.c`)**
-   - Cache path: `{static_dir}/man/{area}/{section}/{page}.{format}`.
-   - Supported cached formats: `html`, `txt`, `md`, `ps`, `pdf`.
-   - For `html` and `md`: a hot-cache TTL check (`MAN_HOT_CACHE_TTL_SEC=30` s) skips re-rendering entirely if the cached file is fresh. For `txt`, `ps`, and `pdf`: every request triggers a fresh render, immediately writes the result to the cache path, then serves via `static_handler`. All formats are eligible for subsequent promotion into the in-memory static cache.
-
-5. **Metrics snapshot cache (`metrics.c`)**
-   - A detached background sampler updates one shared JSON snapshot string once per second.
-   - `/api/metrics` serves a copy of this latest snapshot, avoiding full synchronous data collection on every request.
-
-6. **Networking sample ring (`networking.c`)**
-   - A detached sampler collects routes, DNS, and interface counters every second into a 1 MiB ring buffer.
-   - `/api/networking` usually serializes the latest cached sample; if ring bootstrap is not ready, it falls back to immediate collection.
-
-Additionally, package search has a dedicated micro-cache:
-
-- `/api/packages/search` uses an in-memory query cache (`PKG_SEARCH_CACHE_SIZE=64`, TTL `30s`) to avoid repeated `pkg_info -Q` subprocess calls for repeated queries.
-
-### Static Files
-
-| Endpoint | Description |
-|---|---|
-| `GET /static/*` | CSS, JS, images (rejects `..` and `//`) |
-| `GET /favicon.ico` | `static/assets/favicon.svg` as `image/svg+xml` |
-
-## Architecture
-
-### Project Structure
-
-```text
-.
-├-- Makefile
-├-- README.md
-├-- benchmark.sh
-├-- build/
-├-- docs/
-├-- include/
-├-- src/
-├-- static/
-├-- templates/
-└-- tests/
-```
-
-### Codebase diagram
-
-![Diagram](docs/miniweb_diagram.svg)
-
-### Request Lifecycle
-
-```text
-accept()
-   │
-   ▼
-kqueue dispatcher (main thread)
-   │  EV_DISPATCH → event auto-disabled after delivery
-   ▼
-work queue (pthread_cond_wait, zero busy-waiting)
-   │
-   ▼
-worker thread (1 of N)
-   │  recv() → parse → route_match() → handler()
-   ▼
-close(fd) + free_connection()
-```
-
-Main thread handles accept + queueing only; workers never call `kevent()`. `EV_DISPATCH` ensures one worker handles one readiness event.
-
-Internal refactoring keeps connection teardown logic in one path (`free_connection()`), and view rendering in one path (`http_render_template()`), reducing duplicated code across handlers and timeout/shutdown flows.
-
-### Key Components
-
-- `src/main.c`: dispatcher + pool, fd-indexed connection table, generation checks, idle timeout sweeps
-- `src/urls.c`: declarative route tables (`view_routes[]`) plus grouped registration helpers for view and package API endpoints
-- `src/http_handler.c`: shared response helpers, including centralized template rendering (`http_render_template`)
-- `src/metrics.c`: metrics via `sysctl(2)` and other native interfaces with retry loop for `KERN_PROC_ALL`
-- `src/template_engine.c`: simple `{{TOKEN}}` substitution from `templates/`
-
-## Performance
-
-Benchmark run generated `2026-02-23 13:13:24`, OpenBSD 7.8, `wrk`, 4 threads, 20 s duration, base URL `http://localhost:3000`:
-
-| Metric | Value |
-|---|---|
-| Peak throughput | **38,761.49 req/s** |
-| Average throughput | **15,952.6 req/s** |
-| Best average latency | **0.123 ms** |
-| Worst max latency | **1,450 ms** |
-| Grand average latency | **10.76 ms** |
-
-Per-endpoint summary (connections vary 4–256):
-
-| Endpoint | Peak req/s | Notes |
-|---|---|---|
-| `GET /apiroot` | 38,761 | Highest observed peak (64 conns) |
-| `GET /api/metrics` | 26,197 | Mutex-protected JSON snapshot |
-| `GET /static/assets/favicon.svg` | 34,801 | Small SVG, in-memory static cache |
-| `GET /static/css/custom.css` | 27,810 | CSS, in-memory static cache |
-| `GET /` | 26,838 | Template-rendered, hot-view cache |
-| `GET /packages` | 25,679 | Template-rendered, hot-view cache |
-| `GET /api/networking` | 21,746 | Live route + DNS collection, ring cache |
-| `GET /api/packages/search?q=curl` | 21,728 | `pkg_info` subprocess, query micro-cache |
-| `GET /man/system/1/ls` (HTML) | 18,279 | On-disk man render cache hit |
-| `GET /man/system/1/ls.md` | 19,427 | On-disk man render cache hit |
-
-Static assets and lightweight template-backed pages peak at 16–128 concurrent connections. API endpoints backed by native syscalls (`/api/metrics`, `/api/networking`) sustain high throughput through in-memory snapshot caches. Man-page endpoints show higher latency growth at 128–256 concurrency when the on-disk render cache is cold. Several 256-connection rows report `HTTP=000000` while row status is `OK`; these are high-pressure saturation artifacts and should be validated against server logs before drawing conclusions.
-
-This pattern is consistent with the architecture: hot static and template-backed paths benefit from in-memory static, hot-view, and template TTL caches; subprocess- and render-heavy paths (`mandoc`, `pkg_info`) remain the dominant tail-latency sources.
-
-### History note
-
-The rewrite from `libmicrohttpd` to native `kqueue(2)` + `EV_DISPATCH` workers improved measured static throughput from ~7,000 req/s to over **23,000 req/s** (~+228%, measured with `wrk` at 32 concurrent connections on a four-core system). Subsequent pool, slab, and cache improvements have lifted the peak to over **38,000 req/s** on lightweight template endpoints.
-
-## Security
-
-### Sandboxing
-
-`unveil(2)` restricts to:
-
-```text
-templates/          r
-static/             rwc
-/usr/share/man      r
-/usr/local/man      r
-/usr/X11R6/man      r
-/usr/bin/mandoc     x
-/usr/bin/man        x
-/usr/bin/apropos    x
-/usr/bin/netstat    x
-/bin/sh             x
-/etc/man.conf       r
-/dev/null           rw
-/usr/sbin/pkg_info  x     — packages API
-/var/db/pkg         r     — installed package database
-/usr/local          r     — pkg_info -E path resolution
-/usr/bin            r
-/usr/sbin           r
-/bin                r
-/sbin               r
-/usr/local/bin      r
-/etc/passwd         r
-/etc/group          r
-/etc/resolv.conf    r
-```
-
-`pledge(2)` promises:
-
-```text
-stdio rpath wpath cpath inet route proc exec vminfo ps getpw
-```
-
-### Additional mitigations
-
-- Static traversal protection (`..`, `//` rejected)
-- Connection cap with immediate 503 for excess clients
-- Sanitization of manual page path components before `mandoc(1)` execution
-- Forwarded headers trusted only from `trusted_proxy`
-
-### Known limitations
-
-- No built-in TLS
-- No authentication layer
-- Some JSON fields can be truncated by fixed-size buffers
-- Timeout logic cannot preempt kernel-level stalls inside `mandoc(1)`
-
-## Reverse Proxy
-
-MiniWeb is designed to run behind `relayd(8)`.
-
-When proxied, client identity/protocol are read in this order:
-
-1. `X-Real-IP`
-2. `X-Forwarded-For` (first value)
-3. Socket peer address
-
-`X-Forwarded-Proto` should be set to `https` by the proxy for original TLS connections.
-
-### relayd example
-
-```conf
-table <miniweb> { 127.0.0.1 }
-
-http protocol "https_proxy" {
-    tls keypair "server"
-
-    match request header set "X-Forwarded-For"   value "$REMOTE_ADDR"
-    match request header set "X-Forwarded-Proto" value "https"
-    match request header set "X-Real-IP"         value "$REMOTE_ADDR"
-    match request header set "Host"              value "$HOST"
-
-    tcp { nodelay }
-}
-
-relay "https_frontend" {
-    listen on egress port 443 tls
-    protocol "https_proxy"
-    forward to <miniweb> port 9001
-}
-
-relay "http_redirect" {
-    listen on egress port 80
-    forward to <miniweb> port 9001
-}
-```
-
-## Configuration File
-
-Search order (first match wins):
-
-1. `-f /path/to/file` (explicit, failure is fatal)
-2. `./miniweb.conf`
-3. `$HOME/.miniweb.conf`
-4. `/etc/miniweb.conf`
-
-CLI flags override file values. Unknown directives produce warnings without aborting startup.
-
-### Format
-
-```text
-# comment
-key    value
-```
-
-### Directives
-
-| Key | Default | Description |
-|---|---|---|
-| `port` | `9001` | TCP port |
-| `bind` | `127.0.0.1` | IPv4 bind address |
-| `threads` | `4` | Worker thread count |
-| `max_conns` | `1280` | Max concurrent connections |
-| `conn_timeout` | `30` | Idle timeout (seconds) |
-| `max_req_size` | `16384` | Max request size (bytes) |
-| `mandoc_timeout` | `10` | `mandoc(1)` timeout (seconds) |
-| `static_dir` | `static` | Static assets directory |
-| `templates_dir` | `templates` | Templates directory |
-| `mandoc_path` | `/usr/bin/mandoc` | `mandoc(1)` binary path |
-| `trusted_proxy` | `127.0.0.1` | Trusted proxy IP for forwarded headers |
-| `log_file` | `` (unset) | Optional absolute/relative file path for runtime logs |
-| `verbose` | `no` | `yes/no/true/false/1/0` |
-
-## Logging
-
-MiniWeb includes a central logging facility in `src/log.c` used by runtime
-paths that need consistent formatting and sink selection.
-
-- If `log_file` is set in configuration, logs are appended to that file.
-- If `log_file` is unset, logs go to stderr.
-- `verbose` controls debug-level emission; warnings/errors are still emitted.
-
-
-## kqueue Concurrency Analysis (main + http_handler)
-
-### Current strategy strengths for simultaneous requests
-
-- `EV_DISPATCH` on client sockets prevents duplicate worker handling of the same fd after readiness delivery, reducing race and lock contention under bursty parallel traffic.
-- `handle_accept()` drains the entire accept backlog in one pass, which is a good strategy for high connection fan-in.
-- Workers block on `pthread_cond_wait` (no spin), and the dispatcher is the single owner of `kevent()`, which keeps scheduling predictable.
-- Keep-alive rearm (`EV_ENABLE`) avoids full reconnect overhead for sequential requests.
-
-### Latest merged PR summary (PR-41)
-
-- Replaced per-accept `calloc/free` connection lifecycle with a fixed-size connection slab + free-stack in `main.c`.
-- Added a pooled `http_response_t` allocator in `http_handler.c` (1024 reusable response objects, with heap fallback on transient pool exhaustion).
-- Hardened static file cache behavior with:
-  - insertion token budget (`FILE_CACHE_INSERTS_PER_SEC=8`),
-  - two-hit admission before entering the main cache,
-  - age-based eviction (`FILE_CACHE_MAX_AGE_SEC=120`) for both cache entries and admission candidates.
-
-Why this improves efficiency even if req/s is similar:
-
-- **Less allocator churn**: under concurrent keep-alive traffic, reusing connection/response objects cuts repeated malloc/free and reduces allocator lock contention.
-- **Better CPU cache locality**: slab/pool objects are reused in-place, so hot metadata stays warmer in L1/L2.
-- **Less memory pollution**: one-shot static files are less likely to evict useful cache entries thanks to admission + rate limiting.
-- **More predictable tail behavior**: stale-file eviction and bounded insert rate avoid bursty memory growth and allocator spikes.
-
-### Strategic improvements for spawn/parallel response throughput
-
-- **Batch kevent changes**: where possible, accumulate multiple `EV_ENABLE`/`EV_ADD` operations and flush with one `kevent()` call to reduce syscall pressure.
-- **Accept/load-shedding tuning**: expose and tune `LISTEN_BACKLOG`, `MAX_EVENTS`, and `QUEUE_CAPACITY` together for workload shape (short/static vs long/dynamic).
-- **Backpressure visibility**: export counters for queue-full drops and keep-alive rearm failures to drive tuning from real measurements.
-- **Hot response path**: for static files larger than cache threshold, consider `sendfile(2)`-style zero-copy path (platform permitting) to reduce userspace copy costs.
-
-### Ring buffer opportunities
-
-- **Already present**: the work queue in `main.c` is already a fixed-size circular buffer (`head/tail/count`, modulo arithmetic).
-- **Good candidate**: request receive path currently resets and re-parses a linear per-connection buffer. A per-connection circular RX buffer can reduce memmove/fragmentation pressure when headers arrive in many small chunks.
-- **Not a strong candidate**: `http_handler` response write path (`writev_all`) already streams with iovecs; a second ring buffer for TX would often add complexity without clear wins unless moving to async multi-response pipelining.
-
-### Memory allocation/deallocation analysis
-
-- **Connection lifecycle (`main.c`)**: now uses a preallocated fixed-size slab + free-stack; no per-accept heap allocation in the hot path.
-- **Static file cache (`http_handler.c`)**: still allocates payload copies, but insertion is token-limited, gated by two-hit admission, and stale entries are evicted by age.
-- **File-send path**: uncached file responses may still allocate a temporary full-file copy (`cache_copy`) up to cache limit for insertion.
-- **Response objects**: served from a mutex-protected pool (`1024` slots) with heap fallback when the pool is temporarily exhausted, avoiding most hot-path heap churn.
-
-Potential follow-ups:
-
-- evaluate lock-sharding or per-thread response pools to reduce mutex contention at very high thread counts;
-- measure token budget (`FILE_CACHE_INSERTS_PER_SEC`) per workload class (static-heavy vs API-heavy) and tune accordingly;
-- consider a zero-copy `sendfile(2)` path for larger static files where platform/runtime behavior is favorable.
-
-## Hard-coded caps and effective ranges
-
-Some limits are compile-time constants (hard caps), while others are configurable but clamped by parser/runtime rules.
-
-### Compile-time hard caps (wired in code)
-
-| Cap | Value | Effective range | Notes |
-|---|---:|---|---|
-| `MAX_EVENTS` | 256 | `1..256` per `kevent` wait | Upper bound of events processed per loop iteration. |
-| `MAX_CONNECTIONS` | 4096 | `1..4096` runtime active conns | Absolute upper bound; `-c`/`max_conns` cannot exceed this. |
-| `THREAD_POOL_SIZE` | 32 | `1..32` workers | Runtime `threads` is clamped to this value. |
-| `REQUEST_BUFFER_SIZE` | 16384 | `1024..16384` bytes effective request size | Runtime `max_req_size` parsed up to 1 MiB but now clamped to buffer size. |
-| `LISTEN_BACKLOG` | 1024 | fixed (`listen(2)` backlog hint) | Pending accept queue hint; tune with kernel limits in mind. |
-| `QUEUE_CAPACITY` | 4096 | `1..4096` queued dispatched conns | Circular queue depth before overload 503/drop path. |
-| `MAX_KEEPALIVE_REQUESTS` | 64 | fixed per connection | Forces close after 64 served requests on one keep-alive connection. |
-| `WRITE_RETRY_LIMIT` | 20 | fixed write retries | Max EAGAIN retry cycles before write failure. |
-| `WRITE_WAIT_MS` | 10 | fixed poll wait ms | Poll wait step used by write retry loop. |
-| `FILE_CACHE_SLOTS` | 32 | fixed entries | Number of in-memory static file cache slots. |
-| `FILE_CACHE_MAX_BYTES` | 262144 | `1..262144` bytes per cached file | Files above threshold bypass memory cache. |
-| `FILE_CACHE_INSERTS_PER_SEC` | 8 | fixed inserts/second | Token budget that rate-limits cache insertions. |
-| `FILE_CACHE_MAX_AGE_SEC` | 120 | fixed seconds | Age-based eviction threshold for cache entries and admission candidates. |
-| Response pool size | 16,384 | 16 shards × 1024 objects + heap fallback | Upper bound of reusable pooled `http_response_t` objects; `RESPONSE_POOL_SHARDS=16` shards each holding 1024 items, with thread-hash shard selection. |
-
-### Configurable caps and parser ranges
-
-| Key | Parser range | Runtime effective range | Reason |
-|---|---|---|---|
-| `threads` | `1..64` | `1..32` | hard-clamped by `THREAD_POOL_SIZE`. |
-| `max_conns` | `1..65535` | `1..4096` | hard-clamped by `MAX_CONNECTIONS`. |
-| `max_req_size` | `1024..1048576` | `1024..16384` | hard-clamped by `REQUEST_BUFFER_SIZE`. |
-| `conn_timeout` | `1..3600` | `1..3600` | used by idle sweep logic. |
-| `mandoc_timeout` | `1..120` | `1..120` | subprocess timeout bound. |
-| `port` | `1..65535` | `1..65535` | standard TCP port range. |
-
-Recommended tuning profile for high parallel request loads:
-
-- keep `threads` near CPU core count up to hard cap;
-- increase `max_conns` only with enough RAM and worker capacity;
-- keep `max_req_size` as low as practical for target APIs;
-- monitor 503/drop behavior to decide whether queue/backlog caps need recompilation.
-
-## Files
-
-- `./miniweb.conf`, `$HOME/.miniweb.conf`, `/etc/miniweb.conf` — startup config search list
-- `templates/` — HTML templates
-- `static/` — assets served under `/static/`
-- `/etc/passwd`, `/etc/group`, `/etc/resolv.conf` — lookups/data for runtime views
-- `/etc/man.conf`, `/usr/share/man`, `/usr/local/man`, `/usr/X11R6/man` — manpage data
-- `/usr/bin/mandoc`, `/usr/bin/apropos`, `/usr/bin/netstat`, `/bin/sh` — executed helpers
-- `/usr/sbin/pkg_info` — package information tool, executed by packages API
-- `/var/db/pkg` — installed package database, read by `pkg_info(1)`
-- `/usr/local`, `/usr/bin`, `/usr/sbin`, `/bin`, `/sbin` — unveiled read-only so `pkg_info -E` can stat arbitrary file paths
-
-## Examples
-
-```sh
-miniweb -v
-miniweb -f /etc/miniweb.conf
-miniweb -f /etc/miniweb.conf -p 8080
-miniweb -b 0.0.0.0 -p 8080 -t 8
-miniweb -b 127.0.0.1 -p 9001 -c 4096 -t 8
-miniweb -l /var/log/miniweb.log -v
-curl -s http://127.0.0.1:9001/api/metrics | jq .
-```
-
-Proxy smoke-check:
-
-```sh
-for p in / /docs /apiroot /networking /packages \
-      /api/metrics /api/networking \
-      '/api/packages/search?q=curl' \
-      '/api/man/search?q=pledge' \
-      /static/css/custom.css /favicon.ico; do
-  printf '%-44s %s\n' "$p" \
-    "$(curl -sk -o /dev/null -w '%{http_code}' "https://example.com$p")"
-done
-```
-
-### OpenBSD rc.d service
-
-Esempio di script `/etc/rc.d/miniweb`:
-
-```sh
-#!/bin/ksh
-
-daemon="/usr/local/bin/miniweb"
-daemon_flags="-f /etc/miniweb.conf"
-daemon_user="_miniweb"
-
-. /etc/rc.d/rc.subr
-
-rc_bg=YES
-rc_cmd $1
-```
-
-## Development
-
-### Testing
-
-```sh
-make unit-tests
-
-for p in / /docs /apiroot /networking /packages \
-          /api/metrics /api/networking \
-          '/api/packages/search?q=curl' \
-          '/api/packages/info?name=curl-8.16.0' \
-          '/api/packages/list' \
-          '/api/man/search?q=pledge' \
-          /static/css/custom.css /favicon.ico; do
-    printf '%-44s %s\n' "$p" \
-      "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:9001$p")"
-done
-
-curl -s 'http://127.0.0.1:9001/api/man/search?q=pledge'
-curl -s 'http://127.0.0.1:9001/api/packages/search?q=vim' | jq .
-curl -s http://127.0.0.1:9001/api/metrics | jq .
-```
-
-### Debug build
-
-```sh
-make DEBUG=1
-./build/miniweb -v
-```
-
-## Troubleshooting
-
-- `bind: Address already in use`: another process already owns the port
-- `pledge: Operation not permitted`: syscall outside current promise set
-- `sysctl data query failed: Cannot allocate memory`: process table changed during collection
-- `[write_all] Too many EAGAIN retries`: slow/unresponsive client, connection dropped
-- Man pages not rendering: verify `mandoc` path + unveil permissions, run with `-v`
-
-## Roadmap
-
-- [x] Add `Allow` header generation for `405 Method Not Allowed` responses on known paths.
-- [ ] Add conditional HTTP caching support (`ETag`/`If-None-Match`, `Last-Modified`/`If-Modified-Since`) for static and cached man assets.
-- [ ] Add cache observability counters (static cache hit/miss/admission/eviction and man cache hit/miss) under `/api/metrics`.
-- [ ] Add live streaming endpoint for metrics updates (SSE or WebSocket) to reduce polling overhead.
-- [ ] Add IPv6 listener and dual-stack configuration.
-- [ ] Add Prometheus-compatible export endpoint.
-- [ ] Evaluate portability layer for FreeBSD/NetBSD route + metrics collection.
-
-## License
-
-This project is licensed under the **BSD 3-Clause License** - see the [LICENSE](LICENSE) file for details.
-
-### Third-Party Assets
-
-This project includes the **Satoshi** font family, designed by [Indian Type Foundry](https://www.fontshare.com/fonts/satoshi).
-- **Font License:** The font is included under the [Fontshare Personal & Commercial Use License](https://www.fontshare.com/terms).
-- The font remains the property of its respective owners and is not covered by this project's BSD 3-Clause License.
-
-## Acknowledgments
-
-Built on OpenBSD interfaces and security model: `kqueue(2)`, `pledge(2)`, `unveil(2)`, `sysctl(2)`.
-
-## Diagnostics
-
-MiniWeb may emit the following diagnostics to stderr:
-
-- `bind: Address already in use` — another process is already listening on the selected port
-- `pledge: Operation not permitted` — a syscall fell outside the current promise set (`stdio rpath wpath cpath inet route proc exec vminfo ps getpw`)
-- `sysctl data query failed: Cannot allocate memory` — process table changed during snapshot sizing; MiniWeb retries automatically
-- `[write_all] Too many EAGAIN retries` — client remained back-pressured and connection was dropped
-- `Connection limit reached, rejected fd=n` — active connection count reached `-c` limit
-
-## See Also
-
-`acme-client(1)`, `apropos(1)`, `curl(1)`, `mandoc(1)`, `kqueue(2)`, `pledge(2)`, `sysctl(2)`, `unveil(2)`, `getifaddrs(3)`, `getloadavg(3)`, `getmntinfo(3)`, `getpwuid(3)`, `relayd(8)`.
-
-## Standards
-
-HTTP handling targets HTTP/1.1 (RFC 7230–7235). Persistent connections
-(keep-alive) are supported for sequential requests (no pipelining), with an
-internal per-connection cap of 64 requests.
-
-## History
-
-MiniWeb originally used `libmicrohttpd`, then was rewritten in early 2026 around native `kqueue(2)` + `EV_DISPATCH` workers. This removed the external dependency and improved measured static throughput from ~7,000 req/s to over **23,000 req/s** (~+228%, measured with `wrk` at 32 concurrent connections on a four-core system).
-
-The configuration file system (`miniweb.conf`) was added afterward to replace hardcoded runtime values.
-
-Subsequent iterations added a fixed-size connection slab with a free-stack (eliminating per-accept heap allocation), a sharded pooled `http_response_t` allocator (`RESPONSE_POOL_SHARDS=16` × 1024 objects), two-hit/rate-limited/age-evicted in-memory static-file caching, and on-disk man render reuse under `static/man/` for repeat requests. These changes lifted the measured peak past **38,000 req/s** on lightweight template endpoints (see Performance).
-
-## Authors
-
-Flavio Ferretti `<flavio@flvbox.org>`.
-
-## Caveats
-
-- OpenBSD-specific design (depends on `kqueue(2)`, `pledge(2)`, `unveil(2)`, OpenBSD `sysctl(2)` MIBs)
-- Manual rendering uses a `mandoc(1)` subprocess (sandboxed but still additional execution surface)
-- JSON output uses fixed-size buffers and can truncate very long values
-
-## Security Considerations
-
-MiniWeb uses layered controls:
-
-- `pledge(2)` to constrain syscalls
-- `unveil(2)` to constrain filesystem paths and executable helpers
-- static path traversal rejection (`..`, `//`)
-- active connection cap with 503 for overflow
-- trust of forwarded headers only via reverse proxy (`trusted_proxy`)
-
-Do not expose MiniWeb directly to untrusted networks.
-
-## Bugs
-
-- `mandoc(1)` timeout control is wall-clock based and cannot preempt a kernel-level stall
-- Template substitution currently performs raw token replacement (no HTML escaping stage)
-- IPv6 is not yet implemented

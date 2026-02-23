@@ -29,6 +29,7 @@
 #include "../include/config.h"
 #include "../include/http_handler.h"
 #include "../include/log.h"
+#include "../include/heartbeat.h"
 
 #ifndef SA_SIZE
 #define SA_SIZE(sa)                                                   \
@@ -65,7 +66,6 @@ typedef struct {
 } NetworkingRing;
 
 static NetworkingRing g_networking_ring;
-static pthread_t g_networking_thread;
 static pthread_once_t g_networking_once = PTHREAD_ONCE_INIT;
 static int g_networking_ring_ready = 0;
 
@@ -74,7 +74,7 @@ static void networking_ring_push(NetworkingRing *r,
 		const NetworkingSample *s);
 static int networking_ring_last(NetworkingRing *r, NetworkingSample *out);
 static void networking_collect_sample(NetworkingSample *sample);
-static void *networking_sampler_thread(void *arg);
+static void networking_heartbeat_cb(void *ctx);
 static void networking_ring_bootstrap(void);
 
 
@@ -452,19 +452,14 @@ networking_collect_sample(NetworkingSample *sample)
 		sample->interface_count = 0;
 }
 
-static void *
-networking_sampler_thread(void *arg)
+static void
+networking_heartbeat_cb(void *ctx)
 {
-	(void)arg;
-	for (;;) {
-		NetworkingSample sample;
+	NetworkingSample sample;
 
-		networking_collect_sample(&sample);
-		networking_ring_push(&g_networking_ring, &sample);
-		sleep(1);
-	}
-
-	return NULL;
+	(void)ctx;
+	networking_collect_sample(&sample);
+	networking_ring_push(&g_networking_ring, &sample);
 }
 
 static void
@@ -475,16 +470,26 @@ networking_ring_bootstrap(void)
 		return;
 	}
 
-	if (pthread_create(&g_networking_thread, NULL,
-		networking_sampler_thread, NULL) != 0) {
-		LOG("Failed to start networking sampler thread");
+	if (heartbeat_register(&(struct hb_task){
+		.name = "networking.sample",
+		.period_sec = 1,
+		.initial_delay_sec = 0,
+		.cb = networking_heartbeat_cb,
+		.ctx = NULL,
+	}) != 0) {
+		LOG("Failed to register networking heartbeat task");
+		free(g_networking_ring.buf);
+		g_networking_ring.buf = NULL;
+		return;
+	}
+	if (heartbeat_start() != 0) {
+		LOG("Failed to start heartbeat scheduler");
 		free(g_networking_ring.buf);
 		g_networking_ring.buf = NULL;
 		return;
 	}
 
 	g_networking_ring_ready = 1;
-	pthread_detach(g_networking_thread);
 }
 
 /* ========================================================================

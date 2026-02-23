@@ -1,14 +1,11 @@
-.\" Copyright (c) 2026 Flavio Ferretti <flavio@flvbox.org>
-.\" BSD 3-Clause License
-.\"
 .Dd February 23, 2026
 .Dt MINIWEB 1
-.Os
+.Os OpenBSD
 .Sh NAME
 .Nm miniweb
-.Nd lightweight HTTP server for OpenBSD system monitoring
+.Nd OpenBSD-native C99 web server on enterprise refactor track
 .Sh SYNOPSIS
-.Nm miniweb
+.Nm
 .Op Fl hv
 .Op Fl b Ar address
 .Op Fl c Ar connections
@@ -17,1429 +14,154 @@
 .Op Fl t Ar threads
 .Op Fl l Ar file
 .Sh DESCRIPTION
-The
 .Nm
-utility is a lightweight HTTP server designed for OpenBSD system monitoring
-and metrics collection.
-It provides a web-based dashboard, a RESTful JSON API for system metrics,
-and an integrated manual page browser.
+is a lightweight HTTP server written in C99 for OpenBSD.
+It provides a web dashboard and JSON APIs for metrics, networking,
+manual page browsing, and package management.
 .Pp
-.Nm
-uses a single
+The current runtime uses a single
 .Xr kqueue 2
-instance managed by a dedicated dispatcher thread.
-When a connection becomes read-ready, the event is delivered once
-.Pq using .Dv EV_DISPATCH
-and the connection is placed on a work queue.
-Worker threads dequeue connections, accumulate the full HTTP request,
-parse it, dispatch to the appropriate handler, and close the connection.
-This design avoids busy-waiting and eliminates race conditions between workers.
-.Pp
-.Xr pledge 2
-and
-.Xr unveil 2
-are applied at startup to restrict the process to the minimum required
-system calls and filesystem paths.
-System metrics are gathered via
-.Xr sysctl 2
-without spawning external processes.
-Manual page rendering delegates to
-.Xr mandoc 1
-via a subprocess with an enforced timeout.
+dispatcher thread and a worker pool.
+Expensive telemetry is sampled through feature-local samplers,
+and cached payloads are served to reduce handler latency.
 .Pp
 .Nm
-does not implement TLS.
-For production deployments, place it behind
-.Xr relayd 8
-for TLS termination.
-See
-.Sx EXAMPLES
-for a working
-.Xr relayd 8
-configuration.
+is now under an enterprise refactor program that preserves all existing
+features while introducing modular architecture, centralized heartbeat
+scheduling, and a reusable sqlite3 storage interface.
 .Pp
-At startup,
-.Nm
-loads a configuration file if one is found
-.Pq see Sx CONFIGURATION FILE .
-Command-line flags always override file values.
-.Pp
+The implementation must remain strictly C99 and follow OpenBSD KNF.
+.Sh OPTIONS
 The options are as follows:
 .Bl -tag -width Ds
 .It Fl b Ar address
-Bind to the specified IPv4 address.
-The default is
-.Cm 127.0.0.1
-.Pq loopback only .
-Use
-.Cm 0.0.0.0
-to listen on all interfaces.
-When deployed behind
-.Xr relayd 8 ,
-the default loopback binding is recommended.
+Bind to an IPv4 address.
+Default is
+.Cm 127.0.0.1 .
 .It Fl c Ar connections
-Set the maximum number of concurrent connections.
-The default is
+Maximum concurrent connections.
+Default is
 .Cm 1280 .
-Connections beyond this limit receive a 503 response and are closed
-immediately.
 .It Fl f Ar file
 Load configuration from
-.Ar file
-instead of searching the default locations.
-If the specified file does not exist or cannot be parsed,
-.Nm
-exits with an error.
-See
-.Sx CONFIGURATION FILE
-for the file format and default search order.
+.Ar file .
 .It Fl h
-Print a usage summary and exit.
+Print usage and exit.
 .It Fl l Ar file
-Write runtime logs to
+Append logs to
 .Ar file
-in append mode.
-By default, logs are written to standard error.
-This overrides
-.Cm log_file
-from the configuration file.
+instead of stderr.
 .It Fl p Ar port
-Listen on the specified TCP port.
-The default is
+Listen TCP port.
+Default is
 .Cm 9001 .
-Ports below 1024 require root privileges.
 .It Fl t Ar threads
-Set the number of worker threads.
-The default is
+Worker thread count.
+Default is
 .Cm 4 .
-Each worker independently dequeues and processes connections.
-A value matching the CPU core count is a reasonable starting point.
-The maximum is
-.Cm 32
-as compiled; recompile with a higher
-.Dv THREAD_POOL_SIZE
-to increase it.
+Current compile-time maximum is
+.Cm 32 .
 .It Fl v
-Enable verbose logging to standard error.
-Log entries include connection accept and close events, worker dispatch,
-and security initialisation details.
-.El
-.Sh FEATURES
-.Bl -bullet -compact
-.It
-Real-time system metrics: CPU load, memory, swap, disk usage,
-network interfaces, and process summaries.
-.It
-Process monitoring: top 10 processes by CPU usage and top 10 by
-memory usage.
-.It
-Integrated manual page browser and search via
-.Xr apropos 1 .
-.It
-Security hardening through
-.Xr pledge 2
-and
-.Xr unveil 2 .
-.It
-High-performance architecture based on
-.Xr kqueue 2
-and a worker thread pool.
-.It
-OpenBSD package manager interface: search packages, inspect metadata,
-map file paths to owning packages, and list installed package files.
-.It
-RESTful JSON API for external integrations.
-.It
-No native TLS; designed to run behind
-.Xr relayd 8 .
-.El
-.Sh QUICK START
-.Ss Prerequisites
-.Bl -bullet -compact
-.It
-OpenBSD 7.8 or later.
-.It
-Base development tools:
-.Xr clang 1
-and
-.Xr make 1 .
-.It
-Optional benchmark tooling:
-.Xr wrk 1
-and
-.Xr gnuplot 1 .
-.El
-.Ss Build
-.Bd -literal -offset indent
-$ make clean && make
-.Ed
-.Ss Build man page
-.Bd -literal -offset indent
-$ make man
-.Ed
-.Ss Run unit tests
-.Bd -literal -offset indent
-$ make unit-tests
-.Ed
-.Ss Run
-.Bd -literal -offset indent
-$ ./build/miniweb -v
-.Ed
-.Pp
-Then open
-.Lk http://127.0.0.1:9001 .
-.Sh ENDPOINTS
-.Nm
-provides the following HTTP endpoints.
-Responses follow HTTP/1.1 connection semantics: keep-alive is enabled by
-default for HTTP/1.1 unless the client sends
-.Cm Connection:\ close .
-Each connection is capped at 64 served requests before being closed.
-.Ss Route Matching
-Routing is evaluated in deterministic order:
-.Bl -enum -compact
-.It
-Exact static registrations loaded by
-.Fn init_routes .
-.It
-Dynamic
-.Pa /man/ Ns Ar \&...
-paths
-.Pq GET only, requiring at least two slashes after the prefix .
-.It
-Dynamic
-.Pa /api/man/ Ns Ar \&...
-paths.
-.It
-Dynamic
-.Pa /api/packages/ Ns Ar \&...
-paths.
-.It
-Dynamic
-.Pa /static/ Ns Ar \&...
-paths.
-.El
-.Pp
-Anything not matched returns an HTML 404 page.
-All routes are GET-only in the current implementation.
-If a request path is known but the method is unsupported,
-.Nm
-returns 405 Method Not Allowed; unknown paths return 404 Not Found.
-.Ss Web Interface
-.Bl -tag -width "/networking"
-.It Pa /
-Main dashboard with system overview.
-Tabbed navigation covers load averages, memory, disk, network interfaces,
-and process information.
-.It Pa /docs
-Manual page browser with search powered by
-.Xr apropos 1 .
-.It Pa /networking
-Network interface overview including routes and DNS configuration.
-.It Pa /packages
-Local package manager interface for searching package names, inspecting
-package metadata, and mapping file paths to owning packages.
-.It Pa /apiroot
-API index page listing available endpoints and their response formats.
-.El
-.Ss Adding or Removing Pages
-Template-backed pages such as
-.Pa /
-and
-.Pa /docs
-are defined in the static routing table
-.Dv view_routes
-in
-.Pa src/urls.c .
-Each entry maps a method and path pair to a page title, a main content
-template
-.Pq e.g.\& Pa dashboard.html ,
-and optional per-page head and JavaScript partials.
-.Pp
-To add a page, for example
-.Pa /about :
-.Bl -enum -compact
-.It
-Create templates under
-.Pa templates/
-for the main content and any optional partials.
-.It
-Add a new entry to
-.Dv view_routes
-in
-.Pa src/urls.c .
-.It
-Rebuild; startup route registration will include it automatically.
-.El
-.Pp
-To remove a page, delete its
-.Dv view_routes
-entry and rebuild.
-Requests to the removed path will return 404.
-.Ss Metrics API
-.Bl -tag -width "/api/networking"
-.It Pa /api/metrics
-Returns a JSON object with the following fields:
-system information
-.Pq hostname, OS version, uptime, architecture ;
-CPU load averages for 1, 5, and 15 minutes;
-memory totals including free, active, wired, and cached pages;
-swap usage;
-disk usage for all mounted filesystems;
-network interface status and assigned addresses;
-top 10 processes by CPU usage;
-top 10 processes by memory usage;
-and process counts
-.Pq total, running, sleeping, zombie .
-.Pp
-Metrics are collected on request from native interfaces
-without invoking external commands.
-.Pp
-Implementation details:
-.Bl -bullet -compact
-.It
-A detached sampler thread stores one sample per second in a 1 MiB ring
-buffer.
-.It
-The handler serves a mutex-protected JSON snapshot string that is
-updated once per second.
-.It
-If a snapshot is not yet available, the handler performs an immediate
-refresh and returns the first available payload.
-.It
-The endpoint includes
-.Cm Access-Control-Allow-Origin: *
-to support cross-origin dashboard embedding.
-.El
-.It Pa /api/networking
-Returns a JSON object with network interface details,
-routing table entries, and DNS resolver configuration.
-.El
-.Ss Packages API
-.Bl -tag -width "/api/packages/which?path=path"
-.It Pa /api/packages/search?q= Ns Ar query
-Search installed packages by name pattern via
-.Xr pkg_info 1
-.Fl Q .
-.It Pa /api/packages/info?name= Ns Ar package
-Return detailed information for one installed package via
-.Xr pkg_info 1 .
-.It Pa /api/packages/which?path= Ns Ar path
-Return the package that owns an absolute file path via
-.Xr pkg_info 1
-.Fl E .
-.It Pa /api/packages/files?name= Ns Ar package
-Return the file list installed by a named package via
-.Xr pkg_info 1
-.Fl L .
-.It Pa /api/packages/list
-Return all installed packages via
-.Xr pkg_info 1
-.Fl q .
-.El
-.Ss Manual Page API
-.Bl -tag -width "/api/man/resolve?name=name&section=n"
-.It Pa /api/man/search?q= Ns Ar query
-Returns raw
-.Xr apropos 1
-output, one entry per line.
-Unlike other API endpoints, the response content type is
-.Cm text/plain
-to simplify line-based parsing in the frontend.
-.It Pa /api/man/sections
-Returns a JSON list of available manual sections.
-.It Pa /api/man/pages?section= Ns Ar n
-Returns a JSON list of pages available in a given section.
-.It Pa /api/man/resolve?name= Ns Ar page Ns Op &section= Ns Ar n
-Resolves the real area, section, and filesystem path for a named page via
-.Xr man 1
-.Fl w .
-Returns a JSON object with fields
-.Cm name ,
-.Cm section ,
-.Cm area ,
-and
-.Cm path .
-.It Pa /api/man/ Ns Ar area Ns / Ns Ar section
-Returns a JSON list of pages for the given area and section combination.
-.It Pa /man/ Ns Ar area Ns / Ns Ar section Ns / Ns Ar page Ns Op Ar .ext
-Renders a manual page via
-.Xr mandoc 1 .
-Supported output formats:
-.Pp
-.Bl -tag -width ".html" -compact
-.It Cm .html
-HTML
-.Pq default if no extension is given .
-.It Cm .md
-Markdown.
-.It Cm .pdf
-PDF.
-.It Cm .ps
-PostScript.
-.It Cm .txt
-ASCII text.
-.El
-.Pp
-For
-.Cm html
-and
-.Cm md ,
-a hot-cache TTL check
-.Pq Dv MAN_HOT_CACHE_TTL_SEC No = 30 s
-skips re-rendering if the on-disk cached file is fresh.
-For
-.Cm txt ,
-.Cm ps ,
-and
-.Cm pdf ,
-the page is re-rendered on every request, the result is written to the
-cache path, and the response is served via the static-file handler.
-All formats are eligible for subsequent promotion into the in-memory
-static payload cache on repeated access.
-.El
-.Ss Static Files
-.Bl -tag -width "/favicon.ico"
-.It Pa /static/ Ns Ar path
-Serves static assets including CSS, JavaScript, and images
-from the
-.Pa static/
-directory relative to the working directory.
-The path component is validated to reject
-.Sq ..
-and
-.Sq //
-sequences.
-.It Pa /favicon.ico
-Serves the site favicon from
-.Pa static/assets/favicon.svg
-as
-.Cm image/svg+xml .
-.El
-.Ss Caching
-.Nm
-implements six cache layers/buffers:
-.Bl -enum
-.It
-Template cache
-.Pq Pa src/template_engine.c :
-all files under
-.Pa templates/
-are read at startup and retained in memory for the lifetime of the
-process.
-The cache is protected by a mutex and refreshed with TTL-based
-invalidation.
-After
-.Dv TEMPLATE_CACHE_TTL_SEC
-seconds
-.Pq 60 ,
-the next template lookup reloads the templates directory, so on-disk
-changes are picked up without restarting
-.Nm .
-.It
-Hot view cache for template-backed pages
-.Pq Pa src/routes.c :
-the routes
-.Pa /
-,
-.Pa /docs
-,
-.Pa /networking
-,
-.Pa /packages
-and
-.Pa /apiroot
-store fully-rendered HTML in memory for
-.Dv HOT_VIEW_CACHE_TTL_SEC
-seconds
-.Pq 10 .
-Cache hits bypass template rendering for non-query requests.
-.It
-In-memory static payload cache
-.Pq Pa src/http_handler.c ,
-with the following parameters:
-.Bl -bullet -compact
-.It
-.Dv FILE_CACHE_SHARDS
-shards
-.Pq 16 ,
-each with
-.Dv FILE_CACHE_SLOTS
-slots
-.Pq 32 .
-.It
-Maximum
-.Dv FILE_CACHE_MAX_BYTES
-per cached object
-.Pq 256\ KiB .
-.It
-Two-hit admission via a candidate table before insertion.
-.It
-Insertion token budget of
-.Dv FILE_CACHE_INSERTS_PER_SEC
-inserts per second
-.Pq 8 .
-.It
-Age-based eviction after
-.Dv FILE_CACHE_MAX_AGE_SEC
-seconds
-.Pq 120 .
-.It
-Per-shard hit/miss/insert/throttle counters are tracked and emitted via
-debug logs each second.
-.It
-Validation key is
-.Pq path, mtime ;
-an
-.Xr stat 2
-mtime mismatch forces a cache miss.
-.El
-.It
-On-disk man render cache
-.Pq Pa src/man.c :
-rendered outputs for
-.Cm html ,
-.Cm txt ,
-.Cm md ,
-.Cm ps ,
-and
-.Cm pdf
-are stored under
-.Pa {static_dir}/man/{area}/{section}/{page}.{format} .
-For
-.Cm html
-and
-.Cm md ,
-a freshness check
-.Pq Dv MAN_HOT_CACHE_TTL_SEC No = 30 s
-based on the file
-.Xr stat 2
-mtime skips re-rendering within the window.
-For
-.Cm txt ,
-.Cm ps ,
-and
-.Cm pdf ,
-the page is re-rendered on every request, the result is written to the
-cache path, and the response is served via the static-file handler.
-All formats are eligible for promotion into the in-memory static cache.
-.It
-Metrics snapshot cache
-.Pq Pa src/metrics.c :
-the 1-second background sampler refreshes a shared JSON snapshot string,
-which is duplicated for each
-.Pa /api/metrics
-response.
-.It
-Networking sample ring
-.Pq Pa src/networking.c :
-a detached sampler stores routes, DNS state and interface counters every
-second in a 1 MiB ring; the API usually serializes the latest cached
-sample.
-.El
-.Pp
-Package search also includes a dedicated query cache in
-.Pa src/pkg_manager.c
-with
-.Dv PKG_SEARCH_CACHE_SIZE
-entries
-.Pq 64
-and
-.Dv PKG_SEARCH_CACHE_TTL_SEC
-seconds
-.Pq 30 .
-.Sh ARCHITECTURE
-.Ss Request Lifecycle
-.Bd -literal -offset indent
-accept()
-   |
-   v
-kqueue dispatcher (main thread)
-   |  EV_DISPATCH -> event auto-disabled after delivery
-   v
-work queue (pthread_cond_wait, zero busy-waiting)
-   |
-   v
-worker thread (1 of N)
-   |  recv() -> parse -> route_match() -> handler()
-   v
-close(fd) + free_connection()
-.Ed
-.Pp
-The main thread performs
-.Xr accept 2
-and work queuing only.
-Workers never call
-.Xr kevent 2 ,
-which avoids worker-side races.
-Use of
-.Dv EV_DISPATCH
-ensures one delivery per readiness event, preventing two workers from
-processing the same connection concurrently.
-Connection teardown is consolidated through a single helper and
-view-template response rendering is centralised through a shared HTTP
-helper, reducing duplicated handler logic.
-.Ss Key Source Files
-.Bl -tag -width "src/template_engine.c"
-.It Pa src/main.c
-Single
-.Xr kqueue 2
-instance owned by the dispatcher thread.
-Connection pool indexed by file descriptor, generation counters for
-stale descriptor detection, and periodic idle timeout sweeps.
-.It Pa src/urls.c
-Declarative routing tables for template-backed views and grouped API
-route registration helpers.
-.It Pa src/http_handler.c
-Thread-safe per-request scratch buffers for header extraction.
-Effective client IP is determined in precedence order:
-.Cm X-Real-IP ,
-.Cm X-Forwarded-For
-.Pq first comma-separated value ,
-then the peer socket address.
-Includes a shared template render and send helper used by all view
-handlers.
-.It Pa src/log.c
-Central logging facility for stderr/file sinks, shared by runtime paths
-that require consistent log routing.
-.It Pa src/metrics.c
-System metrics collected exclusively through native interfaces:
-.Xr sysctl 2 ,
-.Xr getloadavg 3 ,
-.Xr getmntinfo 3 ,
-and
-.Xr getifaddrs 3 .
-Includes a retry loop around
-.Dv KERN_PROC_ALL
-snapshot sizing.
-.It Pa src/template_engine.c
-Minimal
-.Cm {{TOKEN}}
-substitution-based rendering from files under
-.Pa templates/ .
-.El
-.Ss Performance Notes
-.Nm
-is optimised for concurrent request handling using a single dispatcher
-thread and
-.Dv EV_DISPATCH
-for one-shot readiness delivery.
-The work queue is implemented as a circular buffer with head, tail, and
-count pointers over a fixed-capacity array.
-Connection and response object pooling reduces allocator and CPU pressure
-under sustained concurrency.
-.Pp
-Strategic performance considerations:
-.Bl -bullet -compact
-.It
-Batching multiple
-.Xr kevent 2
-change operations can reduce syscall overhead in high fan-in bursts.
-.It
-Queue saturation and keep-alive rearm failures should be exported as
-metrics to allow thread and queue caps to be tuned from real traffic.
-.It
-A per-connection circular receive buffer may reduce allocator pressure
-for highly fragmented header arrivals.
-.It
-The transmit path already uses
-.Xr writev 2 ;
-a separate transmit ring buffer is generally unnecessary unless protocol
-pipelining or asynchronous multi-response buffering is introduced.
-.El
-.Pp
-Memory allocation notes:
-.Bl -bullet -compact
-.It
-Connection objects come from a preallocated slab and are returned to a
-free-stack on close or timeout, eliminating per-accept heap allocation
-on the hot path.
-.It
-Static file cache replacement performs
-.Xr malloc 3
-and
-.Xr free 3
-for cached payload copies.
-.It
-.Vt http_response_t
-objects come from a fixed pool of
-.Dv RESPONSE_POOL_SHARDS
-shards
-.Pq 16 ,
-each holding 1024 entries
-.Pq 16,384 total ,
-guarded by a mutex, with heap allocation fallback when the shard pool is
-temporarily exhausted.
-.El
-.Sh PERFORMANCE
-Benchmark run generated 2026-02-23 13:13:24, OpenBSD 7.8,
-.Xr wrk 1 ,
-4 threads, 20 s duration.
-.Ss Overall Summary
-.Bl -tag -width "Grand average latency" -compact
-.It Peak throughput
-38,761.49 requests/s
-.It Average throughput
-15,952.6 requests/s
-.It Best average latency
-0.123 ms
-.It Worst max latency
-1,450 ms
-.It Grand average latency
-10.76 ms
-.El
-.Ss Selected Endpoint Peaks
-.Bl -tag -width "/api/packages/search?q=curl" -compact
-.It Pa /apiroot
-38,761 req/s
-.Pq 64 connections .
-.It Pa /static/assets/favicon.svg
-34,801 req/s.
-.It Pa /api/metrics
-26,197 req/s.
-.It Pa /static/css/custom.css
-27,810 req/s.
-.It Pa /
-26,838 req/s.
-.It Pa /packages
-25,679 req/s.
-.It Pa /api/networking
-21,746 req/s.
-.It Pa /api/packages/search?q=curl
-21,728 req/s.
-.It Pa /man/system/1/ls.md
-19,427 req/s.
-.It Pa /man/system/1/ls
-18,279 req/s.
-.El
-.Ss Endpoint Behavior Notes
-.Bl -bullet -compact
-.It
-Static assets and lightweight template-backed pages peak at 16 to
-128 concurrent connections.
-.It
-API endpoints backed by native syscalls
-.Pq Pa /api/metrics , Pa /api/networking
-sustain high throughput through in-memory snapshot caches.
-.It
-Man-page endpoints show higher latency growth at 128 to 256 concurrency
-when the on-disk render cache is cold.
-.It
-Some 256-connection rows report
-.Cm HTTP=000000
-while row status remains
-.Cm OK ;
-these are high-pressure saturation artifacts and should be validated
-against server logs before drawing conclusions.
-.El
-.Pp
-Hot static and template-backed paths benefit from in-memory static,
-hot-view, and template TTL caches.
-Subprocess- and render-heavy paths
-.Pq Xr mandoc 1 , Xr pkg_info 1
-remain the dominant tail-latency sources.
-.Ss Compile-Time Limits
-.Bl -tag -width "REQUEST_BUFFER_SIZE"
-.It Dv MAX_EVENTS
-256 events per
-.Xr kevent 2
-wait cycle.
-.It Dv MAX_CONNECTIONS
-4096 active connections.
-.It Dv THREAD_POOL_SIZE
-32 worker threads.
-.It Dv REQUEST_BUFFER_SIZE
-16384 bytes receive buffer hard cap.
-.It Dv LISTEN_BACKLOG
-1024 pending connection backlog hint.
-.It Dv QUEUE_CAPACITY
-4096 dispatched connections queued before overload drop.
-.It Dv MAX_KEEPALIVE_REQUESTS
-64 requests per keep-alive connection before forced close.
-.It Dv WRITE_RETRY_LIMIT
-20 write retry cycles on
-.Dv EAGAIN .
-.It Dv WRITE_WAIT_MS
-10 ms poll wait per write retry cycle.
-.It Dv FILE_CACHE_SLOTS
-32 in-memory static file cache entries per shard.
-.It Dv FILE_CACHE_MAX_BYTES
-256 KiB maximum per cached object.
-.It Dv FILE_CACHE_INSERTS_PER_SEC
-8 cache insertions per second
-.Pq token budget .
-.It Dv FILE_CACHE_MAX_AGE_SEC
-120 seconds before cache entry or candidate eviction.
-.It Dv RESPONSE_POOL_SHARDS
-16 shards, each holding 1024 reusable
-.Vt http_response_t
-objects
-.Pq 16,384 total ;
-shard selected by thread-hash.
-Heap allocation fallback when the shard pool is temporarily exhausted.
-.El
-.Ss Effective Runtime Ranges
-.Bl -tag -width "max_req_size"
-.It Cm threads
-Parser range 1\(en64;
-effective runtime 1\(en32,
-hard-capped by
-.Dv THREAD_POOL_SIZE .
-.It Cm max_conns
-Parser range 1\(en65535;
-effective runtime 1\(en4096,
-hard-capped by
-.Dv MAX_CONNECTIONS .
-.It Cm max_req_size
-Parser range 1024\(en1048576;
-effective runtime 1024\(en16384,
-hard-capped by
-.Dv REQUEST_BUFFER_SIZE .
-.It Cm conn_timeout
-1\(en3600 seconds.
-.It Cm mandoc_timeout
-1\(en120 seconds.
-.It Cm port
-1\(en65535.
-.El
-.Sh SECURITY
-.Ss Sandboxing
-.Nm
-restricts filesystem access with
-.Xr unveil 2
-to the following paths:
-.Bd -literal -offset indent
-templates/          r
-static/             rwc
-/usr/share/man      r
-/usr/local/man      r
-/usr/X11R6/man      r
-/usr/bin/mandoc     x
-/usr/bin/man        x
-/usr/bin/apropos    x
-/usr/bin/netstat    x
-/bin/sh             x
-/etc/man.conf       r
-/dev/null           rw
-/usr/sbin/pkg_info  x
-/var/db/pkg         r
-/usr/local          r
-/usr/bin            r
-/usr/sbin           r
-/bin                r
-/sbin               r
-/usr/local/bin      r
-/etc/passwd         r
-/etc/group          r
-/etc/resolv.conf    r
-.Ed
-.Pp
-The current
-.Xr pledge 2
-promise string is:
-.Bd -literal -offset indent
-stdio rpath wpath cpath inet route proc exec vminfo ps getpw
-.Ed
-.Ss Additional Mitigations
-.Bl -bullet -compact
-.It
-Static path traversal protection: requests containing
-.Sq ..
-or
-.Sq //
-are rejected before the filesystem is consulted.
-.It
-Connection limiter: excess accepted clients are answered with HTTP 503
-and immediately closed without further processing.
-.It
-Manual page parameters are sanitised before invoking
-.Xr mandoc 1 ;
-only alphanumeric characters, hyphens, underscores, periods, and plus
-signs are permitted in section, area, and page name components.
-.It
-Reverse-proxy headers are accepted only from the address configured as
-.Cm trusted_proxy .
-.El
-.Ss Known Limitations
-.Bl -bullet -compact
-.It
-No built-in TLS.
-.It
-No authentication layer.
-.It
-JSON fields may be silently truncated by fixed-size buffers under
-extreme input sizes.
-.It
-Timeout logic cannot preempt a kernel-level stall inside
-.Xr mandoc 1 .
-.El
-.Sh REVERSE PROXY
-.Nm
-is designed to run behind
-.Xr relayd 8 .
-When a reverse proxy is present,
-.Nm
-reads the following request headers to determine the real client
-address and original protocol:
-.Bl -tag -width "X-Forwarded-Proto"
-.It Cm X-Real-IP
-Preferred header for the originating client IP address.
-.It Cm X-Forwarded-For
-Used if
-.Cm X-Real-IP
-is absent; the first comma-separated value is taken.
-.It Cm X-Forwarded-Proto
-Set to
-.Cm https
-by
-.Xr relayd 8
-to indicate that the original connection used TLS.
-.El
-.Pp
-If none of these headers are present, the peer address of the TCP
-connection is used.
-.Pp
-These headers must be set exclusively by the reverse proxy.
-Configure
-.Xr relayd 8
-to overwrite rather than append them, and bind
-.Nm
-to
-.Cm 127.0.0.1
-so that the headers cannot be injected by external clients.
-.Sh CONFIGURATION FILE
-.Nm
-reads a configuration file at startup before applying command-line flags.
-The file is searched in the following order; the first match is used:
-.Bl -enum -compact
-.It
-Path supplied with
-.Fl f Ar file
-.Pq explicit; failure to open is fatal .
-.It
-.Pa ./miniweb.conf
-.Pq current working directory .
-.It
-.Pa $HOME/.miniweb.conf .
-.It
-.Pa /etc/miniweb.conf .
-.El
-.Pp
-If no file is found, compiled-in defaults apply.
-Command-line flags always take precedence over file values.
-.Pp
-The file format is one directive per line:
-.Bd -literal -offset indent
-key    value
-.Ed
-.Pp
-Lines beginning with
-.Sq #
-are comments.
-Blank lines are ignored.
-Keys are case-insensitive.
-Unknown directives produce a warning on standard error but do not
-abort startup.
-.Pp
-Recognised directives:
-.Bl -tag -width "mandoc_timeout"
-.It Cm port Ar n
-TCP port to listen on.
-Range 1\(en65535.
-Default:
-.Cm 9001 .
-.It Cm bind Ar address
-IPv4 address to bind to.
-Default:
-.Cm 127.0.0.1 .
-.It Cm threads Ar n
-Number of worker threads.
-Parser range 1\(en64; effective runtime range 1\(en4,
-hard-capped by
-.Dv THREAD_POOL_SIZE .
-Default:
-.Cm 4 .
-.It Cm max_conns Ar n
-Maximum concurrent connections.
-Parser range 1\(en65535; effective runtime range 1\(en4096,
-hard-capped by
-.Dv MAX_CONNECTIONS .
-Default:
-.Cm 1280 .
-.It Cm conn_timeout Ar seconds
-Idle connection timeout in seconds.
-Range 1\(en3600.
-Default:
-.Cm 30 .
-.It Cm max_req_size Ar bytes
-Maximum HTTP request size in bytes.
-Parser range 1024\(en1048576; effective runtime range 1024\(en16384,
-hard-capped by
-.Dv REQUEST_BUFFER_SIZE .
-Default:
-.Cm 16384 .
-.It Cm mandoc_timeout Ar seconds
-Timeout for
-.Xr mandoc 1
-subprocess invocations.
-Range 1\(en120.
-Default:
-.Cm 10 .
-.It Cm static_dir Ar path
-Directory from which static assets are served.
-Default:
-.Cm static .
-.It Cm templates_dir Ar path
-Directory containing HTML templates.
-Default:
-.Cm templates .
-.It Cm mandoc_path Ar path
-Absolute path to the
-.Xr mandoc 1
-binary.
-Default:
-.Cm /usr/bin/mandoc .
-.It Cm trusted_proxy Ar address
-IPv4 address of the reverse proxy from which
-.Cm X-Forwarded-For ,
-.Cm X-Forwarded-Proto ,
-and
-.Cm X-Real-IP
-headers are accepted.
-Default:
-.Cm 127.0.0.1 .
-.It Cm log_file Ar path
-Optional path for runtime log output handled by the central logger.
-If unset, logs are written to standard error.
-Default:
-unset.
-.It Cm verbose Ar bool
 Enable verbose logging.
-Accepted values:
-.Cm yes ,
-.Cm no ,
-.Cm true ,
-.Cm false ,
-.Cm 1 ,
-.Cm 0 .
-Default:
-.Cm no .
 .El
-.Sh FILES
-.Bl -tag -width "/usr/sbin/pkg_info" -compact
-.It Pa ./miniweb.conf
-.It Pa $HOME/.miniweb.conf
-.It Pa /etc/miniweb.conf
-Configuration files, searched in order at startup.
-See
-.Sx CONFIGURATION FILE .
-.It Pa templates/
-HTML templates for dashboard and documentation pages.
-Unveiled read-only.
-.It Pa static/
-Static assets served under
-.Pa /static/ .
-Unveiled read-write-create for the on-disk man render cache.
-.It Pa /etc/group
-Group name lookups.
-Unveiled read-only.
-.It Pa /etc/man.conf
-Read by
-.Xr mandoc 1
-at startup.
-.It Pa /etc/passwd
-User name lookups in process listings via
-.Xr getpwuid 3 .
-Unveiled read-only.
-.It Pa /etc/resolv.conf
-DNS resolver configuration displayed on the networking page.
-Unveiled read-only.
-.It Pa /usr/share/man
-.It Pa /usr/local/man
-.It Pa /usr/X11R6/man
-Manual page search directories.
-All three unveiled read-only.
-.It Pa /usr/bin/apropos
-Manual page search tool.
-Unveiled for execution.
-.It Pa /usr/bin/mandoc
-Manual page formatter.
-Unveiled for execution.
-.It Pa /bin/sh
-.It Pa /usr/bin/netstat
-Unveiled for execution by runtime helpers and networking collectors.
-.It Pa /usr/sbin/pkg_info
-Package information tool.
-Unveiled for execution by the packages API.
-.It Pa /var/db/pkg
-Installed package database.
-Unveiled read-only for
-.Xr pkg_info 1 .
-.It Pa /bin
-.It Pa /sbin
-.It Pa /usr/bin
-.It Pa /usr/local
-.It Pa /usr/local/bin
-.It Pa /usr/sbin
-Unveiled read-only so that
-.Xr pkg_info 1
-.Fl E
-can stat arbitrary file paths across the standard directory trees.
+.Sh CURRENT ENDPOINTS
+.Bl -tag -width "/api/packages/search"
+.It Pa /
+Dashboard view.
+.It Pa /docs
+Manual page browser UI.
+.It Pa /networking
+Networking UI.
+.It Pa /packages
+Package manager UI.
+.It Pa /apiroot
+API index UI.
+.It Pa /api/metrics
+Metrics JSON.
+.It Pa /api/networking
+Networking JSON.
+.It Pa /api/man/*
+Manual page JSON/text API namespace.
+.It Pa /api/packages/*
+Package manager JSON API namespace.
+.It Pa /man/{area}/{section}/{page}[.fmt]
+Rendered manual page endpoint.
+.It Pa /static/*
+Static assets.
+.It Pa /favicon.ico
+Favicon.
 .El
-.Sh EXAMPLES
-Start with verbose logging on the default port:
-.Bd -literal -offset indent
-$ miniweb -v
-.Ed
+.Sh ENTERPRISE REFACTOR PROGRAM
+The approved engineering direction is documented in
+.Pa docs/ENTERPRISE_REFACTOR_PLAN.md .
 .Pp
-Load an explicit configuration file:
-.Bd -literal -offset indent
-$ miniweb -f /etc/miniweb.conf
-.Ed
+The program introduces a capability-based layout:
+.Bl -bullet -compact
+.It
+.Pa core/
+for lifecycle, heartbeat, config, logging.
+.It
+.Pa net/
+for server accept loop, work queues, and connection ownership.
+.It
+.Pa http/
+for parser, response writer, static files, MIME policy.
+.It
+.Pa router/
+for route registry and module attach contracts.
+.It
+.Pa modules/
+for feature bundles (metrics, networking, man, packages, views).
+.It
+.Pa platform/openbsd/
+for native collectors (sysctl/getifaddrs/getmntinfo wrappers).
+.It
+.Pa render/
+for template cache and rendering logic.
+.It
+.Pa storage/
+for sqlite3 database and schema helpers.
+.El
 .Pp
-Override a single value from the configuration file on the command line:
-.Bd -literal -offset indent
-$ miniweb -f /etc/miniweb.conf -p 8080
-.Ed
+Planned route/module extensibility uses an attach API so views and JSON
+endpoints can be enabled or disabled without central route rewrites.
 .Pp
-Listen on all interfaces on port 8080 with 8 worker threads:
-.Bd -literal -offset indent
-$ miniweb -b 0.0.0.0 -p 8080 -t 8
-.Ed
-.Pp
-Production configuration behind
-.Xr relayd 8
-with the maximum connection limit:
-.Bd -literal -offset indent
-$ miniweb -b 127.0.0.1 -p 9001 -c 4096 -t 8
-.Ed
-.Pp
-Write logs to a file for service-style runs:
-.Bd -literal -offset indent
-$ miniweb -l /var/log/miniweb.log -v
-.Ed
-.Pp
-Query the metrics endpoint:
-.Bd -literal -offset indent
-$ curl -s http://127.0.0.1:9001/api/metrics | jq .
-.Ed
-.Pp
-Minimal
-.Xr relayd 8
-configuration for TLS termination.
-Use
-.Xr acme-client 1
-to provision the certificate beforehand:
-.Bd -literal -offset indent
-table <miniweb> { 127.0.0.1 }
-
-http protocol "https_proxy" {
-    tls keypair "server"
-
-    match request header set "X-Forwarded-For" \e
-        value "$REMOTE_ADDR"
-    match request header set "X-Forwarded-Proto" \e
-        value "https"
-    match request header set "X-Real-IP" \e
-        value "$REMOTE_ADDR"
-    match request header set "Host" \e
-        value "$HOST"
-
-    tcp { nodelay }
-}
-
-relay "https_frontend" {
-    listen on egress port 443 tls
-    protocol "https_proxy"
-    forward to <miniweb> port 9001
-}
-
-relay "http_redirect" {
-    listen on egress port 80
-    forward to <miniweb> port 9001
-}
-.Ed
-.Pp
-Verify that all endpoints respond correctly through the proxy:
-.Bd -literal -offset indent
-$ for p in / /docs /apiroot /networking /packages \e
-      /api/metrics /api/networking \e
-      '/api/packages/search?q=curl' \e
-      '/api/man/search?q=pledge' \e
-      /static/css/custom.css /favicon.ico; do
-    printf '%-44s %s\en' "$p" \e
-      "$(curl -sk -o /dev/null \e
-         -w '%{http_code}' "https://example.com$p")"
-  done
-.Ed
-.Pp
-.Xr rc.d 8
-service script:
-.Bd -literal -offset indent
-# cat /etc/rc.d/miniweb
-#!/bin/ksh
-
-daemon="/usr/local/bin/miniweb"
-daemon_flags="-f /etc/miniweb.conf"
-daemon_user="_miniweb"
-
-. /etc/rc.d/rc.subr
-
-rc_bg=YES
-rc_cmd $1
-.Ed
-.Sh DEVELOPMENT
-.Ss Testing
-Run the unit test suite:
-.Bd -literal -offset indent
-$ make unit-tests
-.Ed
-.Pp
-Smoke-test all endpoints against a running instance:
-.Bd -literal -offset indent
-$ for p in / /docs /apiroot /networking \e
-      /api/metrics /api/networking \e
-      /static/css/custom.css /favicon.ico; do
-    printf '%-30s %s\en' "$p" \e
-      "$(curl -s -o /dev/null \e
-         -w '%{http_code}' http://127.0.0.1:9001$p)"
-  done
-.Ed
-.Pp
-Query API endpoints directly:
-.Bd -literal -offset indent
-$ curl -s 'http://127.0.0.1:9001/api/man/search?q=pledge'
-$ curl -s http://127.0.0.1:9001/api/metrics | jq .
-.Ed
-.Ss Debug Build
-.Bd -literal -offset indent
-$ make DEBUG=1
-$ ./build/miniweb -v
-.Ed
-.Sh DIAGNOSTICS
-.Ex -std
-.Pp
-The following messages may appear on standard error:
-.Bl -tag -width Ds
-.It Dq bind: Address already in use
-Another process is listening on the specified port.
-Use
-.Xr fstat 1
-to identify it.
-.It Dq pledge: Operation not permitted
-A system call was attempted outside the current
-.Xr pledge 2
-promise set.
-The required promise string is:
-.Pp
-.Cm stdio rpath wpath cpath inet route proc exec vminfo ps getpw
-.It Dq sysctl data query failed: Cannot allocate memory
-The process table is growing faster than the snapshot buffer can be
-resized.
-.Nm
-retries automatically; if the condition persists, investigate runaway
-process creation.
-.It Dq [write_all] Too many EAGAIN retries
-The client socket buffer remained full for too many polling cycles.
-The connection is dropped.
-This may indicate a slow or unresponsive client.
-.It Dq Connection limit reached, rejected fd= Ns Ar n
-The active connection count reached the value set by
-.Fl c .
-Increase the limit with
-.Fl c
-or reduce connection hold time.
+Planned performance model replaces multiple feature-owned samplers with
+one global 1-second heartbeat scheduler that dispatches periodic tasks.
+.Sh IMPLEMENTATION STATUS
+.Bl -tag -width "Storage layer"
+.It Routing
+Implemented with static table + dynamic prefixes.
+Module-owned attach API is planned.
+.It Sampling
+Metrics and networking each maintain their own 1-second loops.
+Unified heartbeat scheduler is planned.
+.It Storage layer
+Current caches are in-memory and filesystem based.
+Reusable sqlite3 facade is planned.
+.It File organization
+Current tree contains large multi-responsibility files.
+Capability-based modular tree is planned.
+.El
+.Sh DESIGN REQUIREMENTS
+.Bl -bullet -compact
+.It
+C99-only codebase.
+.It
+OpenBSD KNF style.
+.It
+Small per-function decomposition.
+.It
+Doxygen documentation for exported APIs.
+.It
+Compatibility-first refactor (feature parity required).
 .El
 .Sh SEE ALSO
-.Xr acme-client 1 ,
-.Xr apropos 1 ,
-.Xr curl 1 ,
-.Xr fstat 1 ,
-.Xr make 1 ,
-.Xr mandoc 1 ,
-.Xr pkg_info 1 ,
-.Xr accept 2 ,
-.Xr kevent 2 ,
 .Xr kqueue 2 ,
-.Xr pledge 2 ,
-.Xr poll 2 ,
-.Xr stat 2 ,
 .Xr sysctl 2 ,
+.Xr pledge 2 ,
 .Xr unveil 2 ,
-.Xr writev 2 ,
-.Xr free 3 ,
-.Xr getifaddrs 3 ,
-.Xr getloadavg 3 ,
-.Xr getmntinfo 3 ,
-.Xr getpwuid 3 ,
-.Xr malloc 3 ,
 .Xr relayd 8 ,
-.Xr rc.d 8
-.Sh STANDARDS
-The HTTP implementation follows RFC 7230 through RFC 7235
-.Pq HTTP/1.1 .
-Persistent connections
-.Pq keep-alive
-are supported for sequential requests without pipelining,
-with an internal per-connection cap of 64 requests.
-.Sh HISTORY
-.Nm
-was originally based on
-.Nm libmicrohttpd .
-In early 2026 it was rewritten to use a native
-.Xr kqueue 2
-dispatcher with an
-.Dv EV_DISPATCH Ns -based
-worker pool, removing the external library dependency and improving
-throughput from roughly 7,000 requests per second to over 23,000
-requests per second on static-file benchmarks on a four-core system
-.Pq approximately +228%, measured with .Xr wrk 1 at 32 concurrent connections .
-A configuration file facility was added shortly after, replacing
-all hardcoded values with a runtime-configurable
-.Pa miniweb.conf
-read by
-.Pa src/conf.c .
-Later iterations added a fixed-size connection slab with a free-stack
-eliminating per-accept heap allocation, a sharded pooled
-.Vt http_response_t
-allocator
-.Pq Dv RESPONSE_POOL_SHARDS No = 16 shards of 1024 objects ,
-bounded and admission-controlled in-memory static file caching, and
-on-disk rendered manual page reuse under
-.Pa static/man/
-for repeat requests.
-These changes lifted the measured peak past 38,000 requests per second
-on lightweight template endpoints; see
-.Sx PERFORMANCE .
+.Xr mandoc 1
 .Sh AUTHORS
-.An Flavio Ferretti Aq Mt flavio@flvbox.org
-.Sh CAVEATS
-.Nm
-is OpenBSD-specific.
-It depends on
-.Xr kqueue 2 ,
-.Xr pledge 2 ,
-.Xr unveil 2 ,
-and OpenBSD
-.Xr sysctl 2
-MIBs.
-Porting to other systems requires substantial changes.
-.Pp
-The manual page renderer invokes
-.Xr mandoc 1
-as a subprocess.
-Although isolated by
-.Xr pledge 2
-and
-.Xr unveil 2 ,
-the subprocess execution path represents additional attack surface.
-User-supplied section, area, and page name components are sanitised
-before use; only alphanumeric characters, hyphens, underscores,
-periods, and plus signs are permitted.
-.Pp
-JSON output uses fixed-size buffers.
-Extremely long hostnames, mount point paths, or process argument
-lists may be silently truncated.
-.Sh SECURITY CONSIDERATIONS
-.Nm
-implements layered security using native OpenBSD facilities:
-.Bl -bullet
-.It
-.Xr pledge 2
-restricts available system calls to those required for normal operation.
-.It
-.Xr unveil 2
-limits filesystem access to
-.Pa templates/ ,
-.Pa static/ ,
-the system manual page directories, and a small set of executable paths.
-.It
-Path traversal is rejected in the static file handler by refusing any
-path containing
-.Sq ..
-or
-.Sq //
-sequences.
-.It
-The connection pool limits active connections; a connection exceeding
-the pool cap receives a 503 response and is closed without further
-processing.
-.It
-.Cm X-Forwarded-For
-and related headers are set by
-.Xr relayd 8
-and must not be trusted from direct external connections.
-Deploy with
-.Fl b Cm 127.0.0.1
-and route all external traffic through the reverse proxy.
-.El
-.Pp
-Never expose
-.Nm
-directly to untrusted networks.
-.Sh BUGS
-Subprocess timeout handling for
-.Xr mandoc 1
-invocations relies on
-.Xr poll 2
-with a wall-clock deadline.
-A kernel stall inside
-.Xr mandoc 1
-itself cannot be interrupted by this mechanism.
-.Pp
-The template engine performs token substitution without HTML escaping.
-All values currently passed to templates are trusted strings defined in
-source code, so no user input reaches the substitution step and there
-is no immediate risk.
-If future changes introduce user-supplied input into template rendering
-.Pq for example, echoing a search query into a page title ,
-a proper escaping pass must be added to prevent cross-site scripting.
-.Pp
-Only IPv4 is supported.
-IPv6 requires changes to the socket creation and address handling code.
-.Sh ROADMAP
-.Bl -bullet
-.It
-Allow header emission for existing 405 responses on known endpoints is implemented.
-.It
-Add conditional HTTP cache validators
-.Po
-.Cm ETag Ns / Ns Cm If-None-Match
-and
-.Cm Last-Modified Ns / Ns Cm If-Modified-Since
-.Pc
-for static and man-cache responses.
-.It
-Expose cache observability metrics
-.Pq hit, miss, admission, eviction
-for static and man caches via
-.Pa /api/metrics .
-.It
-Add live metrics streaming via SSE or WebSocket to reduce polling
-overhead.
-.It
-Add IPv6 listener support and dual-stack configuration.
-.It
-Add a Prometheus exporter endpoint.
-.It
-Evaluate portability work for FreeBSD and NetBSD metrics and route
-collection.
-.El
-.Sh LICENSE
-BSD 3-Clause License.
-.Pp
-This project includes the Satoshi font family, designed by
-Indian Type Foundry
-.Pq Lk https://www.fontshare.com/fonts/satoshi .
-The font is included under the Fontshare Personal & Commercial Use
-License
-.Pq Lk https://www.fontshare.com/terms
-and remains the property of its respective owners;
-it is not covered by this project's BSD 3-Clause License.
-.Sh ACKNOWLEDGMENTS
-Built on OpenBSD interfaces and the OpenBSD security model, in particular
-.Xr kqueue 2 ,
-.Xr pledge 2 ,
-.Xr sysctl 2 ,
-and
-.Xr unveil 2 .
+MiniWeb contributors.
