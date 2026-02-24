@@ -1125,6 +1125,8 @@ man_render_handler(http_request_t *req)
 	char section[16] = "";
 	char page[64] = "";
 	char format[16] = "html";
+	char cache_area[32] = "system";
+	char cache_section[16] = "";
 
 	/* 1. Parse URL (example: /man/system/1/ls.html). */
 	if (strncmp(req->url, "/man/", 5) != 0) {
@@ -1165,9 +1167,26 @@ man_render_handler(http_request_t *req)
 		return http_send_error(req, 400, "Unsupported format");
 	}
 
+	/* Canonicalize area/section for cache keys using the resolved file path so
+	 * aliases across MANPATH trees map to one cache location. */
+	strlcpy(cache_section, section, sizeof(cache_section));
+	char *resolved = resolve_man_path(page, section);
+	if (resolved) {
+		const char *resolved_area = area_from_path(resolved);
+		strlcpy(cache_area, resolved_area, sizeof(cache_area));
+
+		const char *base = strrchr(resolved, '/');
+		base = base ? base + 1 : resolved;
+		(void)parse_section_from_filename(base, cache_section,
+						     sizeof(cache_section));
+		free(resolved);
+	} else {
+		strlcpy(cache_area, area, sizeof(cache_area));
+	}
+
 	char cache_rel[512];
 	char cache_abs[512];
-	if (build_cache_paths(area, section, page, format, cache_rel,
+	if (build_cache_paths(cache_area, cache_section, page, format, cache_rel,
 				  sizeof(cache_rel), cache_abs,
 				  sizeof(cache_abs)) == 0 &&
 		is_static_cache_format(format) && access(cache_abs, R_OK) == 0 &&
@@ -1181,7 +1200,8 @@ man_render_handler(http_request_t *req)
 
 	/* 3. Render content. */
 	size_t out_len = 0;
-	char *output = man_render_page(area, section, page, format, &out_len);
+	char *output = man_render_page(cache_area, cache_section, page, format,
+				      &out_len);
 
 	if (!output) {
 		return http_send_error(req, 404, "Manual page not found");
