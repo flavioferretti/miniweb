@@ -756,6 +756,21 @@ Package Manager UI.
 API Index UI.
 .El
 .Ss JSON APIs
+This module accepts exact endpoint paths under
+.Pa /api/packages
+(e.g.,
+.Pa /search
+,
+.Pa /info
+,
+.Pa /which
+,
+.Pa /files
+,
+.Pa /list
+) and returns
+.Dv 404
+for unknown suffixes.
 .Bl -tag -width "/api/packages/search"
 .It Pa /api/metrics
 System metrics snapshot (CPU, RAM, load, disk, processes).
@@ -772,7 +787,7 @@ Which package owns a file.
 .It Pa /api/packages/files
 Files installed by a package.
 .It Pa /api/packages/list
-List all installed packages.
+List all installed packages (sorted lexicographically).
 .El
 .Ss Manual page rendering
 .Bl -tag -width "/man/{area}/{section}/{page}.utf8"

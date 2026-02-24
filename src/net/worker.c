@@ -8,6 +8,7 @@
 
 #include <miniweb/http/handler.h>
 #include <miniweb/router/routes.h>
+#include <miniweb/router/urls.h>
 
 #define MAX_KEEPALIVE_REQUESTS 64
 

@@ -29,6 +29,8 @@ typedef struct {
 static pkg_search_cache_entry_t g_pkg_search_cache[PKG_SEARCH_CACHE_SIZE];
 static pthread_mutex_t g_pkg_search_cache_lock = PTHREAD_MUTEX_INITIALIZER;
 
+static int compare_pkg_names(const void *a, const void *b);
+
 /**
  * @brief TODO: Describe pkg_search_cache_store_locked.
  * @param query TODO: Describe this parameter.
@@ -488,37 +490,45 @@ pkg_list_json(void)
 {
 	char *const argv[] = {"pkg_info", "-q", NULL};
 	char *output = safe_popen_read_argv("/usr/sbin/pkg_info", argv,
-					    PKG_CMD_MAX_OUTPUT, 5, NULL);
-
+				    PKG_CMD_MAX_OUTPUT, 5, NULL);
 	char *json = malloc(PKG_JSON_MAX);
+	char *packages[8192];
+	size_t package_count = 0;
+	size_t offset = 0;
+
 	if (!json) {
 		free(output);
 		return NULL;
 	}
 
-	size_t offset = 0;
-	offset +=
-	    snprintf(json + offset, PKG_JSON_MAX - offset, "{\"packages\":[");
-
-	int first = 1;
 	if (output) {
 		char *saveptr = NULL;
 		char *line = strtok_r(output, "\n", &saveptr);
-		while (line && offset < PKG_JSON_MAX - 256) {
+
+		while (line &&
+		       package_count < (sizeof(packages) / sizeof(packages[0]))) {
 			line[strcspn(line, "\r")] = '\0';
 			if (*line != '\0') {
-				char *escaped_line = json_escape_string(line);
-				offset += snprintf(
-				    json + offset, PKG_JSON_MAX - offset,
-				    "%s\"%s\"", first ? "" : ",",
-				    escaped_line ? escaped_line : "");
-				free(escaped_line);
-				first = 0;
+				packages[package_count] = strdup(line);
+				if (packages[package_count])
+					package_count++;
 			}
 			line = strtok_r(NULL, "\n", &saveptr);
 		}
 	}
 
+	qsort(packages, package_count, sizeof(packages[0]), compare_pkg_names);
+
+	offset +=
+	    snprintf(json + offset, PKG_JSON_MAX - offset, "{\"packages\":[");
+	for (size_t i = 0; i < package_count && offset < PKG_JSON_MAX - 256; i++) {
+		char *escaped_line = json_escape_string(packages[i]);
+		offset += snprintf(json + offset, PKG_JSON_MAX - offset,
+				   "%s\"%s\"", i == 0 ? "" : ",",
+				   escaped_line ? escaped_line : "");
+		free(escaped_line);
+		free(packages[i]);
+	}
 	offset += snprintf(json + offset, PKG_JSON_MAX - offset, "]}");
 	free(output);
 	return json;
@@ -553,6 +563,42 @@ pkg_which_json(const char *file_path)
 }
 
 /**
+ * @brief Return non-zero when the request path matches an endpoint exactly.
+ * @param path Request URL path segment after /api/packages.
+ * @param prefix Endpoint path segment to match.
+ * @return 1 when @p path matches @p prefix followed by end or query string.
+ */
+static int
+path_matches_endpoint(const char *path, const char *prefix)
+{
+	size_t len;
+
+	if (!path || !prefix)
+		return 0;
+
+	len = strlen(prefix);
+	if (strncmp(path, prefix, len) != 0)
+		return 0;
+
+	return path[len] == '\0' || path[len] == '?';
+}
+
+/**
+ * @brief qsort comparator for package names.
+ * @param a Pointer to left element.
+ * @param b Pointer to right element.
+ * @return strcmp-style ordering result.
+ */
+static int
+compare_pkg_names(const void *a, const void *b)
+{
+	const char *const *left = a;
+	const char *const *right = b;
+
+	return strcmp(*left, *right);
+}
+
+/**
  * @brief TODO: Describe pkg_api_handler.
  * @param req TODO: Describe this parameter.
  * @return TODO: Describe the return value.
@@ -569,33 +615,33 @@ pkg_api_handler(http_request_t *req)
 	char *json = NULL;
 	char value[1024];
 	const char *base = "/api/packages";
-	const char *path = strstr(req->url, base);
+	const char *path = req->url;
 
-	if (!path)
+	if (!path || strncmp(path, base, strlen(base)) != 0)
 		return http_send_error(req, 400, "Bad Request");
 
 	path += strlen(base);
 
-	if (strncmp(path, "/search", 7) == 0) {
+	if (path_matches_endpoint(path, "/search")) {
 		if (!get_query_value(req->url, "q", value, sizeof(value)))
 			return http_send_error(req, 400, "Missing q parameter");
 		json = pkg_search_json(value);
-	} else if (strncmp(path, "/info", 5) == 0) {
+	} else if (path_matches_endpoint(path, "/info")) {
 		if (!get_query_value(req->url, "name", value, sizeof(value)))
 			return http_send_error(req, 400,
 					       "Missing name parameter");
 		json = pkg_info_json(value);
-	} else if (strncmp(path, "/which", 6) == 0) {
+	} else if (path_matches_endpoint(path, "/which")) {
 		if (!get_query_value(req->url, "path", value, sizeof(value)))
 			return http_send_error(req, 400,
 					       "Missing path parameter");
 		json = pkg_which_json(value);
-	} else if (strncmp(path, "/files", 6) == 0) {
+	} else if (path_matches_endpoint(path, "/files")) {
 		if (!get_query_value(req->url, "name", value, sizeof(value)))
 			return http_send_error(req, 400,
 					       "Missing name parameter");
 		json = pkg_files_json(value);
-	} else if (strncmp(path, "/list", 5) == 0) {
+	} else if (path_matches_endpoint(path, "/list")) {
 		json = pkg_list_json();
 	} else {
 		return http_send_error(req, 404, "Unknown packages endpoint");
