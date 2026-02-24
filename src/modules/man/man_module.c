@@ -89,6 +89,41 @@ is_valid_section(const char *section)
 	return 1;
 }
 
+static const char *
+base_for_area(const char *area)
+{
+	if (area && strcmp(area, "packages") == 0)
+		return "/usr/local/man";
+	if (area && strcmp(area, "x11") == 0)
+		return "/usr/X11R6/man";
+	return "/usr/share/man";
+}
+
+/* Fallback resolver used when `man -w` fails (for example missing command
+ * or MANPATH peculiarities). */
+static char *
+resolve_man_path_fallback(const char *area, const char *section,
+			  const char *name)
+{
+	static const char *suffixes[] = {"", ".gz", ".bz2", ".xz", ".zst"};
+	const char *base = base_for_area(area);
+	char candidate[512];
+
+	if (!is_valid_token(name) || !is_valid_section(section))
+		return NULL;
+
+	for (size_t i = 0; i < sizeof(suffixes) / sizeof(suffixes[0]); i++) {
+		int n = snprintf(candidate, sizeof(candidate), "%s/man%s/%s.%s%s",
+				 base, section, name, section, suffixes[i]);
+		if (n <= 0 || (size_t)n >= sizeof(candidate))
+			continue;
+		if (access(candidate, R_OK) == 0)
+			return strdup(candidate);
+	}
+
+	return NULL;
+}
+
 /* Resolve the man page path using 'man -w'. */
 /**
  * @brief Resolve man path.
@@ -753,19 +788,17 @@ man_render_page(const char *area, const char *section, const char *page,
 	};
 	char *filepath =
 	safe_popen_read_argv("/usr/bin/man", argv_w, 1024, 5, NULL);
+	if (filepath) {
+		/* Strip trailing newline */
+		filepath[strcspn(filepath, "\r\n")] = 0;
+	}
 
-	if (!filepath)
-		return NULL;
-
-	/* Strip trailing newline */
-	filepath[strcspn(filepath, "\r\n")] = 0;
-
-	/* Validate: man -w must return an absolute path.
-	 * An empty string means the page was not found.
-	 * A non-'/' first byte means something went wrong. */
-	if (filepath[0] != '/') {
+	/* Fallback when man(1) is unavailable or returns no usable path. */
+	if (!filepath || filepath[0] != '/') {
 		free(filepath);
-		return NULL;
+		filepath = resolve_man_path_fallback(area, section, page);
+		if (!filepath)
+			return NULL;
 	}
 
 	/* 3. Select mandoc output format. */

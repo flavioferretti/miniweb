@@ -616,14 +616,30 @@ pkg_api_handler(http_request_t *req)
 	char value[1024];
 	const char *base = "/api/packages";
 	const char *path = req->url;
+	const char *query = NULL;
 
 	if (!path || strncmp(path, base, strlen(base)) != 0)
 		return http_send_error(req, 400, "Bad Request");
 
 	path += strlen(base);
+	query = strchr(path, '?');
+
+	if (path[0] == '\0' || (path[0] == '/' && path[1] == '\0') ||
+	    (path[0] == '?' && path[1] != '\0')) {
+		json = pkg_list_json();
+	} else
 
 	if (path_matches_endpoint(path, "/search")) {
 		if (!get_query_value(req->url, "q", value, sizeof(value)))
+			return http_send_error(req, 400, "Missing q parameter");
+		json = pkg_search_json(value);
+	} else if (strncmp(path, "/search/", 8) == 0) {
+		size_t len = query ? (size_t)(query - (path + 8)) : strlen(path + 8);
+		if (len == 0 || len >= sizeof(value))
+			return http_send_error(req, 400, "Missing q parameter");
+		memcpy(value, path + 8, len);
+		value[len] = '\0';
+		if (url_decode_into(value, value, sizeof(value)) != 0 || value[0] == '\0')
 			return http_send_error(req, 400, "Missing q parameter");
 		json = pkg_search_json(value);
 	} else if (path_matches_endpoint(path, "/info")) {
@@ -631,15 +647,42 @@ pkg_api_handler(http_request_t *req)
 			return http_send_error(req, 400,
 					       "Missing name parameter");
 		json = pkg_info_json(value);
+	} else if (strncmp(path, "/info/", 6) == 0) {
+		size_t len = query ? (size_t)(query - (path + 6)) : strlen(path + 6);
+		if (len == 0 || len >= sizeof(value))
+			return http_send_error(req, 400, "Missing name parameter");
+		memcpy(value, path + 6, len);
+		value[len] = '\0';
+		if (url_decode_into(value, value, sizeof(value)) != 0 || value[0] == '\0')
+			return http_send_error(req, 400, "Missing name parameter");
+		json = pkg_info_json(value);
 	} else if (path_matches_endpoint(path, "/which")) {
 		if (!get_query_value(req->url, "path", value, sizeof(value)))
 			return http_send_error(req, 400,
 					       "Missing path parameter");
 		json = pkg_which_json(value);
+	} else if (strncmp(path, "/which/", 7) == 0) {
+		size_t len = query ? (size_t)(query - (path + 7)) : strlen(path + 7);
+		if (len == 0 || len >= sizeof(value))
+			return http_send_error(req, 400, "Missing path parameter");
+		memcpy(value, path + 7, len);
+		value[len] = '\0';
+		if (url_decode_into(value, value, sizeof(value)) != 0 || value[0] == '\0')
+			return http_send_error(req, 400, "Missing path parameter");
+		json = pkg_which_json(value);
 	} else if (path_matches_endpoint(path, "/files")) {
 		if (!get_query_value(req->url, "name", value, sizeof(value)))
 			return http_send_error(req, 400,
 					       "Missing name parameter");
+		json = pkg_files_json(value);
+	} else if (strncmp(path, "/files/", 7) == 0) {
+		size_t len = query ? (size_t)(query - (path + 7)) : strlen(path + 7);
+		if (len == 0 || len >= sizeof(value))
+			return http_send_error(req, 400, "Missing name parameter");
+		memcpy(value, path + 7, len);
+		value[len] = '\0';
+		if (url_decode_into(value, value, sizeof(value)) != 0 || value[0] == '\0')
+			return http_send_error(req, 400, "Missing name parameter");
 		json = pkg_files_json(value);
 	} else if (path_matches_endpoint(path, "/list")) {
 		json = pkg_list_json();
