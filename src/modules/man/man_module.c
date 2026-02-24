@@ -26,6 +26,8 @@
 
 static int is_valid_section(const char *section);
 
+static char *select_resolved_man_path(char *raw_output);
+
 /**
  * @brief Return non-zero when an API endpoint matches exactly.
  * @param path Request URL path after /api/man.
@@ -263,15 +265,46 @@ resolve_man_path(const char *name, const char *section)
 		(char *)section,
 		(char *)name,
 		NULL};
-		char *path = safe_popen_read_argv("/usr/bin/man", argv, 512, 5, NULL);
-		if (path) {
-			path[strcspn(path, "\r\n")] = 0;
-			if (strlen(path) == 0) {
-				free(path);
-				return NULL;
-			}
+	char *raw = safe_popen_read_argv("/usr/bin/man", argv, 2048, 5, NULL);
+	return select_resolved_man_path(raw);
+}
+
+static char *
+select_resolved_man_path(char *raw_output)
+{
+	char *selected = NULL;
+
+	if (!raw_output)
+		return NULL;
+
+	for (char *p = raw_output; *p; p++) {
+		if (*p == '\n' || *p == '\r' || *p == '\t')
+			*p = ' ';
+	}
+
+	char *saveptr = NULL;
+	for (char *tok = strtok_r(raw_output, " ", &saveptr); tok;
+	     tok = strtok_r(NULL, " ", &saveptr)) {
+		if (tok[0] != '/')
+			continue;
+
+		if (!selected)
+			selected = tok;
+
+		if (access(tok, R_OK) == 0) {
+			selected = tok;
+			break;
 		}
-		return path;
+	}
+
+	if (!selected || selected[0] == '\0') {
+		free(raw_output);
+		return NULL;
+	}
+
+	char *resolved = strdup(selected);
+	free(raw_output);
+	return resolved;
 }
 
 /* --- API JSON --- */
@@ -779,30 +812,19 @@ man_api_handler(http_request_t *req)
 			(section_buf[0] != '\0' && !is_valid_section(section_buf))) {
 			json = strdup("{\"error\":\"name parameter required\"}");
 			} else {
-				/* Use full MANPATH; optionally narrow by section */
 				char *filepath = NULL;
 				if (section_buf[0] != '\0') {
-					char *const argv[] = {
-						"man", "-M",
-						"/usr/share/man:/usr/local/man:/usr/X11R6/man",
-						"-w", section_buf, name_buf, NULL
-					};
-					filepath = safe_popen_read_argv("/usr/bin/man",
-													argv, 512, 5, NULL);
+					filepath = resolve_man_path(name_buf, section_buf);
 				} else {
-					char *const argv[] = {
-						"man", "-M",
-						"/usr/share/man:/usr/local/man:/usr/X11R6/man",
-						"-w", name_buf, NULL
-					};
-					filepath = safe_popen_read_argv("/usr/bin/man",
-													argv, 512, 5, NULL);
+					const char *probe_sections[] = {"1", "8", "2", "3", "5", "7", "6", "4", "9", "3p"};
+					for (size_t i = 0; i < sizeof(probe_sections) / sizeof(probe_sections[0]); i++) {
+						filepath = resolve_man_path(name_buf, probe_sections[i]);
+						if (filepath) {
+							strlcpy(section_buf, probe_sections[i], sizeof(section_buf));
+							break;
+						}
+					}
 				}
-
-				if (filepath) {
-					filepath[strcspn(filepath, "\r\n")] = 0;
-				}
-
 				if (!filepath || filepath[0] == '\0') {
 					free(filepath);
 					json = strdup("{\"error\":\"not found\"}");
@@ -966,15 +988,12 @@ man_render_page(const char *area, const char *section, const char *page,
 		"man", "-M", "/usr/share/man:/usr/local/man:/usr/X11R6/man",
 		"-w", (char *)section, (char *)page, NULL
 	};
-	char *filepath =
-	safe_popen_read_argv("/usr/bin/man", argv_w, 1024, 5, NULL);
+	char *raw_path =
+	    safe_popen_read_argv("/usr/bin/man", argv_w, 2048, 5, NULL);
+	char *filepath = select_resolved_man_path(raw_path);
 
 	if (!filepath)
 		return NULL;
-	if (filepath) {
-		/* Strip trailing newline */
-		filepath[strcspn(filepath, "\r\n")] = 0;
-	}
 
 	/* Validate: man -w must return an absolute path.
 	 * An empty string means the page was not found.
@@ -1191,4 +1210,3 @@ man_module_attach_routes(struct router *r)
 		return -1;
 	return router_register_prefix(r, "GET", "/api/man", 0, man_api_handler);
 }
-
