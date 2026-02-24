@@ -462,11 +462,15 @@ serialised with `json_escape_string()`.
 
 ### Networking (`src/modules/networking/`)
 
-Provides `/api/networking` (JSON) and the `/networking` view. Collects
-routing table entries (via `sysctl` with `NET_RT_DUMP`), DNS configuration
-(`/etc/resolv.conf`), per-interface packet/byte statistics
-(`SIOCGIFDATA`/`SIOCGIFFLAGS`), and active TCP/UDP connections (via
-`netstat`).
+Provides `/api/networking` (JSON) and the `/networking` view. Collection uses
+OpenBSD-native facilities only: routing table entries via `sysctl`
+(`NET_RT_DUMP`), DNS configuration from `/etc/resolv.conf`, and per-interface
+counters via `getifaddrs(3)`/`if_data`.
+
+To reduce tail latency under load, networking data is sampled by heartbeat once
+per second into a ring buffer, and the API serves a prebuilt JSON snapshot when
+available. This keeps expensive route/interface sysctl work off the request
+path and avoids repeated JSON serialization storms at high concurrency.
 
 ### Manual pages (`src/modules/man/`)
 
@@ -596,46 +600,82 @@ All log lines are prefixed with a local-time timestamp and a level tag:
 
 ## Performance tuning guide
 
-MiniWeb already uses multiple caching layers and bounded worker concurrency. For
-enterprise workloads, tune performance in this order:
+MiniWeb already uses bounded concurrency plus multiple cache layers. For
+production tuning, treat the following as the performance control surface.
 
-1. **Connection and worker sizing**
-   - Increase `threads` gradually and monitor request latency.
-   - Keep `max_conns` below system fd and memory limits.
-2. **Cache efficiency**
-   - Template cache: keep `templates_dir` on fast local storage; avoid excessive
-     template churn so TTL refreshes are infrequent.
-   - Hot-view cache (`g_hot_view_cache`): add only truly hot views to avoid
-     wasting memory on low-hit pages.
-   - Static file cache (`src/http/response.c`): keep frequently requested assets
-     below `FILE_CACHE_MAX_BYTES` to maximize cache hit rate.
-   - Metrics snapshot cache: avoid serializing large JSON payloads on every API
-     call by reusing periodic snapshots.
-   - Package/man query caches: normalize query strings to increase reuse.
-3. **Heartbeat scheduling**
-   - Run expensive samplers at >=1s and lighter maintenance at 30s/60s.
-   - Avoid long callbacks in heartbeat tasks; split heavy work into smaller
-     independent callbacks.
-4. **SQLite3 facilities (current and target usage)**
-   - Use one opened handle per subsystem and reuse prepared statements.
-   - Group writes with transactions (`mw_tx_begin/commit`) to reduce fsync cost.
-   - Keep schema SQL versioned in `sqlite_schema` migrations.
-   - Enable WAL mode and tuned busy timeout once the runtime backend is fully
-     wired (planned migration step).
-   - Persist module flags and warm caches so restarts avoid cold-start penalties.
+### Runtime tunables (CLI/config)
+
+- `threads` (`-t`): worker threads that execute handlers. Increase gradually;
+  too high can increase lock contention and context switching.
+- `max_conns` (`-c`): connection budget. Must stay below kernel/file-descriptor
+  limits and memory budget.
+- `conn_timeout`: idle keep-alive timeout; lower values reclaim sockets faster
+  under bursty load, higher values improve keep-alive reuse.
+- `max_req_size`: hard cap for request header buffering.
+- `mandoc_timeout`: upper bound for man rendering subprocesses.
+- `verbose`: debug logging; keep disabled during benchmarks because logging adds
+  lock contention and I/O pressure.
+
+### Compile-time tunables (code constants)
+
+- Dispatcher/queue sizing (`src/app_main.c`):
+  - `MAX_EVENTS` (kevent batch)
+  - `LISTEN_BACKLOG`
+  - `QUEUE_CAPACITY`
+  - `MAX_KEEPALIVE_REQUESTS`
+  - `MAX_CONNECTIONS` / `THREAD_POOL_SIZE` hard caps
+- HTTP write path (`src/http/response.c`):
+  - `WRITE_RETRY_LIMIT`, `WRITE_WAIT_MS`
+- Static asset cache (`src/http/response.c`):
+  - `FILE_CACHE_SHARDS`, `FILE_CACHE_SLOTS`
+  - `FILE_CACHE_MAX_BYTES`
+  - `FILE_CACHE_INSERTS_PER_SEC`
+  - `FILE_CACHE_MAX_AGE_SEC`
+- Networking snapshot buffers (`src/modules/networking/networking_module.c`):
+  - `NETWORK_RING_BYTES`
+  - `NETWORK_JSON_BUFFER_SIZE`
+
+### High-load failure mode notes (HTTP `000000` in benchmark table)
+
+At very high concurrency (for example 256 connections), client-side probes can
+report `000`/`000000` when the socket closes before a full HTTP response is
+read (accept queue pressure, worker queue saturation, timeout, or client abort).
+This is not an HTTP status code from the server. Use `wrk` non-2xx counters,
+server logs, and per-endpoint latency curves together before classifying it as
+an application regression.
+
+### `/api/networking` regression analysis and mitigation
+
+`/api/networking` is naturally heavier than most endpoints because route and
+interface snapshots involve sysctl/getifaddrs traversal plus JSON assembly.
+Under concurrent polling, repeated serialization can dominate worker time.
+
+Current mitigation in code:
+
+- heartbeat collects a sample every second;
+- a ring of snapshots keeps recent state;
+- a cached prebuilt JSON payload is reused by request handlers;
+- request path falls back to on-demand collection only when cache is empty.
+
+This shifts expensive work from request fan-out to a bounded periodic task and
+stabilizes p95/p99 latency for the endpoint.
 
 ### Caching facilities summary
 
-- **Template cache**: file content cache for HTML fragments with TTL refresh.
-- **Hot-view cache**: short-lived rendered HTML cache for top pages.
-- **Static file cache**: sharded cache for static assets with size and admission
-  control.
-- **Metrics cache**: periodic snapshot/ring data to decouple collection from API
-  request rate.
-- **Networking cache**: periodic ring snapshots for networking endpoints.
-- **Package search cache**: query-result cache with TTL and recency-based
-  replacement.
-- **Man hot cache**: short-lived cache to avoid repeated heavy mandoc/man calls.
+- **Template cache** (`src/render/template_render.c`): in-memory template files
+  with TTL refresh.
+- **Hot-view cache** (`src/router/route_table.c`): short-lived rendered HTML for
+  hottest pages.
+- **Static file cache** (`src/http/response.c`): sharded cache with two-hit
+  admission, insertion token budget, size cap, and age eviction.
+- **Metrics cache** (`src/modules/metrics/metrics_module.c`): periodic snapshot
+  ring to decouple sampling from API request rate.
+- **Networking cache** (`src/modules/networking/networking_module.c`): periodic
+  snapshot ring plus cached serialized JSON.
+- **Package search cache** (`src/modules/packages/packages_module.c`): TTL query
+  cache for repetitive lookups.
+- **Man page cache** (`src/modules/man/man_module.c`): filesystem-backed render
+  cache for multiple output formats.
 
 ## Source layout
 
