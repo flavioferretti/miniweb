@@ -1,363 +1,161 @@
 # MiniWeb Enterprise Refactor Plan (C99 + OpenBSD KNF)
 
-## Refactor status snapshot (2026-02-23)
+## Refactor status snapshot (verified against repository on 2026-02-24)
 
-### Completed
-
-- Source tree standardized around capability folders in `src/` (`core`, `http`, `router`, `modules`, `render`, `storage`) with `app_main.c` as entrypoint.
-- Public headers now include a namespaced surface under `include/miniweb/` for core/http/router/render/modules/storage APIs while preserving compatibility wrappers.
-- Heartbeat scheduler API (`heartbeat_init/register/start/stop`) is in place and used by module sampling responsibilities.
-- Router/module boundary is active through `struct miniweb_module` and `miniweb_module_attach_enabled()` with `init_routes()` wiring module registration.
-- sqlite storage facade has been introduced (`sqlite_db`, `sqlite_stmt`, `sqlite_schema`) for staged persistence rollout.
-
-### In progress
-
-- Full split of large feature files into service + json + module units (metrics/networking/man/packages).
-- Expansion of integration coverage to route semantics (404/405) and golden payload assertions.
-
-### Next milestone
-
-- Keep the current phased roadmap, but execute decomposition and test hardening as the primary next sprint goals.
-
-## 1) In-depth codebase review
-
-### 1.1 High-level findings
-
-MiniWeb already has strong low-level primitives (kqueue dispatching, worker queue,
-multiple caches, OpenBSD-native data collection), but architecture is currently
-**feature-oriented by file growth** instead of **capability-oriented by module boundary**.
-
-The largest maintainability risks are:
-
-1. **God files** with multiple responsibilities.
-   - `src/main.c` (~964 LOC) mixes lifecycle, socket bootstrapping, pool allocation,
-     worker coordination, signal handling, and config wiring.
-   - `src/metrics.c` (~1385 LOC) mixes kernel sampling, ring storage, snapshot caching,
-     JSON assembly, and HTTP endpoint coupling.
-   - `src/http_handler.c` (~973 LOC) mixes response pooling, static file serving,
-     MIME responsibilities, write/retry policy, and file cache internals.
-2. **Routing concerns split across multiple locations** (`routes.c` and `urls.c`) with
-   partially duplicated path/method logic.
-3. **Domain logic coupled to transport/HTTP** (e.g., metrics functions living in files
-   that also build HTTP payload responses).
-4. **Multiple 1-second sampling loops** (metrics and networking) instead of a single
-   global heartbeat scheduler.
-5. **No generalized service/plugin contract** for enabling/disabling view/json routes as
-   independent modules.
-6. **No generic data-access layer** despite natural fit for a reusable sqlite3-backed
-   persistence module for state/history/configuration.
-
-### 1.2 Current architecture observations (from code)
-
-- Runtime model is a kqueue dispatcher + worker pool, a good base for scale.
-- A metrics ring sampler already runs every second in a detached thread.
-- A networking sampler thread also runs every second.
-- Route matching currently supports exact table routes plus dynamic prefix routes.
-- Caching exists at multiple layers (templates, hot view cache, static cache,
-  metrics snapshot, networking ring, package query cache).
-
-These are strong building blocks for enterprise architecture if boundaries are formalized.
-
-### 1.3 Root causes of growing complexity
-
-- **File-centric accretion**: new features were added to existing large files instead of
-  extracting focused modules.
-- **API surface not explicitly layered**: transport layer can call deep internals directly.
-- **No per-function placement policy**: helper functions remain in their first birthplace.
-- **No central scheduler abstraction**: periodic tasks each spawn their own loop.
+This plan is **not totally outdated**. The high-level direction is still valid, but
+many items from the previous version were already completed and several file-level
+observations were stale.
 
 ---
 
-## 2) Target architecture (divide et impera)
+## 1) Reality check: plan vs current codebase
 
-Adopt a strict layer model:
+### 1.1 Completed since the original draft
 
-1. **core/**
-   - process lifecycle, heartbeat scheduler, config, logging, thread primitives.
-2. **net/**
-   - socket/kqueue accept loop, connection/work queues, protocol IO.
-3. **http/**
-   - request parsing, response writer, static file serving, MIME table, middleware.
-4. **router/**
-   - route registry, method/path matchers, module route attach API.
-5. **modules/**
-   - feature modules: dashboard, docs/man, metrics, networking, packages, api_root.
-6. **storage/**
-   - sqlite3 facade and schema/bootstrap helpers.
-7. **platform/openbsd/**
-   - sysctl/kvm/getifaddrs/getmntinfo wrappers; pure data collection API.
-8. **render/**
-   - template engine and view composition.
+- Capability-oriented source layout is already in place in `src/`:
+  `core`, `http`, `router`, `modules`, `render`, `storage`, plus `app_main.c` entrypoint.
+- Namespaced headers are in `include/miniweb/` for core/http/router/modules/render/storage.
+- Heartbeat scheduler exists and is feature-complete for periodic registration and lifecycle:
+  `heartbeat_init/register/unregister/update/start/stop`.
+- Router/module attach boundary is active with `struct miniweb_module` and
+  `miniweb_module_attach_enabled()`.
+- SQLite facade layer exists with `sqlite_db`, `sqlite_stmt`, and `sqlite_schema` units.
+- Route-level tests already assert 404/405 semantics at the matcher/API level
+  (`route_path_known`, `route_allow_methods`).
 
-### Proposed filesystem redesign
+### 1.2 Still true / still risky
 
-```text
-include/miniweb/
-  core/{app.h,config.h,heartbeat.h,log.h,errors.h}
-  net/{server.h,connection_pool.h,work_queue.h}
-  http/{request.h,response.h,static_files.h,mime.h}
-  router/{router.h,route_table.h,module_attach.h}
-  modules/
-    metrics/{metrics_module.h,metrics_service.h,metrics_json.h}
-    networking/{networking_module.h,networking_service.h,networking_json.h}
-    man/{man_module.h,man_service.h,man_json.h}
-    packages/{packages_module.h,packages_service.h,packages_json.h}
-    views/{views_module.h,view_registry.h}
-  render/{template_cache.h,template_render.h}
-  storage/{sqlite_db.h,sqlite_schema.h,sqlite_stmt.h}
-  platform/openbsd/{cpu.h,memory.h,disk.h,proc.h,netif.h,routes.h,uptime.h}
+- Very large files remain and should be decomposed:
+  - `src/app_main.c` (~1160 LOC)
+  - `src/http/response.c` (~1126 LOC)
+  - `src/modules/metrics/metrics_module.c` (~1628 LOC)
+  - `src/modules/man/man_module.c` (~1102 LOC)
+- Feature files still combine service logic, JSON serialization, and route handlers
+  in the same translation unit for several modules.
+- The platform wrapper layer (`platform/openbsd/*`) and dedicated `net/` folder from the
+  target architecture are not yet implemented.
+- Integration checks exist but are still smoke-oriented (endpoint reachability),
+  not full golden-payload assertions.
 
-src/
-  core/*.c
-  net/*.c
-  http/*.c
-  router/*.c
-  modules/**.c
-  render/*.c
-  storage/*.c
-  platform/openbsd/*.c
-  app_main.c
-```
+### 1.3 Outdated statements from previous version (corrected)
 
-Filename intent should be self-evident: if a function concerns process listing,
-it belongs in `platform/openbsd/proc.c`; if it transforms model to JSON, it belongs
-in `modules/*/*_json.c`; if it exposes endpoint wiring, `*_module.c`.
+- References to `src/main.c`, `src/metrics.c`, and `src/http_handler.c` are obsolete.
+  Current code already moved those responsibilities into `app_main.c`,
+  `src/modules/metrics/metrics_module.c`, and `src/http/response.c`.
+- The roadmap item “introduce module attach API” is no longer pending; it is implemented.
+- The roadmap item “introduce sqlite facade” is no longer pending; scaffold is implemented.
 
 ---
 
-## 3) Single 1-second heartbeat architecture
+## 2) Updated target architecture and gap map
 
-## Goal
+### 2.1 Target layers (kept)
 
-One global heartbeat thread dispatches timed jobs (1s/5s/30s/60s), replacing
-feature-owned infinite loops.
+1. `core/` — lifecycle, heartbeat, config, logging, threading primitives.
+2. `net/` — accept loop, connection/work queues, transport I/O.
+3. `http/` — parser/response writer/static assets/mime helpers.
+4. `router/` — registry, matching, module route-attach integration.
+5. `modules/` — feature packages (`metrics`, `networking`, `man`, `packages`, views/api root).
+6. `storage/` — sqlite facade and schema migration helpers.
+7. `platform/openbsd/` — collectors for sysctl/kvm/getifaddrs/getmntinfo.
+8. `render/` — template render/cache/composition.
 
-### API sketch (C99, KNF-friendly)
+### 2.2 Current implementation status by layer
 
-- `heartbeat_init(void)`
-- `heartbeat_register(const struct hb_task *task)`
-- `heartbeat_start(void)`
-- `heartbeat_stop(void)`
-
-Where `hb_task` contains:
-
-- task name
-- period in seconds
-- initial delay
-- callback pointer
-- opaque context pointer
-- optional failure counter/backoff policy
-
-### Usage
-
-- Metrics sampler task registers at 1s.
-- Networking sampler task registers at 1s.
-- Template cache refresh or cleanup at 30s.
-- Static cache compaction at 60s.
-
-### Benefits
-
-- One control plane for expensive sampling.
-- Consistent timing and observability.
-- Easier future throttling and backpressure.
-- Clean shutdown ordering and thread accountability.
+- `core/` ✅ present
+- `http/` ✅ present
+- `router/` ✅ present
+- `modules/` ✅ present
+- `storage/` ✅ present
+- `render/` ✅ present
+- `net/` ❌ pending extraction (transport still inside `app_main.c`)
+- `platform/openbsd/` ❌ pending extraction (collectors remain embedded in modules)
 
 ---
 
-## 4) Route enable/disable and module attach API
+## 3) Execution plan (re-prioritized)
 
-Create a lightweight module contract:
+### Phase A — Decompose highest-risk files (next sprint)
 
-```c
-struct miniweb_module {
-	const char *name;
-	int (*init)(void *ctx);
-	int (*attach_routes)(struct router *r);
-	void (*shutdown)(void *ctx);
-	int enabled_by_default;
-};
-```
+1. Split `src/app_main.c` into:
+   - `src/net/server.c` (listen/accept/kqueue loop)
+   - `src/net/connection_pool.c`
+   - `src/net/work_queue.c`
+   - `src/net/worker.c`
+2. Split `src/http/response.c` into:
+   - `response_writer.c`
+   - `static_files.c`
+   - `mime.c` (if still embedded)
+3. Split each large feature module into `*_service.c`, `*_json.c`, `*_module.c`:
+   - metrics
+   - networking
+   - man
+   - packages
 
-At startup:
+**Definition of done (Phase A):**
+- No file above 700 LOC.
+- Public behavior unchanged (unit + integration tests pass).
 
-1. Load module registry.
-2. Apply config-based enable/disable flags.
-3. For each enabled module: `init` then `attach_routes`.
+### Phase B — Platform boundary and reusable collectors
 
-This makes views/json endpoints togglable without touching central route logic.
+1. Introduce `src/platform/openbsd/` collectors for CPU/memory/disk/process/net/uptime.
+2. Make modules consume collector APIs only (no direct sysctl/kvm/getifaddrs in modules).
+3. Add minimal tests (or deterministic stubs) per collector-facing adapter.
 
-Config examples:
+**Definition of done (Phase B):**
+- Modules call platform wrappers only.
+- Collector code can be mocked in tests.
 
-- `module.metrics=on`
-- `module.packages=off`
-- `module.views.docs=on`
-- `module.api.man=off`
+### Phase C — Test hardening and payload contracts
 
----
+1. Expand `tests/integration_endpoints.sh` into contract-style checks:
+   - explicit status assertions (200/404/405)
+   - JSON structure checks for core endpoints
+2. Add golden payload fixtures for at least:
+   - `/api/metrics`
+   - `/api/networking`
+   - `/api/packages/list` (or equivalent stable endpoint)
+3. Add CI gate to run unit tests + integration tests on each change.
 
-## 5) sqlite3 reusable interface library
+**Definition of done (Phase C):**
+- Endpoint payload regressions detected automatically.
+- Route semantics verified both at matcher and HTTP response levels.
 
-Provide a `storage/sqlite` layer designed as boilerplate facilities for modules.
+### Phase D — SQLite adoption beyond scaffold
 
-### Minimal API
+1. Persist module enable/disable flags.
+2. Persist selected sampled snapshots (bounded retention).
+3. Version schemas through explicit migration list.
 
-- DB lifecycle:
-  - `mw_db_open(path, flags, &db)`
-  - `mw_db_close(db)`
-- Schema bootstrap:
-  - `mw_db_exec_schema(db, schema_sql)`
-  - `mw_db_migrate(db, migrations[], n)`
-- CRUD helpers:
-  - `mw_stmt_prepare(db, sql, &stmt)`
-  - bind helpers (`mw_bind_text/int64/blob/null`)
-  - `mw_stmt_step(stmt)`
-  - `mw_stmt_finalize(stmt)`
-- Transaction helpers:
-  - `mw_tx_begin/commit/rollback`
-
-### First practical use-cases
-
-1. Persist route/module flags (runtime configuration).
-2. Persist sampled heartbeat snapshots (rolling history).
-3. Persist package/man query caches for warm restart.
-
-Keep all SQL in dedicated `*_schema.c` files with explicit versioning.
-
----
-
-## 6) Per-function separation policy
-
-Adopt explicit placement rules:
-
-1. **Collector function** (sysctl/getifaddrs/etc.) -> `platform/openbsd/*`.
-2. **Model aggregation function** -> `modules/*/*_service.c`.
-3. **Serialization function** -> `modules/*/*_json.c`.
-4. **HTTP handler** -> `modules/*/*_module.c`.
-5. **Router binding** -> module `attach_routes` only.
-
-Each exported function must have:
-
-- One Doxygen comment block (`@brief`, params, return, thread safety note if needed).
-- One owner header.
-- One unit test entry when practical.
+**Definition of done (Phase D):**
+- Restart preserves selected runtime state.
+- Migration path is deterministic and test-covered.
 
 ---
 
-## 7) C99 + OpenBSD KNF compliance intervention list
+## 4) Coding governance (kept and clarified)
 
-1. Keep declarations at block starts when possible and avoid mixed declaration style
-   that hurts readability.
-2. Use KNF indentation/tabs, line wrapping, and brace placement consistently.
-3. Normalize return conventions (`0` success, `-1` failure) across internal APIs.
-4. Replace ad-hoc magic numbers with named `enum` or `#define` in owning module.
-5. Limit file size target:
-   - soft limit 350 LOC
-   - hard review trigger 500 LOC
-6. Limit function size target:
-   - soft limit 40 LOC
-   - hard review trigger 80 LOC
-
----
-
-## 8) Refactor execution roadmap (phased)
-
-### Phase 0 — Safety net (1-2 weeks)
-
-- Freeze behavior with integration tests for all current endpoints.
-- Add route conformance tests (405/404 semantics).
-- Add golden payload smoke tests for `/api/metrics` and `/api/networking`.
-
-### Phase 1 — Extract core infrastructure (1-2 weeks)
-
-- Extract from `main.c`:
-  - connection pool
-  - work queue
-  - worker lifecycle
-  - accept loop helpers
-- Keep external behavior unchanged.
-
-### Phase 2 — Router and module boundary (1 week)
-
-- Introduce router object and module attach API.
-- Migrate existing routes into modules without changing URL contracts.
-
-### Phase 3 — Heartbeat unification (1 week)
-
-- Add `core/heartbeat`.
-- Move metrics/networking samplers to heartbeat tasks.
-- Remove duplicated sampler threads.
-
-### Phase 4 — Domain decomposition (2-3 weeks)
-
-- Split `metrics.c` into:
-  - openbsd collectors
-  - metrics service
-  - json serializer
-  - endpoint module
-- Apply same pattern to networking/packages/man.
-
-### Phase 5 — sqlite3 storage layer (1-2 weeks)
-
-- Add storage library and schema bootstrap.
-- Migrate one cache/state feature first (feature flag table).
-- Expand usage gradually after proving stability.
-
-### Phase 6 — performance hardening (ongoing)
-
-- Instrument heartbeat tasks with runtime counters.
-- Add watchdog logs for slow callbacks.
-- Tune cache TTL/token budgets based on measured latency.
+- C99 + OpenBSD KNF style is mandatory.
+- File-size guideline:
+  - soft limit 350 LOC
+  - review trigger 500 LOC
+- Function-size guideline:
+  - soft limit 40 LOC
+  - review trigger 80 LOC
+- Return convention for internal APIs: `0` success, `-1` failure unless documented otherwise.
+- Every exported symbol must have:
+  - one owning header
+  - one meaningful Doxygen block
+  - one test entry when practical
 
 ---
 
-## 9) Suggested immediate backlog (next sprint)
+## 5) Immediate actionable next steps (ordered backlog)
 
-1. Create architecture decision records (ADR-001: layering, ADR-002: heartbeat,
-   ADR-003: module API).
-2. Extract `connection_pool.*` and `work_queue.*` from `main.c` first (lowest risk).
-3. Introduce `router/router.c` object while preserving existing `init_routes()` API as shim.
-4. Define `modules/metrics` folder and move only HTTP glue first.
-5. Add sqlite3 wrapper skeleton with no runtime dependency yet.
+1. Extract `work_queue_*` and connection-pool logic from `app_main.c` into `src/net/`.
+2. Carve HTTP static serving + response writing out of `src/http/response.c`.
+3. Start with `metrics` module split (`service/json/module`) as the reference pattern.
+4. Upgrade integration test script to assert 404/405 and basic JSON key presence.
+5. Remove stale TODO Doxygen placeholders while touching each file.
 
----
-
-## 10) Success criteria
-
-You can declare miniweb "enterprise-ready" when:
-
-- Every endpoint belongs to a module with independent enable/disable flag.
-- No core source file exceeds 500 LOC.
-- Expensive collectors are triggered only by centralized heartbeat tasks.
-- Platform collectors are transport-agnostic (usable by CLI/tests/http).
-- sqlite3 storage layer is reused by at least two modules.
-- C99 + KNF checks pass in CI and documentation is Doxygen-complete.
-
-
-
----
-
-## 11) Migration status update (current repository snapshot)
-
-### Completed in this stage
-
-1. **Module attach contract is active and migrated**: views, metrics, networking, man, and packages now attach routes via module callbacks (`router_register` / `router_register_prefix`) instead of central hard-coded route lists.
-2. **Heartbeat scheduler is active as the single periodic control plane** for 1-second metrics and networking sampling tasks.
-3. **SQLite storage facade scaffolding exists** under `src/storage` and `include/miniweb/storage`.
-4. **Source tree is capability-oriented** (`core`, `http`, `router`, `modules`, `render`, `storage`) with router/module boundaries now enforced in route initialization.
-
-### Remaining gaps before enterprise completion
-
-1. Move remaining legacy includes to `include/miniweb/**` only and remove compatibility headers.
-2. Complete SQLite backend implementation (`sqlite3_open_v2`, prepared statement execution, error mapping).
-3. Add module-level enable/disable flags loaded from config and persisted in SQLite.
-4. Expand domain decomposition inside each module (split collector/service/json files for metrics, networking, man, and packages).
-5. Add integration tests for module toggles and heartbeat task lifecycle semantics.
-6. Finish Doxygen coverage and enforce via CI gate.
-
-### Code review (focus areas)
-
-- **Documentation quality**: comments are improving but many legacy functions still use placeholder descriptions.
-- **Storage behavior**: `src/storage/*.c` are currently stubs; API shape is good, runtime behavior is incomplete.
-- **Thread lifecycle**: heartbeat thread currently uses detach semantics; consider join-based shutdown for deterministic teardown.
-- **Header organization**: enterprise headers under `include/miniweb/` are present; continue migrating all includes to this namespace.
-- **Performance observability**: add per-task heartbeat latency counters and expose them in metrics JSON.
+This document should now be treated as the active enterprise roadmap baseline.
