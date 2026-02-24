@@ -16,6 +16,8 @@ refactor plan lives in `docs/ENTERPRISE_REFACTOR_PLAN.md`. This document
 describes the **current implemented state**.
 
 ---
+![screenshot](https://raw.githubusercontent.com/flavioferretti/miniweb/refs/heads/main/docs/screenshot.png]])
+---
 
 ## Table of Contents
 
@@ -154,6 +156,10 @@ log_file      /var/log/miniweb.log
 ---
 
 ## Runtime architecture
+
+---
+![screenshot](https://raw.githubusercontent.com/flavioferretti/miniweb/refs/heads/main/docs/screenshot.png]])
+---
 
 MiniWeb uses a **two-tier threading model**:
 
