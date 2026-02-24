@@ -228,3 +228,12 @@ LibNet --> Ksock : socket stack syscalls
 LibProc --> Ksys : time/proc/sysctl wrappers
 
 @enduml
+
+' 2026-02-24 incremental extraction update
+' AppMain -> Server runtime split:
+'   src/app_main.c => bootstrap only
+'   src/net/server.c => dispatch + accept
+'   src/net/connection_pool.c => connection lifecycle
+'   src/net/worker.c => request execution
+' Module split scaffolds introduced for metrics/networking/man/packages:
+'   *_module.c + *_service.c + *_json.c
