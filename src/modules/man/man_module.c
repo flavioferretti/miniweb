@@ -24,6 +24,160 @@
 #define MAX_OUTPUT_SIZE (10 * 1024 * 1024) //10 MB!
 #define MAN_HOT_CACHE_TTL_SEC 30
 
+static int is_valid_section(const char *section);
+
+/**
+ * @brief Return non-zero when an API endpoint matches exactly.
+ * @param path Request URL path after /api/man.
+ * @param endpoint Endpoint token such as "/sections".
+ * @return 1 when @p path is @p endpoint, optionally followed by query string.
+ */
+static int
+path_matches_endpoint(const char *path, const char *endpoint)
+{
+	size_t len;
+
+	if (!path || !endpoint)
+		return 0;
+
+	len = strlen(endpoint);
+	if (strncmp(path, endpoint, len) != 0)
+		return 0;
+
+	return path[len] == '\0' || path[len] == '?';
+}
+
+/**
+ * @brief Decode URL-encoded text into a destination buffer.
+ * @param src Encoded source string.
+ * @param dst Destination buffer.
+ * @param dst_size Destination buffer size.
+ * @return 0 on success, -1 on invalid input or overflow.
+ */
+static int
+url_decode_into(const char *src, char *dst, size_t dst_size)
+{
+	size_t di = 0;
+
+	if (!src || !dst || dst_size == 0)
+		return -1;
+
+	for (size_t si = 0; src[si] != '\0'; si++) {
+		if (di + 1 >= dst_size)
+			return -1;
+
+		if (src[si] == '+') {
+			dst[di++] = ' ';
+			continue;
+		}
+
+		if (src[si] == '%' && isxdigit((unsigned char)src[si + 1]) &&
+		    isxdigit((unsigned char)src[si + 2])) {
+			char hex[3] = {src[si + 1], src[si + 2], '\0'};
+			dst[di++] = (char)strtol(hex, NULL, 16);
+			si += 2;
+			continue;
+		}
+
+		dst[di++] = src[si];
+	}
+
+	dst[di] = '\0';
+	return 0;
+}
+
+/**
+ * @brief Extract and decode a query parameter value from an URL.
+ * @param url Full request URL.
+ * @param key Query key to extract.
+ * @param out Destination buffer for decoded value.
+ * @param out_size Destination buffer size.
+ * @return 1 when found and decoded, 0 otherwise.
+ */
+static int
+get_query_value(const char *url, const char *key, char *out, size_t out_size)
+{
+	const char *qs;
+	size_t key_len;
+
+	if (!url || !key || !out || out_size == 0)
+		return 0;
+
+	qs = strchr(url, '?');
+	if (!qs)
+		return 0;
+	qs++;
+
+	key_len = strlen(key);
+
+	while (*qs) {
+		const char *entry = qs;
+		const char *eq = strchr(entry, '=');
+		const char *amp = strchr(entry, '&');
+
+		if (!amp)
+			amp = entry + strlen(entry);
+		if (!eq || eq > amp) {
+			qs = (*amp == '&') ? amp + 1 : amp;
+			continue;
+		}
+
+		if ((size_t)(eq - entry) == key_len &&
+		    strncmp(entry, key, key_len) == 0) {
+			char encoded[512];
+			size_t encoded_len = (size_t)(amp - (eq + 1));
+
+			if (encoded_len >= sizeof(encoded))
+				return 0;
+
+			memcpy(encoded, eq + 1, encoded_len);
+			encoded[encoded_len] = '\0';
+
+			return url_decode_into(encoded, out, out_size) == 0;
+		}
+
+		qs = (*amp == '&') ? amp + 1 : amp;
+	}
+
+	return 0;
+}
+
+/**
+ * @brief Parse a section suffix from a man page filename.
+ * @param filename Leaf filename (for example "help.1.gz").
+ * @param section_out Destination section string.
+ * @param section_out_len Destination buffer size.
+ * @return 1 on success, 0 when the filename does not include a valid section.
+ */
+static int
+parse_section_from_filename(const char *filename, char *section_out,
+			    size_t section_out_len)
+{
+	static const char *compressed_suffixes[] = {".gz", ".bz2", ".xz", ".zst"};
+	char tmp[256];
+
+	if (!filename || !section_out || section_out_len == 0)
+		return 0;
+
+	strlcpy(tmp, filename, sizeof(tmp));
+
+	for (size_t i = 0; i < sizeof(compressed_suffixes) / sizeof(compressed_suffixes[0]); i++) {
+		size_t tlen = strlen(tmp);
+		size_t slen = strlen(compressed_suffixes[i]);
+		if (tlen > slen && strcmp(tmp + tlen - slen, compressed_suffixes[i]) == 0) {
+			tmp[tlen - slen] = '\0';
+			break;
+		}
+	}
+
+	char *dot = strrchr(tmp, '.');
+	if (!dot || dot[1] == '\0' || !is_valid_section(dot + 1))
+		return 0;
+
+	strlcpy(section_out, dot + 1, section_out_len);
+	return 1;
+}
+
 /* Remove nroff overstrike sequences (for example "N\bN", "_\bX")
  * from mandoc ASCII output so markdown fallback remains readable. */
 /**
@@ -262,10 +416,13 @@ man_get_section_pages_json(const char *area, const char *section)
 		 * Example: xterm.1 in man1 -> accepted.
 		 * Example: i386 (directory) -> skipped by DT_DIR.
 		 */
-		char *dot = strrchr(de->d_name, '.');
-		if (dot && strcmp(dot + 1, section) == 0) {
+		char resolved_section[16];
+		if (parse_section_from_filename(de->d_name, resolved_section,
+					       sizeof(resolved_section)) &&
+		    strcmp(resolved_section, section) == 0) {
 			char name[128];
-			size_t name_len = dot - de->d_name;
+			char *dot = strchr(de->d_name, '.');
+			size_t name_len = dot ? (size_t)(dot - de->d_name) : strlen(de->d_name);
 			if (name_len >= sizeof(name))
 				name_len = sizeof(name) - 1;
 
@@ -591,26 +748,15 @@ man_api_handler(http_request_t *req)
 	/* /api/man/resolve?name=kqueue&section=2
 	 * Resolves the real area+path of a man page via 'man -w' so the FE
 	 * can build a correct /man/{area}/{section}/{name} link without guessing. */
-	if (strncmp(path, "/resolve", 8) == 0) {
+	if (path_matches_endpoint(path, "/resolve")) {
 		char name_buf[64]    = {0};
 		char section_buf[16] = {0};
 
 		/* Extract name= and section= from query string */
-		const char *qs = query_string ? query_string : strchr(path, '?');
-		if (qs) {
-			const char *p_name = strstr(qs, "name=");
-			if (p_name) {
-				p_name += 5;
-				for (int i = 0; *p_name && *p_name != '&' && i < 63; i++)
-					name_buf[i] = *p_name++;
-			}
-			const char *p_sec = strstr(qs, "section=");
-			if (p_sec) {
-				p_sec += 8;
-				for (int i = 0; *p_sec && *p_sec != '&' && i < 15; i++)
-					section_buf[i] = *p_sec++;
-			}
-		}
+		(void)query_string;
+		(void)get_query_value(req->url, "name", name_buf, sizeof(name_buf));
+		(void)get_query_value(req->url, "section", section_buf,
+				      sizeof(section_buf));
 
 		if (name_buf[0] == '\0' || !is_valid_token(name_buf) ||
 			(section_buf[0] != '\0' && !is_valid_section(section_buf))) {
@@ -650,10 +796,11 @@ man_api_handler(http_request_t *req)
 					char resolved_section[16] = {0};
 					const char *base = strrchr(filepath, '/');
 					base = base ? base + 1 : filepath;
-					const char *dot = strrchr(base, '.');
-					if (dot && dot[1] != '\0'){
-						strlcpy(resolved_section, dot + 1,
-								sizeof(resolved_section));
+					if (!parse_section_from_filename(base,
+								 resolved_section,
+								 sizeof(resolved_section))) {
+						strlcpy(resolved_section, section_buf,
+							sizeof(resolved_section));
 					}
 
 
@@ -674,25 +821,26 @@ man_api_handler(http_request_t *req)
 					free(filepath);
 				}
 			}
-	} else
+	} else {
 		/* Casi semplici: stringhe esatte senza parametri nel path */
-		if (strncmp(path, "/sections", path_len) == 0 && path_len == 9) {
+		if (path_matches_endpoint(path, "/sections")) {
 			json = man_get_sections_json();
-		} else if (strncmp(path, "/pages", path_len) == 0) {
+		} else if (path_matches_endpoint(path, "/pages")) {
 			/* Estrazione "section=" dalla query string */
-			const char *q =
-			query_string ? strstr(query_string, "section=") : NULL;
-			if (q) {
-				q += 8;
-				char section[16] = {0};
-				for (int i = 0; *q && *q != '&' && i < 15; i++)
-					section[i++] = *q++;
-				json = man_get_section_pages_json("system", section);
+			char section[16] = {0};
+			char area[16] = "system";
+
+			if (get_query_value(req->url, "section", section,
+					    sizeof(section))) {
+				(void)get_query_value(req->url, "area", area,
+					      sizeof(area));
+				json = man_get_section_pages_json(area, section);
 			} else {
 				json =
 				strdup("{\"error\":\"Missing section parameter\"}");
 			}
-		} else if (strncmp(path, "/search", 7) == 0) {
+		} else if (strncmp(path, "/search/", 8) == 0 ||
+			   path_matches_endpoint(path, "/search")) {
 			const char *query = NULL;
 			char query_buf[256] = {0};
 
@@ -702,15 +850,9 @@ man_api_handler(http_request_t *req)
 			}
 			/* Check whether path is /api/man/search?q=open (curl format). */
 			else {
-				const char *q_param = strstr(path, "q=");
-				if (q_param) {
-					q_param += 2;
-					int i = 0;
-					while (*q_param && *q_param != '&' && i < 255) {
-						query_buf[i++] = *q_param++;
-					}
+				if (get_query_value(req->url, "q", query_buf,
+						    sizeof(query_buf)))
 					query = query_buf;
-				}
 			}
 
 			if (query && *query != '\0') {
@@ -741,8 +883,9 @@ man_api_handler(http_request_t *req)
 				"malformed path\"}");
 			}
 		}
+	}
 
-		/* 3. Send the response */
+	/* 3. Send the response */
 		if (!json) {
 			return http_send_error(req, 500, "Internal Server Error");
 		}

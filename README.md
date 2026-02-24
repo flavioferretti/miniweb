@@ -600,7 +600,11 @@ All log lines are prefixed with a local-time timestamp and a level tag:
 |---|---|---|
 | GET | `/api/metrics` | System metrics snapshot (CPU, RAM, load, disk, processes) |
 | GET | `/api/networking` | Networking diagnostics (routes, DNS, interfaces, connections) |
-| GET | `/api/man/*` | Manual page discovery and search |
+| GET | `/api/man/sections` | Manual areas and section catalog |
+| GET | `/api/man/{area}/{section}` | Pages available in one man section |
+| GET | `/api/man/pages?section={s}&area={a}` | Query-style variant of section listing |
+| GET | `/api/man/search?q={query}` | Apropos-style plain-text search results |
+| GET | `/api/man/resolve?name={n}&section={s}` | Resolve canonical area+section for a page |
 | GET | `/api/packages/search` | Search installed packages |
 | GET | `/api/packages/info` | Package details |
 | GET | `/api/packages/which` | Which package owns a file |
@@ -613,7 +617,7 @@ All log lines are prefixed with a local-time timestamp and a level tag:
 |---|---|---|
 | GET | `/man/{area}/{section}/{page}` | Default HTML rendering |
 | GET | `/man/{area}/{section}/{page}.html` | HTML |
-| GET | `/man/{area}/{section}/{page}.utf8` | Plain UTF-8 text |
+| GET | `/man/{area}/{section}/{page}.txt` | Plain text (ASCII/UTF-8 safe) |
 | GET | `/man/{area}/{section}/{page}.md` | Markdown |
 | GET | `/man/{area}/{section}/{page}.pdf` | PDF |
 

@@ -21,8 +21,13 @@
         </article>
 
         <article class="panel api-endpoint">
-          <div class="endpoint-top"><span class="method">GET</span><code>/api/man/search/{query}</code></div>
-          <p>Performs full-text search against manual pages and returns apropos-like results.</p>
+          <div class="endpoint-top"><span class="method">GET</span><code>/api/man/search?q={query}</code></div>
+          <p>Performs full-text search against manual pages and returns apropos-like plain-text results.</p>
+        </article>
+
+        <article class="panel api-endpoint">
+          <div class="endpoint-top"><span class="method">GET</span><code>/api/man/resolve?name={page}&section={section}</code></div>
+          <p>Resolves the canonical area and section for a page name so clients can build valid <code>/man/{area}/{section}/{page}</code> URLs.</p>
         </article>
 
         <article class="panel api-endpoint">
