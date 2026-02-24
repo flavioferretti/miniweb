@@ -277,7 +277,7 @@ pkg_search_json(const char *query)
 	return json;
 }
 
-/* Validate filesystem path for pkg_info -E: must be absolute, no shell chars */
+/* Validate filesystem path for pkg_info -W: must be absolute, no shell chars */
 /**
  * @brief Is safe path.
  * @param path Request or filesystem path to evaluate.
@@ -440,9 +440,15 @@ pkg_files_json(const char *package_name)
 char *
 pkg_list_json(void)
 {
-	char *const argv[] = {"pkg_info", "-q", NULL};
-	char *output = safe_popen_read_argv("/usr/sbin/pkg_info", argv,
-				    PKG_CMD_MAX_OUTPUT, 5, NULL);
+	char *const argv_a[] = {"pkg_info", "-a", NULL};
+	char *output = safe_popen_read_argv("/usr/sbin/pkg_info", argv_a,
+				    PKG_CMD_MAX_OUTPUT, 10, NULL);
+	if (!output || output[0] == '\0') {
+		free(output);
+		char *const argv_q[] = {"pkg_info", "-q", NULL};
+		output = safe_popen_read_argv("/usr/sbin/pkg_info", argv_q,
+					      PKG_CMD_MAX_OUTPUT, 5, NULL);
+	}
 	char *json = malloc(PKG_JSON_MAX);
 	char *packages[8192];
 	size_t package_count = 0;
@@ -461,9 +467,18 @@ pkg_list_json(void)
 		       package_count < (sizeof(packages) / sizeof(packages[0]))) {
 			line[strcspn(line, "\r")] = '\0';
 			if (*line != '\0') {
-				packages[package_count] = strdup(line);
-				if (packages[package_count])
-					package_count++;
+				const char *candidate = line;
+				if (strncmp(line, "Information for inst:", 21) == 0) {
+					candidate = line + 21;
+					char *colon = strchr((char *)candidate, ':');
+					if (colon)
+						*colon = '\0';
+				}
+				if (*candidate != '\0') {
+					packages[package_count] = strdup(candidate);
+					if (packages[package_count])
+						package_count++;
+				}
 			}
 			line = strtok_r(NULL, "\n", &saveptr);
 		}
@@ -500,10 +515,15 @@ pkg_which_json(const char *file_path)
 		    "{\"found\":false,\"raw\":\"path must be absolute and "
 		    "contain no shell metacharacters\"}");
 
-	char *const argv[] = {"pkg_info", "-E", (char *)file_path, NULL};
-	char *output =
-	    safe_popen_read_argv("/usr/sbin/pkg_info", argv, PKG_CMD_MAX_OUTPUT,
-				 PKG_WHICH_TIMEOUT, NULL);
+	char *const argv_w[] = {"pkg_info", "-W", (char *)file_path, NULL};
+	char *output = safe_popen_read_argv("/usr/sbin/pkg_info", argv_w,
+				     PKG_CMD_MAX_OUTPUT, PKG_WHICH_TIMEOUT, NULL);
+	if (!output || output[0] == '\0') {
+		free(output);
+		char *const argv_e[] = {"pkg_info", "-E", (char *)file_path, NULL};
+		output = safe_popen_read_argv("/usr/sbin/pkg_info", argv_e,
+					       PKG_CMD_MAX_OUTPUT, PKG_WHICH_TIMEOUT, NULL);
+	}
 	char *json = make_raw_json(output);
 	free(output);
 	return json ? json : strdup("{\"found\":false,\"raw\":\"\"}");
@@ -567,22 +587,22 @@ pkg_api_handler(http_request_t *req)
 		if (!get_query_value(req->url, "q", value, sizeof(value)))
 			return http_send_error(req, 400, "Missing q parameter");
 		json = pkg_search_json(value);
-		} else if (path_matches_endpoint(path, "/info")) {
+	} else if (path_matches_endpoint(path, "/info")) {
 		if (!get_query_value(req->url, "name", value, sizeof(value)))
 			return http_send_error(req, 400,
 					       "Missing name parameter");
 		json = pkg_info_json(value);
-		} else if (path_matches_endpoint(path, "/which")) {
+	} else if (path_matches_endpoint(path, "/which")) {
 		if (!get_query_value(req->url, "path", value, sizeof(value)))
 			return http_send_error(req, 400,
 					       "Missing path parameter");
 		json = pkg_which_json(value);
-		} else if (path_matches_endpoint(path, "/files")) {
+	} else if (path_matches_endpoint(path, "/files")) {
 		if (!get_query_value(req->url, "name", value, sizeof(value)))
 			return http_send_error(req, 400,
 					       "Missing name parameter");
 		json = pkg_files_json(value);
-		} else if (path_matches_endpoint(path, "/list")) {
+	} else if (path_matches_endpoint(path, "/list")) {
 		json = pkg_list_json();
 	} else {
 		return http_send_error(req, 404, "Unknown packages endpoint");

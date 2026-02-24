@@ -44,7 +44,7 @@ check_json_key() {
 		echo "  PASS  ${label}  (key '${key}' present)"
 		PASS=$((PASS + 1))
 	else
-		echo "  FAIL  ${label}  key '${key}' missing in: ${body:0:120}"
+		echo "  FAIL  ${label}  key '${key}' missing in: $(printf "%s" "${body}" | head -c 120)"
 		FAIL=$((FAIL + 1))
 	fi
 }
