@@ -24,12 +24,6 @@
 #define MAX_OUTPUT_SIZE (10 * 1024 * 1024) //10 MB!
 #define MAN_HOT_CACHE_TTL_SEC 30
 
-/**
- * @brief TODO: Describe sequences.
- * @param bN TODO: Describe this parameter.
- * @param len TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 /* Remove nroff overstrike sequences (for example "N\bN", "_\bX")
  * from mandoc ASCII output so markdown fallback remains readable. */
 /**
@@ -61,11 +55,6 @@ strip_overstrike_ascii(char *text, size_t *len)
 }
 
 /**
- * @brief TODO: Describe is_valid_token.
- * @param s TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
  * @brief Is valid token.
  * @param s Input string to parse or sanitize.
  * @return Returns 0 on success or a negative value on failure unless documented otherwise.
@@ -84,11 +73,6 @@ is_valid_token(const char *s)
 }
 
 /**
- * @brief TODO: Describe is_valid_section.
- * @param section TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
  * @brief Is valid section.
  * @param section Parameter used by this function.
  * @return Returns 0 on success or a negative value on failure unless documented otherwise.
@@ -106,12 +90,6 @@ is_valid_section(const char *section)
 }
 
 /* Resolve the man page path using 'man -w'. */
-/**
- * @brief TODO: Describe resolve_man_path.
- * @param name TODO: Describe this parameter.
- * @param section TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 /**
  * @brief Resolve man path.
  * @param name Parameter used by this function.
@@ -143,10 +121,6 @@ resolve_man_path(const char *name, const char *section)
 }
 
 /* --- API JSON --- */
-/**
- * @brief TODO: Describe man_get_sections_json.
- * @return TODO: Describe the return value.
- */
 /**
  * @brief Man get sections json.
  * @return Returns 0 on success or a negative value on failure unless documented otherwise.
@@ -201,12 +175,6 @@ man_get_sections_json(void)
 	"}");
 }
 
-/**
- * @brief TODO: Describe man_get_section_pages_json.
- * @param area TODO: Describe this parameter.
- * @param section TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 /**
  * @brief Man get section pages json.
  * @param area Parameter used by this function.
@@ -284,13 +252,6 @@ man_get_section_pages_json(const char *area, const char *section)
 }
 
 /**
- * @brief TODO: Describe man_get_page_metadata_json.
- * @param area TODO: Describe this parameter.
- * @param section TODO: Describe this parameter.
- * @param name TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
  * @brief Build metadata JSON for a resolved manual page.
  * @param area Manual area identifier.
  * @param section Manual section identifier.
@@ -320,11 +281,6 @@ man_get_page_metadata_json(const char *area, const char *section,
 }
 
 /**
- * @brief TODO: Describe man_api_search.
- * @param query TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
  * @brief Man api search.
  * @param query Parameter used by this function.
  * @return Returns 0 on success or a negative value on failure unless documented otherwise.
@@ -348,11 +304,6 @@ man_api_search(const char *query)
 
 /* util for search */
 /**
- * @brief TODO: Describe area_from_path.
- * @param filepath TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
  * @brief Area from path.
  * @param filepath Parameter used by this function.
  * @return Returns 0 on success or a negative value on failure unless documented otherwise.
@@ -365,12 +316,6 @@ area_from_path(const char *filepath)
 	return "system";
 }
 
-/**
- * @brief TODO: Describe mkdir_p.
- * @param dir TODO: Describe this parameter.
- * @param base_dir TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 /**
  * @brief Mkdir p.
  * @param dir Parameter used by this function.
@@ -415,13 +360,6 @@ mkdir_p(const char *dir, const char *base_dir)
 }
 
 /**
- * @brief TODO: Describe write_file_binary.
- * @param path TODO: Describe this parameter.
- * @param buf TODO: Describe this parameter.
- * @param len TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
  * @brief Write file binary.
  * @param path Request or filesystem path to evaluate.
  * @param buf Input buffer containing textual data.
@@ -453,11 +391,6 @@ write_file_binary(const char *path, const char *buf, size_t len)
 }
 
 /**
- * @brief TODO: Describe mime_for_format.
- * @param format TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
  * @brief Mime for format.
  * @param format Parameter used by this function.
  * @return Returns 0 on success or a negative value on failure unless documented otherwise.
@@ -476,12 +409,6 @@ mime_for_format(const char *format)
 	return "text/html; charset=utf-8";
 }
 
-/**
- * @brief TODO: Describe add_content_disposition_for_format.
- * @param resp TODO: Describe this parameter.
- * @param format TODO: Describe this parameter.
- * @param page TODO: Describe this parameter.
- */
 /**
  * @brief Add content disposition header based on requested format.
  * @param resp Response object to mutate.
@@ -509,12 +436,6 @@ add_content_disposition_for_format(http_response_t *resp,
 }
 
 /**
- * @brief TODO: Describe is_hot_man_cache_hit.
- * @param cache_abs TODO: Describe this parameter.
- * @param format TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
  * @brief Send a previously rendered manpage from cache storage.
  * @param req Request context.
  * @param cache_abs Absolute cache file path.
@@ -538,11 +459,6 @@ is_hot_man_cache_hit(const char *cache_abs, const char *format)
 	return (now - st.st_mtime) <= MAN_HOT_CACHE_TTL_SEC;
 }
 
-/**
- * @brief TODO: Describe is_static_cache_format.
- * @param format TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 static int
 is_static_cache_format(const char *format)
 {
@@ -551,18 +467,6 @@ is_static_cache_format(const char *format)
 		strcmp(format, "pdf") == 0;
 }
 
-/**
- * @brief TODO: Describe build_cache_paths.
- * @param area TODO: Describe this parameter.
- * @param section TODO: Describe this parameter.
- * @param page TODO: Describe this parameter.
- * @param format TODO: Describe this parameter.
- * @param rel TODO: Describe this parameter.
- * @param rel_len TODO: Describe this parameter.
- * @param abs TODO: Describe this parameter.
- * @param abs_len TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 /**
  * @brief Compute relative and absolute paths for manpage cache files.
  * @param area Manual area identifier.
@@ -597,11 +501,6 @@ build_cache_paths(const char *area, const char *section, const char *page,
 }
 
 /**
- * @brief TODO: Describe man_api_search_raw.
- * @param query TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
  * @brief Man api search raw.
  * @param query Parameter used by this function.
  * @return Returns 0 on success or a negative value on failure unless documented otherwise.
@@ -631,11 +530,6 @@ man_api_search_raw(const char *query)
 }
 
 /* --- HTTP handlers (using the native http_send_* helpers) --- */
-/**
- * @brief TODO: Describe man_api_handler.
- * @param req TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 /**
  * Handle JSON API requests for manual pages.
  */
@@ -838,15 +732,6 @@ man_api_handler(http_request_t *req)
 }
 
 /**
- * @brief TODO: Describe man_render_page.
- * @param area TODO: Describe this parameter.
- * @param section TODO: Describe this parameter.
- * @param page TODO: Describe this parameter.
- * @param format TODO: Describe this parameter.
- * @param out_len TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
  * Renders a man page via mandoc. Supports html, pdf, ps, md formats.
  * area parameter is accepted for API compat but ignored - full MANPATH
  * is always used; real area is derived from the resolved filepath.
@@ -951,11 +836,6 @@ man_render_page(const char *area, const char *section, const char *page,
 				 exact length */
 }
 
-/**
- * @brief TODO: Describe man_render_handler.
- * @param req TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 /**
 	* Handler for visual rendering of man pages.
 	* Expected URL: /man/{area}/{section}/{page}[.format]
@@ -1088,11 +968,6 @@ man_render_handler(http_request_t *req)
 	return ret;
 }
 
-/**
- * @brief TODO: Describe man_module_attach_routes.
- * @param r TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 int
 man_module_attach_routes(struct router *r)
 {

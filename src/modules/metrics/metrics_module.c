@@ -99,12 +99,6 @@ static char *g_metrics_snapshot_json = NULL;
 static time_t g_metrics_snapshot_updated_at = 0;
 
 /**
- * @brief TODO: Describe metrics_read_cpu_ticks.
- * @param total_ticks TODO: Describe this parameter.
- * @param idle_ticks TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
  * @brief Read raw kernel CPU tick counters.
  * @param total_ticks Receives summed ticks across all CPU states.
  * @param idle_ticks Receives idle-state ticks.
@@ -142,11 +136,6 @@ metrics_read_cpu_ticks(uint64_t *total_ticks, uint64_t *idle_ticks)
 }
 
 /**
- * @brief TODO: Describe ring_init.
- * @param r TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
  * @brief Initialize the in-memory metrics ring buffer.
  * @param r Ring structure to initialize.
  * @return 0 on success, -1 on allocation failure.
@@ -164,11 +153,6 @@ ring_init(MetricRing *r)
 }
 
 /**
- * @brief TODO: Describe ring_push.
- * @param r TODO: Describe this parameter.
- * @param s TODO: Describe this parameter.
- */
-/**
  * @brief Push one metric sample into the ring.
  * @param r Ring buffer instance.
  * @param s Sample to append.
@@ -184,13 +168,6 @@ ring_push(MetricRing *r, const MetricSample *s)
 	pthread_mutex_unlock(&r->lock);
 }
 
-/**
- * @brief TODO: Describe ring_last.
- * @param r TODO: Describe this parameter.
- * @param n TODO: Describe this parameter.
- * @param out TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 /**
  * @brief Copy the last N samples from the ring in chronological order.
  * @param r Ring buffer instance.
@@ -218,10 +195,6 @@ ring_last(MetricRing *r, size_t n, MetricSample *out)
 }
 
 /**
- * @brief TODO: Describe ring_free.
- * @param r TODO: Describe this parameter.
- */
-/**
  * @brief Release resources associated with a metrics ring.
  * @param r Ring buffer instance to reset.
  */
@@ -235,10 +208,6 @@ ring_free(MetricRing *r)
 	r->head = 0;
 }
 
-/**
- * @brief TODO: Describe metrics_take_sample.
- * @param sample TODO: Describe this parameter.
- */
 /**
  * @brief Collect one composite metrics sample.
  * @param sample Destination sample object.
@@ -289,10 +258,6 @@ metrics_take_sample(MetricSample *sample)
 }
 
 /**
- * @brief TODO: Describe metrics_heartbeat_cb.
- * @param ctx TODO: Describe this parameter.
- */
-/**
  * @brief Heartbeat callback that samples metrics and refreshes snapshot.
  * @param ctx Unused callback context.
  */
@@ -307,9 +272,6 @@ metrics_heartbeat_cb(void *ctx)
 	metrics_snapshot_update();
 }
 
-/**
- * @brief TODO: Describe metrics_ring_bootstrap.
- */
 /**
  * @brief Initialize and start the background metrics sampler.
  */
@@ -348,13 +310,6 @@ metrics_ring_bootstrap(void)
 	metrics_snapshot_update();
 }
 
-/**
- * @brief TODO: Describe append_metrics_history_json.
- * @param buffer TODO: Describe this parameter.
- * @param size TODO: Describe this parameter.
- * @param history TODO: Describe this parameter.
- * @param count TODO: Describe this parameter.
- */
 /**
  * @brief Append historical metrics samples JSON to a destination buffer.
  * @param buffer Destination JSON buffer.
@@ -397,12 +352,6 @@ append_metrics_history_json(char *buffer, size_t size,
 
 /* qsort comparator: sort by descending RSS. */
 /**
- * @brief TODO: Describe compare_memory.
- * @param a TODO: Describe this parameter.
- * @param b TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
  * @brief Compare memory.
  * @param a Parameter used by this function.
  * @param b Parameter used by this function.
@@ -423,11 +372,6 @@ compare_memory(const void *a, const void *b)
 }
 
 /* Helper to snapshot all running processes. */
-/**
- * @brief TODO: Describe get_procs_snapshot.
- * @param nprocs TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 /**
  * @brief Get procs snapshot.
  * @param nprocs Parameter used by this function.
@@ -497,11 +441,6 @@ get_procs_snapshot(size_t *nprocs)
 }
 
 /**
- * @brief TODO: Describe metrics_get_cpu_stats.
- * @param stats TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
  * @brief Metrics get cpu stats.
  * @param stats Parameter used by this function.
  * @return Returns 0 on success or a negative value on failure unless documented otherwise.
@@ -542,11 +481,6 @@ metrics_get_cpu_stats(CpuStats *stats)
 	#endif
 }
 
-/**
- * @brief TODO: Describe metrics_get_memory_stats.
- * @param stats TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 /**
  * @brief Metrics get memory stats.
  * @param stats Parameter used by this function.
@@ -607,11 +541,6 @@ metrics_get_memory_stats(MemoryStats *stats)
 }
 
 /**
- * @brief TODO: Describe metrics_get_load_average.
- * @param load TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
  * @brief Metrics get load average.
  * @param load Parameter used by this function.
  * @return Returns 0 on success or a negative value on failure unless documented otherwise.
@@ -632,14 +561,6 @@ metrics_get_load_average(LoadAverage *load)
 	return 0;
 }
 
-/**
- * @brief TODO: Describe metrics_get_os_info.
- * @param type TODO: Describe this parameter.
- * @param release TODO: Describe this parameter.
- * @param machine TODO: Describe this parameter.
- * @param size TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 /**
  * @brief Metrics get os info.
  * @param type Parameter used by this function.
@@ -664,12 +585,6 @@ metrics_get_os_info(char *type, char *release, char *machine, size_t size)
 	return 0;
 }
 
-/**
- * @brief TODO: Describe metrics_get_uptime.
- * @param uptime_str TODO: Describe this parameter.
- * @param size TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 /**
  * @brief Metrics get uptime.
  * @param uptime_str Parameter used by this function.
@@ -709,12 +624,6 @@ metrics_get_uptime(char *uptime_str, size_t size)
 }
 
 /**
- * @brief TODO: Describe metrics_get_hostname.
- * @param hostname TODO: Describe this parameter.
- * @param size TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
  * @brief Metrics get hostname.
  * @param hostname Parameter used by this function.
  * @param size Parameter used by this function.
@@ -726,12 +635,6 @@ metrics_get_hostname(char *hostname, size_t size)
 	return gethostname(hostname, size);
 }
 
-/**
- * @brief TODO: Describe metrics_get_disk_usage.
- * @param disks TODO: Describe this parameter.
- * @param max_disks TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 /**
  * @brief Metrics get disk usage.
  * @param disks Parameter used by this function.
@@ -777,12 +680,6 @@ metrics_get_disk_usage(DiskInfo *disks, int max_disks)
 }
 
 /**
- * @brief TODO: Describe metrics_get_top_ports.
- * @param ports TODO: Describe this parameter.
- * @param max_ports TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
  * @brief Metrics get top ports.
  * @param ports Parameter used by this function.
  * @param max_ports Parameter used by this function.
@@ -796,12 +693,6 @@ metrics_get_top_ports(PortInfo *ports, int max_ports)
 	return 0;
 }
 
-/**
- * @brief TODO: Describe metrics_get_network_interfaces.
- * @param interfaces TODO: Describe this parameter.
- * @param max_interfaces TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 /**
  * @brief Metrics get network interfaces.
  * @param interfaces Parameter used by this function.
@@ -818,15 +709,6 @@ metrics_get_network_interfaces(NetworkInterface *interfaces, int max_interfaces)
 	return 0;
 }
 
-/**
- * @brief TODO: Describe append_process_json_sections.
- * @param top_cpu_json TODO: Describe this parameter.
- * @param top_cpu_json_size TODO: Describe this parameter.
- * @param top_mem_json TODO: Describe this parameter.
- * @param top_mem_json_size TODO: Describe this parameter.
- * @param proc_stats_json TODO: Describe this parameter.
- * @param proc_stats_json_size TODO: Describe this parameter.
- */
 /**
  * @brief Build top-process and process-stats JSON sections.
  * @param top_cpu_json Output buffer for top CPU processes section.
@@ -998,12 +880,6 @@ append_process_json_sections(char *top_cpu_json,
 }
 
 /**
- * @brief TODO: Describe metrics_get_top_cpu_processes.
- * @param processes TODO: Describe this parameter.
- * @param max_processes TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
  * @brief Metrics get top cpu processes.
  * @param processes Parameter used by this function.
  * @param max_processes Parameter used by this function.
@@ -1082,12 +958,6 @@ metrics_get_top_cpu_processes(ProcessInfo *processes, int max_processes)
 }
 
 /**
- * @brief TODO: Describe metrics_get_top_memory_processes.
- * @param processes TODO: Describe this parameter.
- * @param max_processes TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
  * @brief Metrics get top memory processes.
  * @param processes Parameter used by this function.
  * @param max_processes Parameter used by this function.
@@ -1162,14 +1032,6 @@ metrics_get_top_memory_processes(ProcessInfo *processes, int max_processes)
 
 /* 1. Aggregate process counters. */
 /**
- * @brief TODO: Describe metrics_get_process_stats.
- * @param total TODO: Describe this parameter.
- * @param running TODO: Describe this parameter.
- * @param sleeping TODO: Describe this parameter.
- * @param zombie TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
  * @brief Metrics get process stats.
  * @param total Parameter used by this function.
  * @param running Parameter used by this function.
@@ -1200,11 +1062,6 @@ metrics_get_process_stats(int *total, int *running, int *sleeping, int *zombie)
 }
 
 /**
- * @brief TODO: Describe append_cpu_stats_json.
- * @param buffer TODO: Describe this parameter.
- * @param size TODO: Describe this parameter.
- */
-/**
  * @brief Append cpu stats json.
  * @param buffer Parameter used by this function.
  * @param size Parameter used by this function.
@@ -1233,11 +1090,6 @@ append_cpu_stats_json(char *buffer, size_t size)
 	}
 }
 
-/**
- * @brief TODO: Describe append_memory_stats_json.
- * @param buffer TODO: Describe this parameter.
- * @param size TODO: Describe this parameter.
- */
 /**
  * @brief Append memory stats json.
  * @param buffer Parameter used by this function.
@@ -1268,11 +1120,6 @@ append_memory_stats_json(char *buffer, size_t size)
 }
 
 /**
- * @brief TODO: Describe append_load_average_json.
- * @param buffer TODO: Describe this parameter.
- * @param size TODO: Describe this parameter.
- */
-/**
  * @brief Append load average json.
  * @param buffer Parameter used by this function.
  * @param size Parameter used by this function.
@@ -1293,11 +1140,6 @@ append_load_average_json(char *buffer, size_t size)
 	}
 }
 
-/**
- * @brief TODO: Describe append_os_info_json.
- * @param buffer TODO: Describe this parameter.
- * @param size TODO: Describe this parameter.
- */
 /**
  * @brief Append os info json.
  * @param buffer Parameter used by this function.
@@ -1321,11 +1163,6 @@ append_os_info_json(char *buffer, size_t size)
 }
 
 /**
- * @brief TODO: Describe append_uptime_json.
- * @param buffer TODO: Describe this parameter.
- * @param size TODO: Describe this parameter.
- */
-/**
  * @brief Append uptime json.
  * @param buffer Parameter used by this function.
  * @param size Parameter used by this function.
@@ -1340,11 +1177,6 @@ append_uptime_json(char *buffer, size_t size)
 		snprintf(buffer, size, "\"uptime\": \"unknown\"");
 }
 
-/**
- * @brief TODO: Describe append_disk_info_json.
- * @param buffer TODO: Describe this parameter.
- * @param size TODO: Describe this parameter.
- */
 /**
  * @brief Append disk info json.
  * @param buffer Parameter used by this function.
@@ -1384,11 +1216,6 @@ append_disk_info_json(char *buffer, size_t size)
 }
 
 /**
- * @brief TODO: Describe append_top_ports_json.
- * @param buffer TODO: Describe this parameter.
- * @param size TODO: Describe this parameter.
- */
-/**
  * @brief Append top ports json.
  * @param buffer Parameter used by this function.
  * @param size Parameter used by this function.
@@ -1425,12 +1252,6 @@ append_top_ports_json(char *buffer, size_t size)
 	snprintf(ptr, size, "]");
 }
 
-/**
- * @brief TODO: Describe build_system_metrics_json.
- * @param history TODO: Describe this parameter.
- * @param history_count TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 /**
  * @brief Append network interfaces json.
  * @param buffer Parameter used by this function.
@@ -1511,9 +1332,6 @@ build_system_metrics_json(MetricSample *history, size_t history_count)
 	return json;
 }
 
-/**
- * @brief TODO: Describe metrics_snapshot_update.
- */
 static void
 metrics_snapshot_update(void)
 {
@@ -1531,10 +1349,6 @@ metrics_snapshot_update(void)
 	pthread_mutex_unlock(&g_metrics_snapshot_lock);
 }
 
-/**
- * @brief TODO: Describe get_system_metrics_json.
- * @return TODO: Describe the return value.
- */
 char *
 get_system_metrics_json(void)
 {
@@ -1575,11 +1389,6 @@ get_system_metrics_json(void)
 
 
 /**
- * @brief TODO: Describe metrics_handler.
- * @param req TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
  * Handler HTTP
  */
 int
@@ -1612,11 +1421,6 @@ metrics_handler(http_request_t *req)
 	return ret;
 }
 
-/**
- * @brief TODO: Describe metrics_module_attach_routes.
- * @param r TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 int
 metrics_module_attach_routes(struct router *r)
 {

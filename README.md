@@ -712,6 +712,10 @@ stabilizes p95/p99 latency for the endpoint.
 ```
 src/
   app_main.c                      Main: kqueue loop, worker pool, accept, idle sweep, shutdown
+  net/
+    work_queue.c                  Extracted thread-safe FIFO queue used by worker pool
+  platform/openbsd/
+    security.c                    OpenBSD unveil(2)/pledge(2) security boundary setup
   core/
     conf.c                        Configuration file parser and CLI override
     heartbeat.c                   Periodic task scheduler (HB_MAX_TASKS=32 slots)
@@ -746,6 +750,8 @@ include/
   miniweb/modules/metrics.h       Metrics structs and collection API
   miniweb/modules/networking.h    Networking structs and collection API
   miniweb/modules/pkg_manager.h   Package manager API
+  miniweb/net/work_queue.h        Shared queue abstraction for transport workers
+  miniweb/platform/openbsd/security.h OpenBSD security API boundary
   miniweb/render/template_engine.h template_data, template_render*, template_cache_*
   miniweb/router/module_attach.h  miniweb_module struct and miniweb_module_attach_enabled
   miniweb/router/router.h         struct router and router_register / router_register_prefix

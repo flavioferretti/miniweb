@@ -44,11 +44,6 @@ typedef struct {
 static response_pool_t response_pools[RESPONSE_POOL_SHARDS];
 
 /**
- * @brief TODO: Describe wait_fd_writable.
- * @param fd TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
  * @brief Wait fd writable.
  * @param fd File descriptor to operate on.
  * @return Returns 0 on success or a negative value on failure unless documented otherwise.
@@ -116,9 +111,6 @@ typedef struct {
 static file_cache_shard_t file_cache_shards[FILE_CACHE_SHARDS];
 static pthread_once_t cache_once = PTHREAD_ONCE_INIT;
 
-/**
- * @brief TODO: Describe http_handler_globals_init.
- */
 static void
 http_handler_globals_init(void)
 {
@@ -131,10 +123,6 @@ http_handler_globals_init(void)
 	}
 }
 
-/**
- * @brief TODO: Describe thread_hash.
- * @return TODO: Describe the return value.
- */
 static inline unsigned long
 thread_hash(void)
 {
@@ -142,21 +130,12 @@ thread_hash(void)
 	return (unsigned long)(tid ^ (tid >> 7) ^ (tid >> 13));
 }
 
-/**
- * @brief TODO: Describe response_pool_shard_index.
- * @return TODO: Describe the return value.
- */
 static int
 response_pool_shard_index(void)
 {
 	return (int)(thread_hash() % RESPONSE_POOL_SHARDS);
 }
 
-/**
- * @brief TODO: Describe file_cache_shard_index.
- * @param path TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 static int
 file_cache_shard_index(const char *path)
 {
@@ -170,10 +149,6 @@ file_cache_shard_index(const char *path)
 	return (int)(hash % FILE_CACHE_SHARDS);
 }
 
-/**
- * @brief TODO: Describe response_pool_init_locked.
- * @param pool TODO: Describe this parameter.
- */
 /**
  * @brief Response pool init locked.
  */
@@ -189,12 +164,6 @@ response_pool_init_locked(response_pool_t *pool)
 	pool->initialized = 1;
 }
 
-/**
- * @brief TODO: Describe file_cache_refill_budget_locked.
- * @param shard TODO: Describe this parameter.
- * @param now TODO: Describe this parameter.
- * @param shard_idx TODO: Describe this parameter.
- */
 /**
  * @brief File cache refill budget locked.
  * @param now Parameter used by this function.
@@ -224,11 +193,6 @@ file_cache_refill_budget_locked(file_cache_shard_t *shard, time_t now,
 }
 
 /**
- * @brief TODO: Describe file_cache_evict_stale_locked.
- * @param shard TODO: Describe this parameter.
- * @param now TODO: Describe this parameter.
- */
-/**
  * @brief File cache evict stale locked.
  * @param now Parameter used by this function.
  */
@@ -253,13 +217,6 @@ file_cache_evict_stale_locked(file_cache_shard_t *shard, time_t now)
 	}
 }
 
-/**
- * @brief TODO: Describe file_cache_admit_locked.
- * @param shard TODO: Describe this parameter.
- * @param path TODO: Describe this parameter.
- * @param now TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 /**
  * @brief File cache admit locked.
  * @param path Request or filesystem path to evaluate.
@@ -299,13 +256,6 @@ file_cache_admit_locked(file_cache_shard_t *shard, const char *path,
 	return 0;
 }
 
-/**
- * @brief TODO: Describe file_cache_store.
- * @param path TODO: Describe this parameter.
- * @param st TODO: Describe this parameter.
- * @param data TODO: Describe this parameter.
- * @param len TODO: Describe this parameter.
- */
 /**
  * @brief Store a static file payload in the in-memory cache.
  * @param path Cache key path.
@@ -374,14 +324,6 @@ file_cache_store(const char *path, const struct stat *st, const char *data,
 }
 
 /**
- * @brief TODO: Describe file_cache_lookup.
- * @param path TODO: Describe this parameter.
- * @param st TODO: Describe this parameter.
- * @param out TODO: Describe this parameter.
- * @param out_len TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
  * @brief Lookup and duplicate a cached static file payload.
  * @param path Cache key path.
  * @param st Current file metadata.
@@ -433,10 +375,6 @@ file_cache_lookup(const char *path, const struct stat *st, char **out,
 
 /* Create response */
 /**
- * @brief TODO: Describe http_response_create.
- * @return TODO: Describe the return value.
- */
-/**
  * @brief Http response create.
  * @return Returns 0 on success or a negative value on failure unless documented otherwise.
  */
@@ -474,11 +412,6 @@ http_response_create(void)
 
 /* Set status code */
 /**
- * @brief TODO: Describe http_response_set_status.
- * @param resp TODO: Describe this parameter.
- * @param code TODO: Describe this parameter.
- */
-/**
  * @brief Http response set status.
  * @param resp Response object to emit or mutate.
  * @param code HTTP status code to send.
@@ -490,13 +423,6 @@ http_response_set_status(http_response_t *resp, int code)
 }
 
 /* Set response body */
-/**
- * @brief TODO: Describe http_response_set_body.
- * @param resp TODO: Describe this parameter.
- * @param body TODO: Describe this parameter.
- * @param len TODO: Describe this parameter.
- * @param must_free TODO: Describe this parameter.
- */
 /**
  * @brief Set body pointer and ownership metadata for a response.
  * @param resp Response object to mutate.
@@ -515,12 +441,6 @@ http_response_set_body(http_response_t *resp, char *body, size_t len,
 
 /* Add response header */
 /**
- * @brief TODO: Describe http_response_add_header.
- * @param resp TODO: Describe this parameter.
- * @param name TODO: Describe this parameter.
- * @param value TODO: Describe this parameter.
- */
-/**
  * @brief Append a header line to a response object.
  * @param resp Response object to mutate.
  * @param name Header name.
@@ -538,13 +458,6 @@ http_response_add_header(http_response_t *resp, const char *name,
 	}
 }
 
-/**
- * @brief TODO: Describe write_all.
- * @param fd TODO: Describe this parameter.
- * @param buf TODO: Describe this parameter.
- * @param n TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 /* Write exactly n bytes, retrying on partial writes.
  * Returns 0 on success, -1 on error or closed connection. */
 /* Write exactly n bytes, retrying on partial writes and EAGAIN.
@@ -589,13 +502,6 @@ write_all(int fd, const void *buf, size_t n)
 	return 0;
 }
 
-/**
- * @brief TODO: Describe writev_all.
- * @param fd TODO: Describe this parameter.
- * @param iov TODO: Describe this parameter.
- * @param iovcnt TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 /**
  * @brief Writev all.
  * @param fd File descriptor to operate on.
@@ -643,12 +549,6 @@ writev_all(int fd, struct iovec *iov, int iovcnt)
 
 /* Send HTTP response */
 /* Temporary debug note for http_response_send. */
-/**
- * @brief TODO: Describe http_response_send.
- * @param req TODO: Describe this parameter.
- * @param resp TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 /**
  * @brief http_response_send.
  */
@@ -717,10 +617,6 @@ int http_response_send(http_request_t *req, http_response_t *resp)
 
 /* Free response */
 /**
- * @brief TODO: Describe http_response_free.
- * @param resp TODO: Describe this parameter.
- */
-/**
  * @brief Http response free.
  * @param resp Response object to emit or mutate.
  */
@@ -769,12 +665,6 @@ http_response_free(http_response_t *resp)
 
 /* Get request header - writes into caller-supplied buffer, thread-safe */
 /**
- * @brief TODO: Describe http_request_get_header.
- * @param req TODO: Describe this parameter.
- * @param name TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
  * @brief Http request get header.
  * @param req Request context for response generation.
  * @param name Parameter used by this function.
@@ -822,11 +712,6 @@ http_request_get_header(http_request_t *req, const char *name)
 
 /* Get real client IP - writes into req->ip_scratch, thread-safe */
 /**
- * @brief TODO: Describe http_request_get_client_ip.
- * @param req TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
  * @brief Http request get client ip.
  * @param req Request context for response generation.
  * @return Returns 0 on success or a negative value on failure unless documented otherwise.
@@ -864,11 +749,6 @@ http_request_get_client_ip(http_request_t *req)
 
 /* Check if the request arrived over HTTPS (via reverse-proxy header) */
 /**
- * @brief TODO: Describe http_request_is_https.
- * @param req TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
  * @brief Http request is https.
  * @param req Request context for response generation.
  * @return Returns 0 on success or a negative value on failure unless documented otherwise.
@@ -881,13 +761,6 @@ http_request_is_https(http_request_t *req)
 }
 
 /* Send error response */
-/**
- * @brief TODO: Describe http_send_error.
- * @param req TODO: Describe this parameter.
- * @param status_code TODO: Describe this parameter.
- * @param message TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 /**
  * @brief Http send error.
  * @param req Request context for response generation.
@@ -934,12 +807,6 @@ http_send_error(http_request_t *req, int status_code, const char *message)
 
 /* Send JSON response */
 /**
- * @brief TODO: Describe http_send_json.
- * @param req TODO: Describe this parameter.
- * @param json TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
  * @brief Http send json.
  * @param req Request context for response generation.
  * @param json Parameter used by this function.
@@ -962,12 +829,6 @@ http_send_json(http_request_t *req, const char *json)
 
 /* Send HTML response */
 /**
- * @brief TODO: Describe http_send_html.
- * @param req TODO: Describe this parameter.
- * @param html TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
  * @brief Http send html.
  * @param req Request context for response generation.
  * @param html Parameter used by this function.
@@ -988,13 +849,6 @@ http_send_html(http_request_t *req, const char *html)
 }
 
 /* Versione corretta di http_send_file */
-/**
- * @brief TODO: Describe http_send_file.
- * @param req TODO: Describe this parameter.
- * @param path TODO: Describe this parameter.
- * @param mime TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 /**
  * @brief Http send file.
  * @param req Request context for response generation.
@@ -1077,13 +931,6 @@ http_send_file(http_request_t *req, const char *path, const char *mime)
 }
 
 /* In http_handler.c */
-/**
- * @brief TODO: Describe http_render_template.
- * @param req TODO: Describe this parameter.
- * @param data TODO: Describe this parameter.
- * @param fallback_template TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 /**
  * @brief Render an HTML template and send it as HTTP response.
  * @param req Request context.
