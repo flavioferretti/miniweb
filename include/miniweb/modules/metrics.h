@@ -1,3 +1,4 @@
+/* metrics.h - metrics api */
 #ifndef MINIWEB_MODULES_METRICS_H
 #define MINIWEB_MODULES_METRICS_H
 

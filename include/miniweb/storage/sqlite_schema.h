@@ -1,3 +1,4 @@
+/* sqlite_schema.h - main db schema */
 #ifndef MINIWEB_STORAGE_SQLITE_SCHEMA_H
 #define MINIWEB_STORAGE_SQLITE_SCHEMA_H
 

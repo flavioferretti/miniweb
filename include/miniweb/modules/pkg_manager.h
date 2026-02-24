@@ -1,3 +1,4 @@
+/* pkg_manager.h - pkg api */
 #ifndef MINIWEB_MODULES_PKG_MANAGER_H
 #define MINIWEB_MODULES_PKG_MANAGER_H
 

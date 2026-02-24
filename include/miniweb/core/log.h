@@ -1,3 +1,4 @@
+/* log.h - log facility */
 #ifndef MINIWEB_CORE_LOG_H
 #define MINIWEB_CORE_LOG_H
 

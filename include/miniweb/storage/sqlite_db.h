@@ -1,3 +1,4 @@
+/* sqlite_db.h - main db api */
 #ifndef MINIWEB_STORAGE_SQLITE_DB_H
 #define MINIWEB_STORAGE_SQLITE_DB_H
 

@@ -1,3 +1,4 @@
+/* module_attach.h - modules api */
 #ifndef MINIWEB_ROUTER_MODULE_ATTACH_H
 #define MINIWEB_ROUTER_MODULE_ATTACH_H
 

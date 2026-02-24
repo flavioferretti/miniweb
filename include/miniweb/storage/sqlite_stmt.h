@@ -1,3 +1,4 @@
+/* sqlite_db.h - main sql facility */
 #ifndef MINIWEB_STORAGE_SQLITE_STMT_H
 #define MINIWEB_STORAGE_SQLITE_STMT_H
 

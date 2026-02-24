@@ -1,4 +1,4 @@
-/* http_handler.h - Native kqueue HTTP handler interface */
+/* handler.h - Native kqueue HTTP handler interface */
 
 #ifndef MINIWEB_HTTP_HANDLER_H
 #define MINIWEB_HTTP_HANDLER_H

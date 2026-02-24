@@ -362,48 +362,84 @@ man_get_section_pages_json(const char *area, const char *section)
 		return NULL;
 	}
 
-	/* Initialize JSON output. */
-	strlcpy(json, "{\"pages\":[", MAX_JSON_SIZE);
+	/*
+	 * Build the JSON array using an explicit write offset so we always
+	 * know how much space remains.  The previous strlcat-based loop was
+	 * correct but silent: once the buffer filled, subsequent strlcat calls
+	 * became no-ops and the closing "]}" was never written, producing
+	 * truncated JSON that caused JSON.parse() to throw in the browser.
+	 *
+	 * Reserve 4 bytes at the end for the mandatory "]}" terminator plus a
+	 * NUL and one byte of safety margin.
+	 */
+#define JSON_CLOSE_RESERVE 4
+
+	int n = snprintf(json, MAX_JSON_SIZE, "{\"pages\":[");
+	size_t used = (n > 0) ? (size_t)n : 0;
 
 	struct dirent *de;
 	int first = 1;
-	// size_t suffix_len = strlen(section) + 1; // Lunghezza di ".1", ".7",
-	// ecc.
 
 	while ((de = readdir(dr)) != NULL) {
-		// Skip hidden files and architecture subdirectories (for example i386, alpha).
+		/* Skip hidden files and architecture subdirectories. */
 		if (de->d_name[0] == '.')
 			continue;
 		if (de->d_type == DT_DIR)
 			continue;
 
-		/* Filter: filename must end exactly with .<section>.
-		 * Example: xterm.1 in man1 -> accepted.
-		 * Example: i386 (directory) -> skipped by DT_DIR.
+		/*
+		 * Also follow symlinks — some man trees use .so-style symlinks
+		 * for alias pages. DT_LNK is neither DT_DIR nor DT_REG but
+		 * parse_section_from_filename works on the link name directly.
 		 */
+
+		/* Filter: filename must parse to the requested section. */
 		char resolved_section[16];
-		if (parse_section_from_filename(de->d_name, resolved_section,
-					       sizeof(resolved_section)) &&
-		    strcmp(resolved_section, section) == 0) {
-			char name[128];
-			char *dot = strchr(de->d_name, '.');
-			size_t name_len = dot ? (size_t)(dot - de->d_name) : strlen(de->d_name);
-			if (name_len >= sizeof(name))
-				name_len = sizeof(name) - 1;
+		if (!parse_section_from_filename(de->d_name, resolved_section,
+		    sizeof(resolved_section)))
+			continue;
+		if (strcmp(resolved_section, section) != 0)
+			continue;
 
-			memcpy(name, de->d_name, name_len);
-			name[name_len] = '\0';
+		/* Extract base name (everything before the first dot). */
+		char name[128];
+		char *dot = strchr(de->d_name, '.');
+		size_t name_len = dot
+		    ? (size_t)(dot - de->d_name)
+		    : strlen(de->d_name);
+		if (name_len >= sizeof(name))
+			name_len = sizeof(name) - 1;
+		memcpy(name, de->d_name, name_len);
+		name[name_len] = '\0';
 
-			if (!first)
-				strlcat(json, ",", MAX_JSON_SIZE);
-			strlcat(json, "\"", MAX_JSON_SIZE);
-			strlcat(json, name, MAX_JSON_SIZE);
-			strlcat(json, "\"", MAX_JSON_SIZE);
+		/*
+		 * Calculate how many bytes this entry needs:
+		 *   separator ("," or "") + '"' + name + '"'
+		 * plus the JSON_CLOSE_RESERVE we always keep.
+		 */
+		size_t entry_len = (first ? 0 : 1) + 1 + name_len + 1;
+		if (used + entry_len + JSON_CLOSE_RESERVE >= MAX_JSON_SIZE)
+			break; /* Graceful truncation — close array below. */
+
+		n = snprintf(json + used,
+		    MAX_JSON_SIZE - used - JSON_CLOSE_RESERVE,
+		    "%s\"%s\"",
+		    first ? "" : ",",
+		    name);
+		if (n > 0) {
+			used += (size_t)n;
 			first = 0;
 		}
 	}
 	closedir(dr);
-	strlcat(json, "]}", MAX_JSON_SIZE);
+
+	/*
+	 * Always close the JSON array.  Because we reserved JSON_CLOSE_RESERVE
+	 * bytes above, this snprintf is guaranteed to succeed.
+	 */
+	(void)snprintf(json + used, MAX_JSON_SIZE - used, "]}");
+
+#undef JSON_CLOSE_RESERVE
 
 	return json;
 }
@@ -668,9 +704,25 @@ man_api_search_raw(const char *query)
 	if (!query || strlen(query) < 2)
 		return strdup("");
 
+	/*
+	 * Validate the query token before handing it to apropos.
+	 * man_api_search() (JSON variant) already does this via is_valid_token.
+	 * We mirror that check here so both paths behave consistently.
+	 *
+	 * is_valid_token rejects whitespace and shell-significant characters.
+	 * Queries such as "ls -l" or "open files" contain spaces and are
+	 * rejected; the FE search box should send single-keyword queries.
+	 * If multi-word support is needed, widen the validator to accept spaces.
+	 *
+	 * execv (used by safe_popen_read_argv) is not a shell — there is no
+	 * injection risk — but invalid tokens produce garbage apropos output
+	 * that breaks the FE parseAproposLine parser.
+	 */
+	if (!is_valid_token(query))
+		return strdup("");
+
 	/* Use the full manual search path so results can include /usr/local/man
 	 * after the local makewhatis database has been generated. */
-	// char *const argv[] = {"apropos", (char *)query, NULL};
 	char *const argv[] = {
 		"apropos", "-M",
 		"/usr/share/man:/usr/local/man:/usr/X11R6/man",
@@ -679,7 +731,7 @@ man_api_search_raw(const char *query)
 
 	/* Increase buffer size because apropos may return a lot of text. */
 	char *output = safe_popen_read_argv("/usr/bin/apropos", argv,
-										1024 * 1024, 5, NULL);
+	    1024 * 1024, 5, NULL);
 
 	if (!output)
 		return strdup("");
@@ -769,20 +821,40 @@ man_api_handler(http_request_t *req)
 					}
 
 
-					/* Escape filepath for JSON (no untrusted input,
-					 * but paths can contain spaces on weird installs) */
-					char jbuf[1024];
-					snprintf(jbuf, sizeof(jbuf),
-							 "{\"name\":\"%s\","
-							 "\"section\":\"%s\","
-							 "\"area\":\"%s\","
-							 "\"path\":\"%s\"}",
-			  name_buf,
-			  resolved_section[0] ? resolved_section
-			  : section_buf,
-			  area,
-			  filepath);
-					json = strdup(jbuf);
+					/* Escape filepath for JSON — paths from 'man -w'
+					 * can contain spaces on unusual installations and
+					 * can be up to PATH_MAX bytes long. A fixed 1024-
+					 * byte stack buffer was too small; use a dynamically
+					 * sized allocation instead. */
+					char *escaped_path = json_escape_string(filepath);
+					if (!escaped_path)
+						escaped_path = strdup("");
+
+					const char *sec_out =
+					    resolved_section[0] ? resolved_section
+					                        : section_buf;
+
+					/* Calculate the exact required size, then allocate. */
+					int needed = snprintf(NULL, 0,
+					    "{\"name\":\"%s\","
+					    "\"section\":\"%s\","
+					    "\"area\":\"%s\","
+					    "\"path\":\"%s\"}",
+					    name_buf, sec_out, area,
+					    escaped_path);
+					if (needed > 0) {
+						json = malloc((size_t)needed + 1);
+						if (json) {
+							snprintf(json, (size_t)needed + 1,
+							    "{\"name\":\"%s\","
+							    "\"section\":\"%s\","
+							    "\"area\":\"%s\","
+							    "\"path\":\"%s\"}",
+							    name_buf, sec_out, area,
+							    escaped_path);
+						}
+					}
+					free(escaped_path);
 					free(filepath);
 				}
 			}
@@ -1119,3 +1191,4 @@ man_module_attach_routes(struct router *r)
 		return -1;
 	return router_register_prefix(r, "GET", "/api/man", 0, man_api_handler);
 }
+

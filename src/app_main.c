@@ -92,14 +92,29 @@ main(int argc, char *argv[])
 	if (log_init(config.log_file, config.verbose) != 0)
 		return 1;
 	log_set_verbose(config.verbose);
-	if (template_cache_init() != 0)
+
+	log_info("MiniWeb starting on %s:%d (%d thread(s))",
+	    config.bind_addr, config.port, config.threads);
+	log_info("Static dir: %s  Templates dir: %s",
+	    config.static_dir, config.templates_dir);
+
+	if (config.verbose)
+		conf_dump(&config);
+
+	if (template_cache_init() != 0) {
+		log_error("template_cache_init failed");
 		return 1;
+	}
 	init_routes();
+	log_info("Routes registered — listening");
+
 	g_server.config = &config;
 	signal(SIGINT, handle_signal);
 	signal(SIGTERM, handle_signal);
 	miniweb_apply_openbsd_security(&config);
 	(void)miniweb_server_run(&g_server);
+
+	log_info("MiniWeb shutting down");
 	template_cache_cleanup();
 	log_close();
 	return 0;

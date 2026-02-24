@@ -1,4 +1,4 @@
-/* http_utils.h - HTTP utility functions (no MHD dependency) */
+/* utils.h - HTTP utility functions (no MHD dependency) */
 
 #ifndef MINIWEB_HTTP_UTILS_H
 #define MINIWEB_HTTP_UTILS_H

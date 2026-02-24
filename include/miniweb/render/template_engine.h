@@ -1,4 +1,4 @@
-/* template_engine.h */
+/* template_engine.h - rustic html template api  */
 
 #ifndef MINIWEB_RENDER_TEMPLATE_ENGINE_H
 #define MINIWEB_RENDER_TEMPLATE_ENGINE_H

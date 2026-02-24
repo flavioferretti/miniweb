@@ -1,3 +1,4 @@
+/* heartbeat.h - central heartbeat api */
 #ifndef MINIWEB_CORE_HEARTBEAT_H
 #define MINIWEB_CORE_HEARTBEAT_H
 
