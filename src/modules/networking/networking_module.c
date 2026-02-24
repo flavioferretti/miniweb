@@ -639,10 +639,6 @@ networking_build_json(const NetworkingSample *sample)
 	char timestamp[64];
 	struct tm *tm_ptr;
 
-	(void)pthread_once(&g_networking_once, networking_ring_bootstrap);
-	if (!networking_ring_last(&g_networking_ring, &sample))
-		networking_collect_sample(&sample);
-
 	/* Allocate JSON buffer */
 	json = malloc(json_size);
 	if (!json) {
