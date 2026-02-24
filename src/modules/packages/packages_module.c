@@ -30,6 +30,7 @@ static pkg_search_cache_entry_t g_pkg_search_cache[PKG_SEARCH_CACHE_SIZE];
 static pthread_mutex_t g_pkg_search_cache_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static int compare_pkg_names(const void *a, const void *b);
+static int collect_pkg_name_from_line(char *line, char **out_name);
 
 static void
 pkg_search_cache_store_locked(const char *query, const char *json, time_t now)
@@ -465,26 +466,25 @@ pkg_list_json(void)
 
 		while (line &&
 		       package_count < (sizeof(packages) / sizeof(packages[0]))) {
-			line[strcspn(line, "\r")] = '\0';
-			if (*line != '\0') {
-				const char *candidate = line;
-				if (strncmp(line, "Information for inst:", 21) == 0) {
-					candidate = line + 21;
-					char *colon = strchr((char *)candidate, ':');
-					if (colon)
-						*colon = '\0';
-				}
-				if (*candidate != '\0') {
-					packages[package_count] = strdup(candidate);
-					if (packages[package_count])
-						package_count++;
-				}
-			}
+			if (collect_pkg_name_from_line(line, &packages[package_count]))
+				package_count++;
 			line = strtok_r(NULL, "\n", &saveptr);
 		}
 	}
 
 	qsort(packages, package_count, sizeof(packages[0]), compare_pkg_names);
+
+	/* De-duplicate adjacent package names after sort. */
+	size_t unique_count = 0;
+	for (size_t i = 0; i < package_count; i++) {
+		if (unique_count > 0 &&
+		    strcmp(packages[i], packages[unique_count - 1]) == 0) {
+			free(packages[i]);
+			continue;
+		}
+		packages[unique_count++] = packages[i];
+	}
+	package_count = unique_count;
 
 	offset +=
 	    snprintf(json + offset, PKG_JSON_MAX - offset, "{\"packages\":[");
@@ -563,6 +563,37 @@ compare_pkg_names(const void *a, const void *b)
 	const char *const *right = b;
 
 	return strcmp(*left, *right);
+}
+
+static int
+collect_pkg_name_from_line(char *line, char **out_name)
+{
+	char *candidate;
+
+	if (!line || !out_name)
+		return 0;
+
+	line[strcspn(line, "\r")] = '\0';
+	if (*line == '\0')
+		return 0;
+
+	candidate = line;
+	if (strncmp(line, "Information for inst:", 21) == 0) {
+		candidate = line + 21;
+		char *colon = strchr(candidate, ':');
+		if (colon)
+			*colon = '\0';
+	}
+
+	if (*candidate == '\0' || strchr(candidate, ':') ||
+	    strpbrk(candidate, " \t"))
+		return 0;
+
+	if (!is_safe_pkg_name(candidate))
+		return 0;
+
+	*out_name = strdup(candidate);
+	return *out_name != NULL;
 }
 
 /**
