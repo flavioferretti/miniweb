@@ -1,3 +1,4 @@
+
 /* metrics_module.c - System metrics collection (Native kqueue version) */
 
 #include <sys/types.h>
@@ -319,13 +320,19 @@ metrics_ring_bootstrap(void)
 		LOG("Failed to allocate 1MB metrics ring");
 		return;
 	}
+	/*
+	 * heartbeat_register() returns HB_REGISTER_INSERTED (1) on success,
+	 * HB_REGISTER_DUPLICATE (0) if the task name was already registered,
+	 * and HB_REGISTER_ERROR (-1) on invalid input or a full table.
+	 * Both 0 and 1 are non-error outcomes; only abort on -1.
+	 */
 	if (heartbeat_register(&(struct hb_task){
 		.name = "metrics.sample",
 		.period_sec = 1,
 		.initial_delay_sec = 0,
 		.cb = metrics_heartbeat_cb,
 		.ctx = NULL,
-	}) != 0) {
+	}) < 0) {
 		LOG("Failed to register metrics heartbeat task");
 		ring_free(&g_metrics_ring);
 		return;
@@ -336,6 +343,8 @@ metrics_ring_bootstrap(void)
 		return;
 	}
 	g_metrics_ring_ready = 1;
+	/* Take a first snapshot immediately so the very first HTTP request
+	 * gets a valid (though empty-history) payload without waiting 1s. */
 	metrics_snapshot_update();
 }
 
@@ -1537,10 +1546,11 @@ get_system_metrics_json(void)
 	if (g_metrics_snapshot_json == NULL) {
 		should_refresh = 1;
 	} else if (g_metrics_snapshot_updated_at == 0 ||
-		(now - g_metrics_snapshot_updated_at) > 2) {
+		(now - g_metrics_snapshot_updated_at) > 5) {
 		/*
-		 * Fallback refresh path: if heartbeat sampling stalls for any reason,
-		 * avoid serving a permanently frozen payload.
+		 * Fallback refresh: if the heartbeat has not updated the
+		 * snapshot for more than 5 seconds, regenerate it inline so
+		 * stale data is never served indefinitely.
 		 */
 		should_refresh = 1;
 	}
