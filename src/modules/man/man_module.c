@@ -767,7 +767,44 @@ man_api_search_raw(const char *query)
 	    1024 * 1024, 5, NULL);
 
 	if (!output)
-		return strdup("");
+		output = strdup("");
+
+	/*
+	 * Some installations do not have a populated whatis/apropos DB, which
+	 * makes apropos return no lines even for valid pages.  Keep the endpoint
+	 * useful by falling back to a direct page resolve and emitting one
+	 * apropos-like line so the frontend parser still gets a non-empty payload.
+	 */
+	if (output[0] == '\0') {
+		char *filepath = resolve_man_path(query, "1");
+		if (!filepath)
+			filepath = resolve_man_path(query, "8");
+		if (!filepath) {
+			char *const argv_w[] = {
+				"man", "-M", "/usr/share/man:/usr/local/man:/usr/X11R6/man",
+				"-w", (char *)query, NULL
+			};
+			filepath = safe_popen_read_argv("/usr/bin/man", argv_w, 1024, 5,
+				NULL);
+			if (filepath)
+				filepath[strcspn(filepath, "\r\n")] = 0;
+		}
+
+		if (filepath && filepath[0] != '\0') {
+			char section[16] = {0};
+			const char *base = strrchr(filepath, '/');
+			base = base ? base + 1 : filepath;
+			if (!parse_section_from_filename(base, section, sizeof(section)))
+				strlcpy(section, "?", sizeof(section));
+
+			char line[256];
+			snprintf(line, sizeof(line), "%s (%s) - manual page", query,
+				 section);
+			free(output);
+			output = strdup(line);
+		}
+		free(filepath);
+	}
 	return output;
 }
 
@@ -984,13 +1021,15 @@ man_render_page(const char *area, const char *section, const char *page,
 	(void)area;
 
 	/* 1. Resolve physical file path via 'man -w' with full MANPATH. */
-	char *const argv_w[] = {
-		"man", "-M", "/usr/share/man:/usr/local/man:/usr/X11R6/man",
-		"-w", (char *)section, (char *)page, NULL
-	};
-	char *raw_path =
-	    safe_popen_read_argv("/usr/bin/man", argv_w, 2048, 5, NULL);
-	char *filepath = select_resolved_man_path(raw_path);
+	// char *filepath = resolve_man_path(page, section);
+	if (!filepath) {
+		char *const argv_w[] = {
+			"man", "-M", "/usr/share/man:/usr/local/man:/usr/X11R6/man",
+			"-w", (char *)page, NULL
+		};
+		filepath = safe_popen_read_argv("/usr/bin/man", argv_w, 1024, 5,
+			NULL);
+	}
 
 	if (!filepath)
 		return NULL;
