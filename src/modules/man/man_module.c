@@ -1021,7 +1021,11 @@ man_render_page(const char *area, const char *section, const char *page,
 	(void)area;
 
 	/* 1. Resolve physical file path via 'man -w' with full MANPATH. */
-	// char *filepath = resolve_man_path(page, section);
+	char *filepath = NULL;
+	if (is_valid_section(section)) {
+		filepath = resolve_man_path(page, section);
+	}
+
 	if (!filepath) {
 		char *const argv_w[] = {
 			"man", "-M", "/usr/share/man:/usr/local/man:/usr/X11R6/man",
