@@ -23,6 +23,7 @@
 #include <errno.h>
 #include <pthread.h>
 #include <time.h>
+#include <stdarg.h>
 
 /* Include del progetto */
 #include <miniweb/modules/networking.h>
@@ -68,7 +69,6 @@ typedef struct {
 
 static NetworkingRing g_networking_ring;
 static pthread_once_t g_networking_once = PTHREAD_ONCE_INIT;
-static int g_networking_ring_ready = 0;
 
 static int networking_ring_init(NetworkingRing *r);
 static void networking_ring_push(NetworkingRing *r,
@@ -77,6 +77,10 @@ static int networking_ring_last(NetworkingRing *r, NetworkingSample *out);
 static void networking_collect_sample(NetworkingSample *sample);
 static void networking_heartbeat_cb(void *ctx);
 static void networking_ring_bootstrap(void);
+static int networking_json_append(char *dst, size_t dst_size,
+		size_t *offset, const char *fmt, ...);
+static int networking_json_append_escaped(char *dst, size_t dst_size,
+		size_t *offset, const char *src);
 
 
 /* ========================================================================
@@ -462,7 +466,7 @@ networking_ring_push(NetworkingRing *r, const NetworkingSample *s)
 static int
 networking_ring_last(NetworkingRing *r, NetworkingSample *out)
 {
-	if (!g_networking_ring_ready || r->buf == NULL)
+	if (r->buf == NULL)
 		return 0;
 
 	pthread_mutex_lock(&r->lock);
@@ -527,7 +531,7 @@ networking_ring_bootstrap(void)
 		.initial_delay_sec = 0,
 		.cb = networking_heartbeat_cb,
 		.ctx = NULL,
-	}) != 0) {
+	}) < 0) {
 		LOG("Failed to register networking heartbeat task");
 		free(g_networking_ring.buf);
 		g_networking_ring.buf = NULL;
@@ -540,7 +544,59 @@ networking_ring_bootstrap(void)
 		return;
 	}
 
-	g_networking_ring_ready = 1;
+}
+
+static int
+networking_json_append(char *dst, size_t dst_size, size_t *offset,
+	const char *fmt, ...)
+{
+	va_list ap;
+	int written;
+
+	if (*offset >= dst_size)
+		return -1;
+
+	va_start(ap, fmt);
+	written = vsnprintf(dst + *offset, dst_size - *offset, fmt, ap);
+	va_end(ap);
+
+	if (written < 0)
+		return -1;
+	if ((size_t)written >= (dst_size - *offset)) {
+		*offset = dst_size;
+		return -1;
+	}
+
+	*offset += (size_t)written;
+	return 0;
+}
+
+static int
+networking_json_append_escaped(char *dst, size_t dst_size, size_t *offset,
+	const char *src)
+{
+	const unsigned char *p = (const unsigned char *)src;
+
+	if (!src)
+		return networking_json_append(dst, dst_size, offset, "null");
+
+	if (networking_json_append(dst, dst_size, offset, "\"") != 0)
+		return -1;
+
+	for (; *p != '\0'; p++) {
+		if (*p == '"' || *p == '\\') {
+			if (networking_json_append(dst, dst_size, offset, "\\%c", *p) != 0)
+				return -1;
+		} else if (*p < 0x20) {
+			if (networking_json_append(dst, dst_size, offset, "\\u%04x", *p) != 0)
+				return -1;
+		} else {
+			if (networking_json_append(dst, dst_size, offset, "%c", *p) != 0)
+				return -1;
+		}
+	}
+
+	return networking_json_append(dst, dst_size, offset, "\"");
 }
 
 /* ========================================================================
@@ -586,57 +642,116 @@ networking_get_json(void)
 		strlcpy(timestamp, "unknown", sizeof(timestamp));
 	}
 
-	/* Build JSON */
-	offset += snprintf(json + offset, json_size - offset,
-					   "{\"timestamp\":\"%s\",\"timestamp_unix\":%lld,",
-					   timestamp, (long long)sample.ts);
+	if (networking_json_append(json, json_size, &offset,
+		"{\"timestamp\":") != 0)
+		goto fail;
+	if (networking_json_append_escaped(json, json_size, &offset, timestamp) != 0)
+		goto fail;
+	if (networking_json_append(json, json_size, &offset,
+		",\"timestamp_unix\":%lld,", (long long)sample.ts) != 0)
+		goto fail;
 
 	/* Routes */
-	offset += snprintf(json + offset, json_size - offset, "\"routes\":[");
-	for (int i = 0; i < sample.route_count && offset < json_size - 1000; i++) {
-		offset +=
-		snprintf(json + offset, json_size - offset,
-				 "%s{\"destination\":\"%s\",\"gateway\":\"%s\","
-				 "\"netmask\":\"%s\",\"interface\":\"%s\","
-				 "\"flags\":\"%s\"}",
-		   i > 0 ? "," : "", sample.routes[i].destination,
-		   sample.routes[i].gateway, sample.routes[i].netmask,
-		   sample.routes[i].interface, sample.routes[i].flags_str);
+	if (networking_json_append(json, json_size, &offset, "\"routes\":[") != 0)
+		goto fail;
+	for (int i = 0; i < sample.route_count; i++) {
+		if (networking_json_append(json, json_size, &offset, "%s{\"destination\":",
+			i > 0 ? "," : "") != 0)
+			goto fail;
+		if (networking_json_append_escaped(json, json_size, &offset,
+			sample.routes[i].destination) != 0)
+			goto fail;
+		if (networking_json_append(json, json_size, &offset, ",\"gateway\":") != 0)
+			goto fail;
+		if (networking_json_append_escaped(json, json_size, &offset,
+			sample.routes[i].gateway) != 0)
+			goto fail;
+		if (networking_json_append(json, json_size, &offset, ",\"netmask\":") != 0)
+			goto fail;
+		if (networking_json_append_escaped(json, json_size, &offset,
+			sample.routes[i].netmask) != 0)
+			goto fail;
+		if (networking_json_append(json, json_size, &offset, ",\"interface\":") != 0)
+			goto fail;
+		if (networking_json_append_escaped(json, json_size, &offset,
+			sample.routes[i].interface) != 0)
+			goto fail;
+		if (networking_json_append(json, json_size, &offset, ",\"flags\":") != 0)
+			goto fail;
+		if (networking_json_append_escaped(json, json_size, &offset,
+			sample.routes[i].flags_str) != 0)
+			goto fail;
+		if (networking_json_append(json, json_size, &offset, "}") != 0)
+			goto fail;
 	}
-	offset += snprintf(json + offset, json_size - offset, "],");
+	if (networking_json_append(json, json_size, &offset, "],") != 0)
+		goto fail;
 
 	/* DNS */
-	offset += snprintf(json + offset, json_size - offset,
-					   "\"dns\":{\"nameservers\":[");
+	if (networking_json_append(json, json_size, &offset,
+		"\"dns\":{\"nameservers\":[") != 0)
+		goto fail;
 	for (int i = 0; i < sample.dns.nameserver_count; i++) {
-		offset +=
-		snprintf(json + offset, json_size - offset, "%s\"%s\"",
-				 i > 0 ? "," : "", sample.dns.nameservers[i]);
+		if (networking_json_append(json, json_size, &offset, "%s",
+			i > 0 ? "," : "") != 0)
+			goto fail;
+		if (networking_json_append_escaped(json, json_size, &offset,
+			sample.dns.nameservers[i]) != 0)
+			goto fail;
 	}
-	offset += snprintf(json + offset, json_size - offset,
-					   "],\"domain\":\"%s\",\"search\":\"%s\"},",
-					sample.dns.domain, sample.dns.search);
+	if (networking_json_append(json, json_size, &offset,
+		"],\"domain\":") != 0)
+		goto fail;
+	if (networking_json_append_escaped(json, json_size, &offset,
+		sample.dns.domain) != 0)
+		goto fail;
+	if (networking_json_append(json, json_size, &offset,
+		",\"search\":") != 0)
+		goto fail;
+	if (networking_json_append_escaped(json, json_size, &offset,
+		sample.dns.search) != 0)
+		goto fail;
+	if (networking_json_append(json, json_size, &offset, "},") != 0)
+		goto fail;
 
 	/* Interface Stats */
-	offset +=
-	snprintf(json + offset, json_size - offset, "\"interfaces\":[");
-	for (int i = 0; i < sample.interface_count && offset < json_size - 1000; i++) {
-		offset +=
-		snprintf(json + offset, json_size - offset,
-				 "%s{\"interface\":\"%s\",\"ipv4\":\"%s\",\"rx_packets\":%llu,"
-				 "\"rx_bytes\":%llu,\"rx_errors\":%llu,"
-				 "\"tx_packets\":%llu,\"tx_bytes\":%llu,"
-				 "\"tx_errors\":%llu}",
-		   i > 0 ? "," : "", sample.interfaces[i].interface,
-		   sample.interfaces[i].ipv4, sample.interfaces[i].rx_packets,
-		   sample.interfaces[i].rx_bytes, sample.interfaces[i].rx_errors,
-		   sample.interfaces[i].tx_packets, sample.interfaces[i].tx_bytes,
-		   sample.interfaces[i].tx_errors);
+	if (networking_json_append(json, json_size, &offset,
+		"\"interfaces\":[") != 0)
+		goto fail;
+	for (int i = 0; i < sample.interface_count; i++) {
+		if (networking_json_append(json, json_size, &offset,
+			"%s{\"interface\":", i > 0 ? "," : "") != 0)
+			goto fail;
+		if (networking_json_append_escaped(json, json_size, &offset,
+			sample.interfaces[i].interface) != 0)
+			goto fail;
+		if (networking_json_append(json, json_size, &offset,
+			",\"ipv4\":") != 0)
+			goto fail;
+		if (networking_json_append_escaped(json, json_size, &offset,
+			sample.interfaces[i].ipv4) != 0)
+			goto fail;
+		if (networking_json_append(json, json_size, &offset,
+			",\"rx_packets\":%llu,\"rx_bytes\":%llu,\"rx_errors\":%llu,"
+			"\"tx_packets\":%llu,\"tx_bytes\":%llu,\"tx_errors\":%llu}",
+			sample.interfaces[i].rx_packets,
+			sample.interfaces[i].rx_bytes,
+			sample.interfaces[i].rx_errors,
+			sample.interfaces[i].tx_packets,
+			sample.interfaces[i].tx_bytes,
+			sample.interfaces[i].tx_errors) != 0)
+			goto fail;
 	}
-	offset += snprintf(json + offset, json_size - offset, "]");
+	if (networking_json_append(json, json_size, &offset, "]") != 0)
+		goto fail;
 
-	offset += snprintf(json + offset, json_size - offset, "}");
+	if (networking_json_append(json, json_size, &offset, "}") != 0)
+		goto fail;
 	return json;
+
+fail:
+	free(json);
+	return NULL;
 }
 
 /* ========================================================================
@@ -685,8 +800,13 @@ networking_api_handler(http_request_t *req)
 	}
 
 	http_response_t *resp = http_response_create();
+	if (!resp) {
+		free(json);
+		return http_send_error(req, 500, "Unable to allocate response");
+	}
 	resp->status_code = 200;
 	resp->content_type = "application/json";
+	http_response_add_header(resp, "Cache-Control", "no-store");
 	http_response_set_body(resp, json, strlen(json), 1);
 
 	int ret = http_response_send(req, resp);

@@ -1591,11 +1591,16 @@ metrics_handler(http_request_t *req)
 	}
 
 	http_response_t *resp = http_response_create();
+	if (!resp) {
+		free(json);
+		return http_send_error(req, 500, "Unable to allocate response");
+	}
 	resp->status_code = 200;
 	resp->content_type = "application/json";
 
 	/* Allow access from external dashboards. */
 	http_response_add_header(resp, "Access-Control-Allow-Origin", "*");
+	http_response_add_header(resp, "Cache-Control", "no-store");
 
 	/* Attach JSON as response body.
 	 *      The '1' flag tells the response layer to free memory automatically. */
