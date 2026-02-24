@@ -319,7 +319,8 @@ Allowed` with an `Allow` header built by `route_allow_methods`. Otherwise a
 
 ### Adding an API endpoint
 
-Add an `attach_routes` callback in the relevant module and register the route through the router facade:
+Add an `attach_routes` callback in the relevant module and register the route
+through the router facade:
 
 ```c
 int my_module_attach_routes(struct router *r)
@@ -328,10 +329,13 @@ int my_module_attach_routes(struct router *r)
 }
 ```
 
+Then include the module in the `miniweb_module` array in
+`src/router/url_registry.c` `init_routes()` with `enabled_by_default = 1`.
 The handler must have the signature `int handler(http_request_t *req)` and
 call one of the HTTP send helpers (`http_send_json`, `http_send_html`,
 `http_send_error`, or `http_response_send`) before returning. Note that
-`MAX_ROUTES` is currently 32; raise it in `include/urls.h` if needed.
+`MAX_ROUTES` is currently 32; raise it in `include/miniweb/router/urls.h`
+if needed.
 
 ### Adding a web view (template-backed page)
 
@@ -348,7 +352,7 @@ call one of the HTTP send helpers (`http_send_json`, `http_send_html`,
    `mypage_extra_js.html` (for deferred JavaScript) are silently skipped if
    absent.
 
-3. The URL is automatically registered by `register_view_routes()` at startup.
+3. The URL is automatically registered by `views_module_attach_routes()` at startup.
    The rendered page is served through `view_template_handler`, which caches
    the rendered HTML in the hot-view cache for `HOT_VIEW_CACHE_TTL_SEC`
    seconds (10 s by default). Add the path to `g_hot_view_cache` in
@@ -364,8 +368,9 @@ The route will simply stop matching and requests to it will receive 404.
 The module attach API (`src/router/module_attach.c`) provides
 `miniweb_module_attach_enabled()`, which iterates a `miniweb_module` array
 and, for each entry with `enabled_by_default` set to non-zero, calls the
-module's `init()` and `attach_routes()` callbacks. Metrics, networking, man,
-packages, and views are now attached through this contract.
+module's `init()` and `attach_routes()` callbacks. All built-in modules
+(metrics, networking, man, packages, and views) are attached through this
+contract at startup via `init_routes()` in `src/router/url_registry.c`.
 
 ---
 
@@ -434,52 +439,70 @@ static assets:
   `heartbeat_register()`. Each task specifies a callback function, an opaque
   context pointer, a period in seconds, and an initial delay.
 - Duplicate registrations (by name) are silently ignored.
-- `heartbeat_start()` spawns a single background thread that sleeps for 1
-  second per iteration and fires all tasks whose `next_run` timestamp has
-  been reached. Callbacks are invoked outside the lock.
-- `heartbeat_stop()` sets a stop flag; the thread exits on the next iteration.
-- The heartbeat thread is detached and does not need to be joined.
+  `heartbeat_register()` returns `HB_REGISTER_INSERTED` (1) on success,
+  `HB_REGISTER_DUPLICATE` (0) for a name collision, and `HB_REGISTER_ERROR`
+  (-1) on invalid input or a full table; only -1 is an error condition.
+- `heartbeat_start()` spawns a single background thread that wakes for each
+  due task and fires them outside the lock. Overrun counts are tracked in
+  `hb_task_stats`. `heartbeat_shutdown(drain)` can optionally execute all
+  active tasks one final time before the thread exits.
+- `heartbeat_stop()` is a convenience wrapper for `heartbeat_shutdown(0)`.
+- Task execution statistics (runs, overruns, last run time, last error) are
+  retrievable per task via `heartbeat_get_stats()`.
 
-The scheduler is active and currently drives the 1-second samplers used by
-the metrics and networking modules through heartbeat task registration.
+Both the metrics and networking modules are fully migrated onto the heartbeat
+scheduler. Each module calls `heartbeat_register()` and `heartbeat_start()`
+from its bootstrap function, driving their 1-second samplers through named
+heartbeat tasks (`"metrics.sample"` and `"networking.sample"`).
 
 ---
 
 ## Modules
 
-All modules expose an HTTP handler function (signature
-`int handler(http_request_t *req)`) registered in `init_routes()`.
+All modules are registered at startup through the module attach API
+(`miniweb_module_attach_enabled`). Each module provides an `attach_routes`
+callback that registers its own endpoints through the `struct router` facade,
+and an optional `init` callback invoked before routes are attached.
 
 ### Metrics (`src/modules/metrics/`)
 
 Provides `/api/metrics` (JSON) and the `/` dashboard. Collects via sysctl:
-CPU percentages (`kern.cp_time`), memory and swap stats (`vm.uvmexp`), load
-averages (`vm.loadavg`), OS info (`kern.ostype`, `kern.osrelease`,
-`hw.machine`), uptime (`kern.boottime`), hostname (`kern.hostname`), disk
-usage (`getmntinfo(3)`), open ports (via `netstat`), network interfaces
-(`getifaddrs(3)`), and top processes by CPU (via `ps`). All JSON is
-serialised with `json_escape_string()`.
+CPU percentages (`kern.cp_time` / `KERN_CPTIME`), memory and swap stats
+(`vm.uvmexp`), load averages (`vm.loadavg`), OS info (`kern.ostype`,
+`kern.osrelease`, `hw.machine`), uptime (`kern.boottime`), hostname
+(`kern.hostname`), disk usage (`getmntinfo(3)`), and top processes by CPU and
+RSS (via `kinfo_proc` / `KERN_PROC_ALL` sysctl). All JSON is serialised with
+`json_escape_string()`.
+
+Metrics are sampled every second by a heartbeat task (`"metrics.sample"`),
+pushed into a lock-free ring buffer, and pre-serialised into a cached JSON
+snapshot. Handlers serve the cached snapshot rather than re-collecting on every
+request.
 
 ### Networking (`src/modules/networking/`)
 
 Provides `/api/networking` (JSON) and the `/networking` view. Collection uses
 OpenBSD-native facilities only: routing table entries via `sysctl`
 (`NET_RT_DUMP`), DNS configuration from `/etc/resolv.conf`, and per-interface
-counters via `getifaddrs(3)`/`if_data`.
+counters via `getifaddrs(3)`/`if_data`. Active TCP/UDP connection enumeration
+is currently a placeholder (`networking_get_connections` returns 0).
 
-To reduce tail latency under load, networking data is sampled by heartbeat once
-per second into a ring buffer, and the API serves a prebuilt JSON snapshot when
-available. This keeps expensive route/interface sysctl work off the request
-path and avoids repeated JSON serialization storms at high concurrency.
+To reduce tail latency under load, networking data is sampled by a heartbeat
+task (`"networking.sample"`) once per second into a ring buffer, and the API
+serves a prebuilt JSON snapshot when available. This keeps expensive
+route/interface sysctl work off the request path and avoids repeated JSON
+serialisation storms at high concurrency.
 
 ### Manual pages (`src/modules/man/`)
 
 Provides `/man/{area}/{section}/{page}[.fmt]` (rendered output) and the
 `/api/man/...` JSON namespace. Renders man pages by forking `mandoc(1)` via
 `safe_popen_read_argv()` with a configurable timeout (`mandoc_timeout`).
-Supported output formats include `html`, `utf8`, `markdown`, and `pdf`.
+Supported output formats include `html`, `utf8`, `markdown`, `ps`, and `pdf`.
 Stderr from mandoc is redirected to `/dev/null` to prevent error messages
-from appearing in response bodies.
+from appearing in response bodies. Rendered output is cached to the filesystem
+under `{static_dir}/man/{area}/{section}/{page}.{fmt}` and served via
+`static_handler` on subsequent requests.
 
 ### Packages (`src/modules/packages/`)
 
@@ -632,7 +655,7 @@ production tuning, treat the following as the performance control surface.
   - `FILE_CACHE_INSERTS_PER_SEC`
   - `FILE_CACHE_MAX_AGE_SEC`
 - Networking snapshot buffers (`src/modules/networking/networking_module.c`):
-  - `NETWORK_RING_BYTES`
+  - `NETWORK_RING_CAPACITY`
   - `NETWORK_JSON_BUFFER_SIZE`
 
 ### High-load failure mode notes (HTTP `000000` in benchmark table)
@@ -663,68 +686,69 @@ stabilizes p95/p99 latency for the endpoint.
 ### Caching facilities summary
 
 - **Template cache** (`src/render/template_render.c`): in-memory template files
-  with TTL refresh.
+  preloaded at startup and refreshed lazily every 60 seconds.
 - **Hot-view cache** (`src/router/route_table.c`): short-lived rendered HTML for
-  hottest pages.
-- **Static file cache** (`src/http/response.c`): sharded cache with two-hit
-  admission, insertion token budget, size cap, and age eviction.
-- **Metrics cache** (`src/modules/metrics/metrics_module.c`): periodic snapshot
-  ring to decouple sampling from API request rate.
-- **Networking cache** (`src/modules/networking/networking_module.c`): periodic
-  snapshot ring plus cached serialized JSON.
+  the five top-level pages, with a 10-second TTL.
+- **Static file cache** (`src/http/response.c`): 16 shards × 32 slots with
+  two-hit admission, insertion token budget (8/sec per shard), 256 KiB size
+  cap, and 120-second age eviction.
+- **Metrics cache** (`src/modules/metrics/metrics_module.c`): heartbeat-driven
+  ring buffer and pre-serialised JSON snapshot updated every second.
+- **Networking cache** (`src/modules/networking/networking_module.c`): heartbeat-driven
+  ring buffer plus cached serialised JSON updated every second.
+- **Man page cache** (`src/modules/man/man_module.c`): filesystem-backed render
+  cache under `{static_dir}/man/` for html, txt, md, ps, and pdf formats.
 - **Package search cache** (`src/modules/packages/packages_module.c`): TTL query
   cache for repetitive lookups.
-- **Man page cache** (`src/modules/man/man_module.c`): filesystem-backed render
-  cache for multiple output formats.
 
 ## Source layout
 
 ```
 src/
-  app_main.c                      Main: kqueue loop, worker pool, accept, shutdown
+  app_main.c                      Main: kqueue loop, worker pool, accept, idle sweep, shutdown
   core/
     conf.c                        Configuration file parser and CLI override
-    heartbeat.c                   Periodic task scheduler
+    heartbeat.c                   Periodic task scheduler (HB_MAX_TASKS=32 slots)
     log.c                         Thread-safe logger
   http/
-    response.c                    Response pool, serialisation, file cache, send helpers
+    response.c                    Response pool, serialisation, sharded file cache, send helpers
     utils.c                       JSON escaping, subprocess execution (fork/poll/timeout)
   router/
-    module_attach.c               Module attach/detach API
-    route_table.c                 Static and hot-view cache, static file handler
-    router.c                      router_register() wrapper
-    url_registry.c                Route table, view routes, init_routes()
+    module_attach.c               Module attach/detach API (miniweb_module_attach_enabled)
+    route_table.c                 Static, favicon, and hot-view-cache handlers
+    router.c                      router_register() / router_register_prefix() wrappers
+    url_registry.c                Route table, prefix routes, view_routes[], init_routes()
   modules/
-    man/man_module.c              Man page rendering and JSON API
-    metrics/metrics_module.c      System metrics collection and JSON API
-    networking/networking_module.c Networking diagnostics and JSON API
+    man/man_module.c              Man page rendering (mandoc fork), filesystem cache, JSON API
+    metrics/metrics_module.c      System metrics collection, ring buffer, heartbeat task, JSON API
+    networking/networking_module.c Networking diagnostics, ring buffer, heartbeat task, JSON API
     packages/packages_module.c    pkg_info(1) wrapper and JSON API
   render/
-    template_render.c             Template cache, placeholder substitution
+    template_render.c             Template file cache, placeholder substitution
   storage/
     sqlite_db.c                   SQLite3 database lifecycle stubs
     sqlite_schema.c               Schema migration and transaction stubs
     sqlite_stmt.c                 Prepared statement stubs
 include/
-  conf.h                          miniweb_conf_t definition and parser API
-  config.h                        Global config_verbose, config_static_dir, config_templates_dir
-  heartbeat.h                     hb_task struct and scheduler API
-  http_handler.h                  http_request_t, http_response_t, handler typedefs
-  http_utils.h                    safe_popen_read_argv, json_escape_string
-  log.h                           Logger API
-  man.h                           Man module public API
-  metrics.h                       Metrics structs and collection API
-  networking.h                    Networking structs and collection API
-  pkg_manager.h                   Package manager API
-  routes.h                        route_handler_t, init_routes, route_match
-  template_engine.h               template_data, render API
-  urls.h                          route/view_route structs, MAX_ROUTES, registry API
-  miniweb/core/heartbeat.h        Canonical heartbeat header
-  miniweb/router/module_attach.h  miniweb_module struct and attach API
-  miniweb/router/router.h         router struct and register API
+  miniweb/core/conf.h             miniweb_conf_t definition and parser API
+  miniweb/core/config.h           Global config_verbose, config_static_dir, config_templates_dir
+  miniweb/core/heartbeat.h        hb_task struct and heartbeat scheduler API
+  miniweb/core/log.h              Logger API
+  miniweb/http/handler.h          http_request_t, http_response_t, http_handler_t typedef
+  miniweb/http/utils.h            safe_popen_read_argv, json_escape_string
+  miniweb/modules/man.h           Man module public API
+  miniweb/modules/metrics.h       Metrics structs and collection API
+  miniweb/modules/networking.h    Networking structs and collection API
+  miniweb/modules/pkg_manager.h   Package manager API
+  miniweb/render/template_engine.h template_data, template_render*, template_cache_*
+  miniweb/router/module_attach.h  miniweb_module struct and miniweb_module_attach_enabled
+  miniweb/router/router.h         struct router and router_register / router_register_prefix
+  miniweb/router/routes.h         route_handler_t typedef, handler declarations
+  miniweb/router/urls.h           struct route / prefix_route / view_route, MAX_ROUTES, registry API
   miniweb/storage/sqlite_db.h     mw_db API
-  miniweb/storage/sqlite_schema.h Migration and transaction API
+  miniweb/storage/sqlite_schema.h Migration, transaction API
   miniweb/storage/sqlite_stmt.h   Statement binding and step API
+  (legacy shims in include/*.h forward to miniweb/... equivalents)
 ```
 
 ---
@@ -734,8 +758,8 @@ include/
 | Phase | Description | Status |
 |---|---|---|
 | 0 | Test freeze / safety net | Planned |
-| 1 | Module attach API + router separation | In progress (module-driven route attachment enabled) |
-| 2 | Single global heartbeat scheduler | API ready; metrics/networking migration pending completion |
+| 1 | Module attach API + router separation | **Complete** (all modules use `miniweb_module_attach_enabled`) |
+| 2 | Single global heartbeat scheduler | **Complete** (metrics and networking both run on heartbeat tasks) |
 | 3 | Domain decomposition (metrics, networking, man, packages) | Ongoing |
 | 4 | Documentation and architecture transition (docs/miniweb.1 + README.md, port modules to enterprise paradigm) | In progress |
 | 5 | SQLite3 storage integration | Stub interfaces defined |
