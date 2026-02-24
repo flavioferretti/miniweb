@@ -786,3 +786,19 @@ include/
 - Documentation: **Doxygen** for all exported APIs
 - Principle: small reusable functions, strict module ownership, minimal coupling
 - TLS: not implemented — run behind `relayd(8)` for TLS termination
+
+## Refactor progress update (2026-02-24)
+
+Networking/server decomposition is now advanced:
+- `src/app_main.c` now focuses on process bootstrap, CLI config, signal wiring, and top-level lifecycle.
+- server internals were extracted into:
+  - `src/net/server.c`
+  - `src/net/connection_pool.c`
+  - `src/net/worker.c`
+- module decomposition scaffolds were added for enterprise separation of concerns:
+  - `src/modules/metrics/{metrics_service.c,metrics_json.c}`
+  - `src/modules/networking/{networking_service.c,networking_json.c}`
+  - `src/modules/man/{man_service.c,man_json.c}`
+  - `src/modules/packages/{packages_service.c,packages_json.c}`
+
+> Note: the current development environment is Linux-based and does not provide `sys/event.h`; full binary build for kqueue paths must be validated on OpenBSD.

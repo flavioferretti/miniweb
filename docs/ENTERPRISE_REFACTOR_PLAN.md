@@ -160,3 +160,23 @@ observations were stale.
 5. Remove stale TODO Doxygen placeholders while touching each file.
 
 This document should now be treated as the active enterprise roadmap baseline.
+
+## 2026-02-24 Incremental extraction update
+
+Completed in this slice:
+- `app_main.c` trimmed to orchestration/bootstrap only.
+- New net runtime units introduced:
+  - `src/net/server.c` (listen + accept + kqueue dispatch loop)
+  - `src/net/connection_pool.c` (fd-indexed pool with generation guard)
+  - `src/net/worker.c` (request read/parse/dispatch lifecycle)
+- New module decomposition stubs introduced for enterprise layering:
+  - `metrics_service.c`, `metrics_json.c`
+  - `networking_service.c`, `networking_json.c`
+  - `man_service.c`, `man_json.c`
+  - `packages_service.c`, `packages_json.c`
+- Build graph updated to compile all newly extracted translation units.
+
+Outstanding follow-ups in next slices:
+- Finish splitting `src/http/response.c` into `response_writer.c`, `static_files.c`, and optional `mime.c`.
+- Move function bodies from module `*_module.c` into the new `*_service.c` and `*_json.c` units (currently compatibility scaffolds).
+- Extract `work_queue` abstraction details into dedicated private header for stricter net-layer encapsulation.

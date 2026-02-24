@@ -7,15 +7,26 @@ BUILDDIR=  build
 TESTDIR=   tests
 
 SRCS=      ${SRCDIR}/app_main.c \
+           ${SRCDIR}/net/server.c \
+           ${SRCDIR}/net/connection_pool.c \
+           ${SRCDIR}/net/worker.c \
            ${SRCDIR}/router/route_table.c \
            ${SRCDIR}/render/template_render.c \
            ${SRCDIR}/modules/metrics/metrics_module.c \
+           ${SRCDIR}/modules/metrics/metrics_service.c \
+           ${SRCDIR}/modules/metrics/metrics_json.c \
            ${SRCDIR}/modules/man/man_module.c \
+           ${SRCDIR}/modules/man/man_service.c \
+           ${SRCDIR}/modules/man/man_json.c \
            ${SRCDIR}/http/utils.c \
            ${SRCDIR}/router/url_registry.c \
            ${SRCDIR}/modules/networking/networking_module.c \
+           ${SRCDIR}/modules/networking/networking_service.c \
+           ${SRCDIR}/modules/networking/networking_json.c \
            ${SRCDIR}/http/response.c \
            ${SRCDIR}/modules/packages/packages_module.c \
+           ${SRCDIR}/modules/packages/packages_service.c \
+           ${SRCDIR}/modules/packages/packages_json.c \
            ${SRCDIR}/core/heartbeat.c \
            ${SRCDIR}/router/router.c \
            ${SRCDIR}/router/module_attach.c \
@@ -28,15 +39,26 @@ SRCS=      ${SRCDIR}/app_main.c \
            ${SRCDIR}/platform/openbsd/security.c
 
 OBJS=      ${BUILDDIR}/app_main.o \
+           ${BUILDDIR}/server.o \
+           ${BUILDDIR}/connection_pool.o \
+           ${BUILDDIR}/worker.o \
            ${BUILDDIR}/route_table.o \
            ${BUILDDIR}/template_render.o \
            ${BUILDDIR}/metrics_module.o \
+           ${BUILDDIR}/metrics_service.o \
+           ${BUILDDIR}/metrics_json.o \
            ${BUILDDIR}/man_module.o \
+           ${BUILDDIR}/man_service.o \
+           ${BUILDDIR}/man_json.o \
            ${BUILDDIR}/http_utils.o \
            ${BUILDDIR}/url_registry.o \
            ${BUILDDIR}/networking_module.o \
+           ${BUILDDIR}/networking_service.o \
+           ${BUILDDIR}/networking_json.o \
            ${BUILDDIR}/http_response.o \
            ${BUILDDIR}/packages_module.o \
+           ${BUILDDIR}/packages_service.o \
+           ${BUILDDIR}/packages_json.o \
            ${BUILDDIR}/heartbeat.o \
            ${BUILDDIR}/router.o \
            ${BUILDDIR}/module_attach.o \
@@ -105,6 +127,18 @@ ${BUILDDIR}/http_utils.o: ${SRCDIR}/http/utils.c
 ${BUILDDIR}/app_main.o: ${SRCDIR}/app_main.c
 	@mkdir -p ${BUILDDIR}
 	${CC} ${CFLAGS} -c ${SRCDIR}/app_main.c -o $@
+
+${BUILDDIR}/server.o: ${SRCDIR}/net/server.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/net/server.c -o $@
+
+${BUILDDIR}/connection_pool.o: ${SRCDIR}/net/connection_pool.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/net/connection_pool.c -o $@
+
+${BUILDDIR}/worker.o: ${SRCDIR}/net/worker.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/net/worker.c -o $@
 
 ${BUILDDIR}/man_module.o: ${SRCDIR}/modules/man/man_module.c
 	@mkdir -p ${BUILDDIR}
@@ -191,3 +225,35 @@ ${BUILDDIR}/heartbeat_test: ${TESTDIR}/heartbeat_test.c ${SRCDIR}/core/heartbeat
 	${CC} ${CFLAGS} ${LDFLAGS} -I${INCDIR} -o $@ ${TESTDIR}/heartbeat_test.c ${SRCDIR}/core/heartbeat.c ${LDADD}
 
 .PHONY: all clean run debug install man unit-tests integration-test
+
+${BUILDDIR}/packages_service.o: ${SRCDIR}/modules/packages/packages_service.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/modules/packages/packages_service.c -o $@
+
+${BUILDDIR}/packages_json.o: ${SRCDIR}/modules/packages/packages_json.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/modules/packages/packages_json.c -o $@
+
+${BUILDDIR}/metrics_service.o: ${SRCDIR}/modules/metrics/metrics_service.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/modules/metrics/metrics_service.c -o $@
+
+${BUILDDIR}/metrics_json.o: ${SRCDIR}/modules/metrics/metrics_json.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/modules/metrics/metrics_json.c -o $@
+
+${BUILDDIR}/man_service.o: ${SRCDIR}/modules/man/man_service.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/modules/man/man_service.c -o $@
+
+${BUILDDIR}/man_json.o: ${SRCDIR}/modules/man/man_json.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/modules/man/man_json.c -o $@
+
+${BUILDDIR}/networking_service.o: ${SRCDIR}/modules/networking/networking_service.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/modules/networking/networking_service.c -o $@
+
+${BUILDDIR}/networking_json.o: ${SRCDIR}/modules/networking/networking_json.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/modules/networking/networking_json.c -o $@

@@ -897,3 +897,36 @@ Compatibility-first refactor: feature parity required at every phase.
 .Xr relayd 8
 .Sh AUTHORS
 MiniWeb contributors.
+.Sh REFACTOR STATUS
+As of 2026-02-24, server runtime decomposition has progressed to dedicated
+networking translation units:
+.Bl -bullet
+.It
+Pa src/net/server.c
+(kqueue dispatcher and accept loop)
+.It
+Pa src/net/connection_pool.c
+(fd-indexed pool with generation checks)
+.It
+Pa src/net/worker.c
+(worker request parsing and route dispatch)
+.El
+Module layering scaffolds were also added:
+.Bl -bullet
+.It
+Pa src/modules/metrics/metrics_service.c
+and
+Pa src/modules/metrics/metrics_json.c
+.It
+Pa src/modules/networking/networking_service.c
+and
+Pa src/modules/networking/networking_json.c
+.It
+Pa src/modules/man/man_service.c
+and
+Pa src/modules/man/man_json.c
+.It
+Pa src/modules/packages/packages_service.c
+and
+Pa src/modules/packages/packages_json.c
+.El
