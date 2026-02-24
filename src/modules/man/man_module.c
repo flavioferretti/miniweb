@@ -28,12 +28,23 @@ static int is_valid_section(const char *section);
 
 static char *select_resolved_man_path(char *raw_output);
 
+static int compare_string_ptrs(const void *a, const void *b);
+
 /**
  * @brief Return non-zero when an API endpoint matches exactly.
  * @param path Request URL path after /api/man.
  * @param endpoint Endpoint token such as "/sections".
  * @return 1 when @p path is @p endpoint, optionally followed by query string.
  */
+static int
+compare_string_ptrs(const void *a, const void *b)
+{
+	const char *const *left = a;
+	const char *const *right = b;
+
+	return strcmp(*left, *right);
+}
+
 static int
 path_matches_endpoint(const char *path, const char *endpoint)
 {
@@ -372,6 +383,8 @@ char *
 man_get_section_pages_json(const char *area, const char *section)
 {
 	char dir_path[256];
+	char *pages[8192];
+	size_t page_count = 0;
 	const char *base = "/usr/share/man";
 
 	/* Select base path from the requested area. */
@@ -445,26 +458,36 @@ man_get_section_pages_json(const char *area, const char *section)
 		memcpy(name, de->d_name, name_len);
 		name[name_len] = '\0';
 
-		/*
-		 * Calculate how many bytes this entry needs:
-		 *   separator ("," or "") + '"' + name + '"'
-		 * plus the JSON_CLOSE_RESERVE we always keep.
-		 */
+		if (page_count < (sizeof(pages) / sizeof(pages[0]))) {
+			pages[page_count] = strdup(name);
+			if (pages[page_count])
+				page_count++;
+		}
+	}
+	closedir(dr);
+
+	if (page_count > 1)
+		qsort(pages, page_count, sizeof(pages[0]), compare_string_ptrs);
+
+	for (size_t i = 0; i < page_count; i++) {
+		size_t name_len = strlen(pages[i]);
 		size_t entry_len = (first ? 0 : 1) + 1 + name_len + 1;
-		if (used + entry_len + JSON_CLOSE_RESERVE >= MAX_JSON_SIZE)
-			break; /* Graceful truncation — close array below. */
+		if (used + entry_len + JSON_CLOSE_RESERVE >= MAX_JSON_SIZE) {
+			free(pages[i]);
+			continue;
+		}
 
 		n = snprintf(json + used,
 		    MAX_JSON_SIZE - used - JSON_CLOSE_RESERVE,
 		    "%s\"%s\"",
 		    first ? "" : ",",
-		    name);
+		    pages[i]);
+		free(pages[i]);
 		if (n > 0) {
 			used += (size_t)n;
 			first = 0;
 		}
 	}
-	closedir(dr);
 
 	/*
 	 * Always close the JSON array.  Because we reserved JSON_CLOSE_RESERVE
@@ -1125,6 +1148,8 @@ man_render_handler(http_request_t *req)
 	char section[16] = "";
 	char page[64] = "";
 	char format[16] = "html";
+	char cache_area[32] = "system";
+	char cache_section[16] = "";
 
 	/* 1. Parse URL (example: /man/system/1/ls.html). */
 	if (strncmp(req->url, "/man/", 5) != 0) {
@@ -1165,9 +1190,26 @@ man_render_handler(http_request_t *req)
 		return http_send_error(req, 400, "Unsupported format");
 	}
 
+	/* Canonicalize area/section for cache keys using the resolved file path so
+	 * aliases across MANPATH trees map to one cache location. */
+	strlcpy(cache_section, section, sizeof(cache_section));
+	char *resolved = resolve_man_path(page, section);
+	if (resolved) {
+		const char *resolved_area = area_from_path(resolved);
+		strlcpy(cache_area, resolved_area, sizeof(cache_area));
+
+		const char *base = strrchr(resolved, '/');
+		base = base ? base + 1 : resolved;
+		(void)parse_section_from_filename(base, cache_section,
+						     sizeof(cache_section));
+		free(resolved);
+	} else {
+		strlcpy(cache_area, area, sizeof(cache_area));
+	}
+
 	char cache_rel[512];
 	char cache_abs[512];
-	if (build_cache_paths(area, section, page, format, cache_rel,
+	if (build_cache_paths(cache_area, cache_section, page, format, cache_rel,
 				  sizeof(cache_rel), cache_abs,
 				  sizeof(cache_abs)) == 0 &&
 		is_static_cache_format(format) && access(cache_abs, R_OK) == 0 &&
@@ -1181,7 +1223,8 @@ man_render_handler(http_request_t *req)
 
 	/* 3. Render content. */
 	size_t out_len = 0;
-	char *output = man_render_page(area, section, page, format, &out_len);
+	char *output = man_render_page(cache_area, cache_section, page, format,
+				      &out_len);
 
 	if (!output) {
 		return http_send_error(req, 404, "Manual page not found");
