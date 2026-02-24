@@ -799,6 +799,13 @@ Favicon (served from
 .Bl -tag -width "modules/networking/"
 .It Pa src/app_main.c
 kqueue loop, worker pool, accept, idle sweep, shutdown.
+.It Pa src/net/work_queue.c
+Thread-safe FIFO transport work queue extracted from the server entrypoint.
+.It Pa src/platform/openbsd/security.c
+OpenBSD sandbox boundary setup using
+.Xr unveil 2
+and
+.Xr pledge 2 .
 .It Pa src/core/conf.c
 Configuration file parser and CLI override logic.
 .It Pa src/core/heartbeat.c

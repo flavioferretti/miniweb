@@ -23,7 +23,9 @@ SRCS=      ${SRCDIR}/app_main.c \
            ${SRCDIR}/storage/sqlite_stmt.c \
            ${SRCDIR}/storage/sqlite_schema.c \
            ${SRCDIR}/core/conf.c \
-           ${SRCDIR}/core/log.c
+           ${SRCDIR}/core/log.c \
+           ${SRCDIR}/net/work_queue.c \
+           ${SRCDIR}/platform/openbsd/security.c
 
 OBJS=      ${BUILDDIR}/app_main.o \
            ${BUILDDIR}/route_table.o \
@@ -42,7 +44,9 @@ OBJS=      ${BUILDDIR}/app_main.o \
            ${BUILDDIR}/sqlite_stmt.o \
            ${BUILDDIR}/sqlite_schema.o \
            ${BUILDDIR}/conf.o \
-           ${BUILDDIR}/log.o
+           ${BUILDDIR}/log.o \
+           ${BUILDDIR}/work_queue.o \
+           ${BUILDDIR}/security.o
 
 CC?=       cc
 CFLAGS+=   -std=c99 -O2 -Wall -Wextra -pedantic
@@ -157,6 +161,14 @@ ${BUILDDIR}/conf.o: ${SRCDIR}/core/conf.c
 ${BUILDDIR}/log.o: ${SRCDIR}/core/log.c
 	@mkdir -p ${BUILDDIR}
 	${CC} ${CFLAGS} -c ${SRCDIR}/core/log.c -o $@
+
+${BUILDDIR}/work_queue.o: ${SRCDIR}/net/work_queue.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/net/work_queue.c -o $@
+
+${BUILDDIR}/security.o: ${SRCDIR}/platform/openbsd/security.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/platform/openbsd/security.c -o $@
 
 unit-tests: ${BUILDDIR}/routes_test ${BUILDDIR}/template_test ${BUILDDIR}/heartbeat_test
 	./${BUILDDIR}/routes_test

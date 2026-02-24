@@ -35,6 +35,8 @@
 #include <miniweb/core/log.h>
 #include <miniweb/http/handler.h>
 #include <miniweb/http/utils.h>
+#include <miniweb/net/work_queue.h>
+#include <miniweb/platform/openbsd/security.h>
 #include <miniweb/render/template_engine.h>
 #include <miniweb/router/routes.h>
 #include <miniweb/router/urls.h>
@@ -46,7 +48,6 @@
 #define THREAD_POOL_SIZE 32
 #define REQUEST_BUFFER_SIZE 16384
 #define LISTEN_BACKLOG 1024
-#define QUEUE_CAPACITY 4096
 #define MAX_KEEPALIVE_REQUESTS 64
 
 /* -- Active configuration (populated in main before any thread starts) ------
@@ -87,9 +88,6 @@ static int connection_free_stack[MAX_CONNECTIONS];
 static int connection_free_top = 0;
 
 /**
- * @brief TODO: Describe init_connection_pool.
- */
-/**
  * @brief Init connection pool.
  */
 static void
@@ -101,122 +99,8 @@ init_connection_pool(void)
 	}
 }
 
-/* -- Work queue -------------------------------------------------------------
- */
-/**
- * @brief Internal data structure.
- */
-typedef struct {
-	connection_t *items[QUEUE_CAPACITY];
-	int head;
-	int tail;
-	int count;
-	pthread_mutex_t lock;
-	pthread_cond_t not_empty;
-} work_queue_t;
+static miniweb_work_queue_t wq;
 
-static work_queue_t wq;
-
-/**
- * @brief TODO: Describe queue_init.
- * @param q TODO: Describe this parameter.
- */
-/**
- * @brief Queue init.
- * @param q Work queue instance.
- */
-static void
-queue_init(work_queue_t *q)
-{
-	memset(q, 0, sizeof(*q));
-	pthread_mutex_init(&q->lock, NULL);
-	pthread_cond_init(&q->not_empty, NULL);
-}
-
-/**
- * @brief TODO: Describe full.
- * @param conn TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/* Enqueue from the main thread. Non-blocking: returns 0 on success, -1 if
- * the queue is full (connection will be dropped). */
-/**
- * @brief Queue push.
- * @param q Work queue instance.
- * @param conn Connection object.
- * @return Returns 0 on success or a negative value on failure unless documented
- * otherwise.
- */
-static int
-queue_push(work_queue_t *q, connection_t *conn)
-{
-	pthread_mutex_lock(&q->lock);
-	if (q->count >= QUEUE_CAPACITY) {
-		pthread_mutex_unlock(&q->lock);
-		return -1;
-	}
-	q->items[q->tail] = conn;
-	q->tail = (q->tail + 1) % QUEUE_CAPACITY;
-	q->count++;
-	pthread_cond_signal(&q->not_empty);
-	pthread_mutex_unlock(&q->lock);
-	return 0;
-}
-
-/**
- * @brief TODO: Describe queue_pop.
- * @param q TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/* Dequeue in a worker thread. Blocks until an item is available or
- * running becomes 0. Returns NULL on shutdown. */
-/**
- * @brief Queue pop.
- * @param q Work queue instance.
- * @return Returns 0 on success or a negative value on failure unless documented
- * otherwise.
- */
-static connection_t *
-queue_pop(work_queue_t *q)
-{
-	pthread_mutex_lock(&q->lock);
-	while (q->count == 0 && running) {
-		pthread_cond_wait(&q->not_empty, &q->lock);
-	}
-	if (q->count == 0) { /* running == 0 and queue empty */
-		pthread_mutex_unlock(&q->lock);
-		return NULL;
-	}
-	connection_t *conn = q->items[q->head];
-	q->head = (q->head + 1) % QUEUE_CAPACITY;
-	q->count--;
-	pthread_mutex_unlock(&q->lock);
-	return conn;
-}
-
-/* Wake all workers so they can notice running == 0 and exit cleanly. */
-/**
- * @brief TODO: Describe queue_broadcast_shutdown.
- * @param q TODO: Describe this parameter.
- */
-/**
- * @brief Queue broadcast shutdown.
- * @param q Work queue instance.
- */
-static void
-queue_broadcast_shutdown(work_queue_t *q)
-{
-	pthread_mutex_lock(&q->lock);
-	pthread_cond_broadcast(&q->not_empty);
-	pthread_mutex_unlock(&q->lock);
-}
-
-/**
- * @brief TODO: Describe alloc_connection.
- * @param fd TODO: Describe this parameter.
- * @param addr TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 /* -- Connection pool helpers ------------------------------------------------
  */
 /**
@@ -263,10 +147,6 @@ alloc_connection(int fd, struct sockaddr_in *addr)
 }
 
 /**
- * @brief TODO: Describe free_connection.
- * @param fd TODO: Describe this parameter.
- */
-/**
  * @brief Free connection.
  * @param fd File descriptor to operate on.
  */
@@ -294,10 +174,6 @@ free_connection(int fd)
 	pthread_mutex_unlock(&conn_mutex);
 }
 
-/**
- * @brief TODO: Describe set_nonblock.
- * @param fd TODO: Describe this parameter.
- */
 /* -- Helpers ----------------------------------------------------------------
  */
 /**
@@ -313,14 +189,6 @@ set_nonblock(int fd)
 	fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
-/**
- * @brief TODO: Describe parse_request_line.
- * @param buf TODO: Describe this parameter.
- * @param method TODO: Describe this parameter.
- * @param url TODO: Describe this parameter.
- * @param version TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 /**
  * @brief Parse request line.
  * @param buf Input buffer containing textual data.
@@ -363,11 +231,6 @@ parse_request_line(const char *buf, char *method, char *url, char *version)
 }
 
 /**
- * @brief TODO: Describe find_header_end.
- * @param buf TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
  * @brief Find header end.
  * @param buf Input buffer containing textual data.
  * @return Returns 0 on success or a negative value on failure unless documented
@@ -379,12 +242,6 @@ find_header_end(const char *buf)
 	return strstr(buf, "\r\n\r\n");
 }
 
-/**
- * @brief TODO: Describe request_keep_alive.
- * @param buf TODO: Describe this parameter.
- * @param version TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 /**
  * @brief Request keep alive.
  * @param buf Input buffer containing textual data.
@@ -422,12 +279,6 @@ request_keep_alive(const char *buf, const char *version)
 }
 
 /**
- * @brief TODO: Describe send_error_response.
- * @param fd TODO: Describe this parameter.
- * @param code TODO: Describe this parameter.
- * @param msg TODO: Describe this parameter.
- */
-/**
  * @brief Send error response.
  * @param fd File descriptor to operate on.
  * @param code HTTP status code to send.
@@ -448,11 +299,6 @@ send_error_response(int fd, int code, const char *msg)
 }
 
 /**
- * @brief TODO: Describe close_connection.
- * @param fd TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
  * @brief close_connection.
  */
 static void
@@ -469,11 +315,6 @@ close_connection(int fd)
 	free_connection(fd);
 }
 
-/**
- * @brief TODO: Describe try_rearm_keepalive.
- * @param conn TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 /**
  * @brief Try rearm keepalive.
  * @param conn Connection object.
@@ -498,11 +339,6 @@ try_rearm_keepalive(connection_t *conn)
 	return kevent(kq_fd, &ev, 1, NULL, 0, NULL) == 0;
 }
 
-/**
- * @brief TODO: Describe worker_thread.
- * @param arg TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 /* -- Worker thread ----------------------------------------------------------
  */
 /**
@@ -519,7 +355,8 @@ worker_thread(void *arg)
 	(void)arg; /* workers are identical; id not needed */
 
 	while (running) {
-		connection_t *conn = queue_pop(&wq);
+		connection_t *conn =
+		    (connection_t *)miniweb_work_queue_pop(&wq, &running);
 		if (!conn) {
 			break; /* shutdown signal */
 		}
@@ -648,11 +485,6 @@ worker_thread(void *arg)
 	return NULL;
 }
 
-/**
- * @brief TODO: Describe helper.
- * @param handle_accept TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 /* -- Accept helper (called from main loop) ----------------------------------
  */
 /**
@@ -727,9 +559,6 @@ handle_accept(void)
 	}
 }
 
-/**
- * @brief TODO: Describe sweep_idle_connections.
- */
 /* -- Idle timeout sweep -----------------------------------------------------
  */
 /**
@@ -757,10 +586,6 @@ sweep_idle_connections(void)
 	}
 }
 
-/**
- * @brief TODO: Describe handle_signal.
- * @param sig TODO: Describe this parameter.
- */
 /* -- Signal handler ---------------------------------------------------------
  */
 /**
@@ -774,11 +599,6 @@ handle_signal(int sig)
 	running = 0;
 }
 
-/**
- * @brief TODO: Describe usage.
- * @param prog TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 /* -- CLI --------------------------------------------------------------------
  */
 /**
@@ -802,12 +622,6 @@ usage(const char *prog)
 		THREAD_POOL_SIZE, config.max_conns);
 }
 
-/**
- * @brief TODO: Describe parse_args.
- * @param argc TODO: Describe this parameter.
- * @param argv TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 /**
  * @brief Parse args.
  * @param argc Argument count from the command line.
@@ -890,76 +704,6 @@ parse_args(int argc, char *argv[])
 		conf_dump(&config);
 }
 
-/**
- * @brief TODO: Describe apply_openbsd_security.
- */
-/* -- OpenBSD security -------------------------------------------------------
- */
-/**
- * @brief Apply openbsd security.
- */
-static void
-apply_openbsd_security(void)
-{
-#ifdef __OpenBSD__
-	log_info("Applying OpenBSD security features...");
-
-	/* Filesystem paths from config */
-	unveil(config.templates_dir, "r");
-	unveil(config.static_dir, "rwc");
-
-	/* Man page infrastructure */
-	unveil("/usr/share/man", "r");
-	unveil("/usr/local/man", "r");
-	unveil("/usr/X11R6/man", "r");
-	unveil(config.mandoc_path, "x");
-	unveil("/usr/bin/man", "x");
-	unveil("/usr/bin/apropos", "x");
-	unveil("/usr/bin/netstat", "x");
-	unveil("/bin/sh", "x");
-	unveil("/etc/man.conf", "r");
-	unveil("/dev/null", "rw");
-	unveil("/usr/sbin/pkg_info", "x");
-
-	/* pkg_info needs read access to the package database and to stat()
-	 * the file paths passed to -E (which package owns this file).
-	 * Without /var/db/pkg pkg_info exits immediately with no output. */
-	unveil("/var/db/pkg", "r"); /* installed package database    */
-	unveil("/usr/local", "r");  /* packages install prefix       */
-	unveil("/usr/bin", "r");    /* -E lookups on base binaries   */
-	unveil("/usr/sbin", "r");   /* idem                          */
-	unveil("/bin", "r");	    /* idem                          */
-	unveil("/sbin", "r");	    /* idem                          */
-	unveil("/usr/local/bin", "r");
-
-	/* User/group lookups */
-	unveil("/etc/passwd", "r");
-	unveil("/etc/group", "r");
-	unveil("/etc/resolv.conf", "r");
-
-	unveil(NULL, NULL);
-
-	const char *promises =
-	    "stdio rpath wpath cpath inet route proc exec vminfo ps getpw";
-	if (pledge(promises, NULL) == -1) {
-		log_errno("pledge");
-		log_error("Continuing without pledge...");
-	} else if (config.verbose) {
-		log_debug("Pledge promises set: %s", promises);
-	}
-#else
-	if (config.verbose)
-		log_debug(
-		    "OpenBSD security features disabled on this platform.");
-#endif
-}
-
-/**
- * @brief TODO: Describe main.
- * @param argc TODO: Describe this parameter.
- * @param argv TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 /* -- main -------------------------------------------------------------------
  */
 /**
@@ -1039,7 +783,7 @@ main(int argc, char *argv[])
 	}
 
 	/* -- Work queue + worker threads -- */
-	queue_init(&wq);
+	miniweb_work_queue_init(&wq);
 	init_connection_pool();
 
 	pthread_t threads[THREAD_POOL_SIZE];
@@ -1051,7 +795,7 @@ main(int argc, char *argv[])
 		}
 	}
 
-	apply_openbsd_security();
+	miniweb_apply_openbsd_security(&config);
 	spare_fd = open("/dev/null", O_RDONLY);
 
 	printf("Server started. Workers: %d  MaxConns: %d  Port: %d\n"
@@ -1125,7 +869,7 @@ main(int argc, char *argv[])
 			 * worker will re-enable it via EV_ENABLE if it needs
 			 * more data, or close the fd when done (which removes
 			 * the kevent automatically). */
-			if (queue_push(&wq, conn) < 0) {
+			if (miniweb_work_queue_push(&wq, conn) < 0) {
 				/* Queue full: server overloaded, drop the
 				 * connection */
 				send_error_response(fd, 503, "Server busy");
@@ -1137,7 +881,7 @@ main(int argc, char *argv[])
 	/* -- Graceful shutdown -- */
 	printf("\nShutting down...\n");
 	running = 0;
-	queue_broadcast_shutdown(&wq);
+	miniweb_work_queue_broadcast_shutdown(&wq);
 
 	for (int i = 0; i < config.threads; i++)
 		pthread_join(threads[i], NULL);

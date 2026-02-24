@@ -25,11 +25,12 @@ observations were stale.
 
 ### 1.2 Still true / still risky
 
-- Very large files remain and should be decomposed:
-  - `src/app_main.c` (~1160 LOC)
-  - `src/http/response.c` (~1126 LOC)
-  - `src/modules/metrics/metrics_module.c` (~1628 LOC)
-  - `src/modules/man/man_module.c` (~1102 LOC)
+- Very large files remain and should be decomposed further:
+  - `src/http/response.c` (~973 LOC)
+  - `src/modules/metrics/metrics_module.c` (~1432 LOC)
+  - `src/modules/man/man_module.c` (~977 LOC)
+- `src/app_main.c` was reduced and partially extracted (~904 LOC), but still
+  needs follow-up splits (`server`, `worker`, `connection_pool`).
 - Feature files still combine service logic, JSON serialization, and route handlers
   in the same translation unit for several modules.
 - The platform wrapper layer (`platform/openbsd/*`) and dedicated `net/` folder from the
@@ -68,8 +69,8 @@ observations were stale.
 - `modules/` ✅ present
 - `storage/` ✅ present
 - `render/` ✅ present
-- `net/` ❌ pending extraction (transport still inside `app_main.c`)
-- `platform/openbsd/` ❌ pending extraction (collectors remain embedded in modules)
+- `net/` 🟡 partially extracted (`work_queue.c` extracted; server/worker still in `app_main.c`)
+- `platform/openbsd/` 🟡 partially extracted (`security.c` extracted; collectors still embedded in modules)
 
 ---
 
@@ -152,7 +153,7 @@ observations were stale.
 
 ## 5) Immediate actionable next steps (ordered backlog)
 
-1. Extract `work_queue_*` and connection-pool logic from `app_main.c` into `src/net/`.
+1. Complete extraction of connection-pool/server/worker units from `app_main.c` into `src/net/`.
 2. Carve HTTP static serving + response writing out of `src/http/response.c`.
 3. Start with `metrics` module split (`service/json/module`) as the reference pattern.
 4. Upgrade integration test script to assert 404/405 and basic JSON key presence.
