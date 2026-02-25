@@ -4,6 +4,7 @@
  * No libmicrohttpd dependency. */
 
 #include <miniweb/http/utils.h>
+#include <miniweb/core/log.h>
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -79,72 +80,59 @@ sanitize_string(char *s)
 	}
 }
 
-/* Execute path with argv, capture up to max_size bytes of output.
- * Enforces a wall-clock timeout (seconds).  Returns malloc'd buffer
- * NUL-terminated, or NULL on error / timeout / empty output.
- * Caller must free(). */
-/**
- * @brief Execute a command and capture stdout with size/time limits.
- * @param path Executable path.
- * @param argv Argument vector including program name.
- * @param max_size Maximum bytes captured before truncation.
- * @param timeout_seconds Process timeout in seconds.
- * @param out_len Optional captured length output.
- * @return Malloc'd NUL-terminated output buffer, or NULL on failure.
- */
-/* src/http_utils.c */
-/**
- * @brief TODO: Describe safe_popen_read_argv.
- * @param path TODO: Describe this parameter.
- * @param argv TODO: Describe this parameter.
- * @param max_size TODO: Describe this parameter.
- * @param timeout_seconds TODO: Describe this parameter.
- * @param out_len TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 char *
 safe_popen_read_argv(const char *path, char *const argv[],
 					 size_t max_size, int timeout_seconds, size_t *out_len)
 {
 	int pipefd[2];
-	if (pipe(pipefd) == -1)
-		return NULL;
 
-	pid_t pid = fork();
+	log_debug("[UTILS] Attempting to execute: %s", path);
+	for (int i = 0; argv[i] != NULL; i++) {
+		log_debug("[UTILS]   argv[%d]: '%s'", i, argv[i]);
+	}
+
+	if (pipe(pipefd) == -1) {
+		log_debug("[UTILS] pipe() failed: %s", strerror(errno));
+		return NULL;
+	}
+
+	/* Usa vfork() invece di fork() - più sicuro con pledge */
+	pid_t pid = vfork();
 	if (pid == -1) {
+		log_debug("[UTILS] vfork() failed: %s", strerror(errno));
 		close(pipefd[0]);
 		close(pipefd[1]);
 		return NULL;
 	}
 
 	if (pid == 0) {
-		/* Child: stdout → pipe, stderr → /dev/null.
-		 * Keeping stderr separate prevents mandoc/man error messages
-		 * (e.g. "No entry for X in section Y") from leaking into the
-		 * output buffer and being sent to the client as a 200 body. */
+		/* Child process - in vfork condividiamo la memoria col parent */
 		close(pipefd[0]);
+
+		/* Redirect stdout to pipe */
 		dup2(pipefd[1], STDOUT_FILENO);
 		close(pipefd[1]);
 
+		/* Redirect stderr to /dev/null */
 		int devnull = open("/dev/null", O_WRONLY);
 		if (devnull >= 0) {
 			dup2(devnull, STDERR_FILENO);
 			close(devnull);
 		}
 
-		/* Close all other fds */
-		for (int fd = 3; fd < 1024; fd++)
-			close(fd);
-
+		/* Esegui il comando */
 		execv(path, argv);
+
+		/* Se arriviamo qui, execv è fallito */
 		_exit(127);
 	}
 
-	/* Parent */
+	/* Parent process */
 	close(pipefd[1]);
 
 	char *buffer = malloc(max_size + 1);
 	if (!buffer) {
+		log_debug("[UTILS] malloc(%zu) failed", max_size + 1);
 		close(pipefd[0]);
 		kill(pid, SIGKILL);
 		waitpid(pid, NULL, 0);
@@ -178,22 +166,23 @@ safe_popen_read_argv(const char *path, char *const argv[],
 		if (pfd.revents & POLLIN) {
 			ssize_t n = read(pipefd[0], buffer + total, max_size - total);
 			if (n < 0) {
-				if (errno == EAGAIN || errno == EWOULDBLOCK)
-					continue;
+				if (errno == EAGAIN || errno == EWOULDBLOCK) continue;
 				break;
 			}
-			if (n == 0) break;  /* EOF */
-				total += (size_t)n;
+			if (n == 0) break;
+			total += (size_t)n;
 		}
-		if (pfd.revents & (POLLERR | POLLHUP))
-			break;
+		if (pfd.revents & (POLLERR | POLLHUP)) break;
 	}
 
 	close(pipefd[0]);
 
-	if (timed_out)
+	if (timed_out) {
 		kill(pid, SIGKILL);
-	waitpid(pid, NULL, 0);
+	}
+
+	int status;
+	waitpid(pid, &status, 0);
 
 	if (out_len) {
 		*out_len = total;
@@ -205,8 +194,7 @@ safe_popen_read_argv(const char *path, char *const argv[],
 	}
 
 	buffer[total] = '\0';
-
-	return buffer;  /* NUL-terminated. */
+	return buffer;
 }
 
 /* Convenience wrapper: run cmd through /bin/sh -c */

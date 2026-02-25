@@ -4,24 +4,24 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <miniweb/router/router.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <unistd.h>
 #include <time.h>
-#include <miniweb/router/router.h>
+#include <unistd.h>
 
 #include <miniweb/core/config.h>
+#include <miniweb/core/log.h>
 #include <miniweb/http/handler.h>
 #include <miniweb/http/utils.h>
 #include <miniweb/modules/man.h>
 #include <miniweb/router/routes.h>
-#include <miniweb/core/log.h>
 
 #define MAX_JSON_SIZE (256 * 1024)
-#define MAX_OUTPUT_SIZE (10 * 1024 * 1024) //10 MB!
+#define MAX_OUTPUT_SIZE (10 * 1024 * 1024) // 10 MB!
 #define MAN_HOT_CACHE_TTL_SEC 30
 
 static int is_valid_section(const char *section);
@@ -166,7 +166,8 @@ static int
 parse_section_from_filename(const char *filename, char *section_out,
 			    size_t section_out_len)
 {
-	static const char *compressed_suffixes[] = {".gz", ".bz2", ".xz", ".zst"};
+	static const char *compressed_suffixes[] = {".gz", ".bz2", ".xz",
+						    ".zst"};
 	char tmp[256];
 
 	if (!filename || !section_out || section_out_len == 0)
@@ -174,10 +175,13 @@ parse_section_from_filename(const char *filename, char *section_out,
 
 	strlcpy(tmp, filename, sizeof(tmp));
 
-	for (size_t i = 0; i < sizeof(compressed_suffixes) / sizeof(compressed_suffixes[0]); i++) {
+	for (size_t i = 0;
+	     i < sizeof(compressed_suffixes) / sizeof(compressed_suffixes[0]);
+	     i++) {
 		size_t tlen = strlen(tmp);
 		size_t slen = strlen(compressed_suffixes[i]);
-		if (tlen > slen && strcmp(tmp + tlen - slen, compressed_suffixes[i]) == 0) {
+		if (tlen > slen &&
+		    strcmp(tmp + tlen - slen, compressed_suffixes[i]) == 0) {
 			tmp[tlen - slen] = '\0';
 			break;
 		}
@@ -224,7 +228,8 @@ strip_overstrike_ascii(char *text, size_t *len)
 /**
  * @brief Is valid token.
  * @param s Input string to parse or sanitize.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 static int
 is_valid_token(const char *s)
@@ -233,7 +238,7 @@ is_valid_token(const char *s)
 		return 0;
 	for (const unsigned char *p = (const unsigned char *)s; *p; p++) {
 		if (!isalnum(*p) && *p != '.' && *p != '_' && *p != '-' &&
-			*p != '+')
+		    *p != '+')
 			return 0;
 	}
 	return 1;
@@ -242,7 +247,8 @@ is_valid_token(const char *s)
 /**
  * @brief Is valid section.
  * @param section Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 static int
 is_valid_section(const char *section)
@@ -261,7 +267,8 @@ is_valid_section(const char *section)
  * @brief Resolve man path.
  * @param name Parameter used by this function.
  * @param section Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 static char *
 resolve_man_path(const char *name, const char *section)
@@ -270,12 +277,12 @@ resolve_man_path(const char *name, const char *section)
 		return NULL;
 
 	char *const argv[] = {"man",
-		"-M",
-		"/usr/share/man:/usr/local/man:/usr/X11R6/man",
-		"-w",
-		(char *)section,
-		(char *)name,
-		NULL};
+			      "-M",
+			      "/usr/share/man:/usr/local/man:/usr/X11R6/man",
+			      "-w",
+			      (char *)section,
+			      (char *)name,
+			      NULL};
 	char *raw = safe_popen_read_argv("/usr/bin/man", argv, 2048, 5, NULL);
 	return select_resolved_man_path(raw);
 }
@@ -321,63 +328,65 @@ select_resolved_man_path(char *raw_output)
 /* --- API JSON --- */
 /**
  * @brief Man get sections json.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 char *
 man_get_sections_json(void)
 {
 	return strdup("{"
-	"\"system\":{"
-	"\"name\":\"OpenBSD Base System\","
-	"\"path\":\"/usr/share/man\","
-	"\"sections\":["
-	"{\"id\":\"1\",\"name\":\"General Commands\"},"
-	"{\"id\":\"2\",\"name\":\"System Calls\"},"
-	"{\"id\":\"3\",\"name\":\"Library Functions\"},"
-	"{\"id\":\"3p\",\"name\":\"Perl Library\"},"
-	"{\"id\":\"4\",\"name\":\"Device Drivers\"},"
-	"{\"id\":\"5\",\"name\":\"File Formats\"},"
-	"{\"id\":\"6\",\"name\":\"Games\"},"
-	"{\"id\":\"7\",\"name\":\"Miscellaneous\"},"
-	"{\"id\":\"8\",\"name\":\"System Administration\"},"
-	"{\"id\":\"9\",\"name\":\"Kernel Internals\"}"
-	"]"
-	"},"
-	"\"x11\":{"
-	"\"name\":\"X11 Window System\","
-	"\"path\":\"/usr/X11R6/man\","
-	"\"sections\":["
-	"{\"id\":\"1\",\"name\":\"X11 Commands\"},"
-	"{\"id\":\"3\",\"name\":\"X11 Library\"},"
-	"{\"id\":\"4\",\"name\":\"X11 Drivers\"},"
-	"{\"id\":\"5\",\"name\":\"X11 Formats\"},"
-	"{\"id\":\"7\",\"name\":\"X11 Misc\"}"
-	"]"
-	"},"
-	"\"packages\":{"
-	"\"name\":\"Local Packages\","
-	"\"path\":\"/usr/local/man\","
-	"\"sections\":["
-	"{\"id\":\"1\",\"name\":\"Pkg General\"},"
-	"{\"id\":\"2\",\"name\":\"Pkg Calls\"},"
-	"{\"id\":\"3\",\"name\":\"Pkg Lib\"},"
-	"{\"id\":\"3p\",\"name\":\"Pkg Perl\"},"
-	"{\"id\":\"4\",\"name\":\"Pkg Drivers\"},"
-	"{\"id\":\"5\",\"name\":\"Pkg Formats\"},"
-	"{\"id\":\"6\",\"name\":\"Pkg Games\"},"
-	"{\"id\":\"7\",\"name\":\"Pkg Misc\"},"
-	"{\"id\":\"8\",\"name\":\"Pkg Admin\"},"
-	"{\"id\":\"9\",\"name\":\"Pkg Kernel\"}"
-	"]"
-	"}"
-	"}");
+		      "\"system\":{"
+		      "\"name\":\"OpenBSD Base System\","
+		      "\"path\":\"/usr/share/man\","
+		      "\"sections\":["
+		      "{\"id\":\"1\",\"name\":\"General Commands\"},"
+		      "{\"id\":\"2\",\"name\":\"System Calls\"},"
+		      "{\"id\":\"3\",\"name\":\"Library Functions\"},"
+		      "{\"id\":\"3p\",\"name\":\"Perl Library\"},"
+		      "{\"id\":\"4\",\"name\":\"Device Drivers\"},"
+		      "{\"id\":\"5\",\"name\":\"File Formats\"},"
+		      "{\"id\":\"6\",\"name\":\"Games\"},"
+		      "{\"id\":\"7\",\"name\":\"Miscellaneous\"},"
+		      "{\"id\":\"8\",\"name\":\"System Administration\"},"
+		      "{\"id\":\"9\",\"name\":\"Kernel Internals\"}"
+		      "]"
+		      "},"
+		      "\"x11\":{"
+		      "\"name\":\"X11 Window System\","
+		      "\"path\":\"/usr/X11R6/man\","
+		      "\"sections\":["
+		      "{\"id\":\"1\",\"name\":\"X11 Commands\"},"
+		      "{\"id\":\"3\",\"name\":\"X11 Library\"},"
+		      "{\"id\":\"4\",\"name\":\"X11 Drivers\"},"
+		      "{\"id\":\"5\",\"name\":\"X11 Formats\"},"
+		      "{\"id\":\"7\",\"name\":\"X11 Misc\"}"
+		      "]"
+		      "},"
+		      "\"packages\":{"
+		      "\"name\":\"Local Packages\","
+		      "\"path\":\"/usr/local/man\","
+		      "\"sections\":["
+		      "{\"id\":\"1\",\"name\":\"Pkg General\"},"
+		      "{\"id\":\"2\",\"name\":\"Pkg Calls\"},"
+		      "{\"id\":\"3\",\"name\":\"Pkg Lib\"},"
+		      "{\"id\":\"3p\",\"name\":\"Pkg Perl\"},"
+		      "{\"id\":\"4\",\"name\":\"Pkg Drivers\"},"
+		      "{\"id\":\"5\",\"name\":\"Pkg Formats\"},"
+		      "{\"id\":\"6\",\"name\":\"Pkg Games\"},"
+		      "{\"id\":\"7\",\"name\":\"Pkg Misc\"},"
+		      "{\"id\":\"8\",\"name\":\"Pkg Admin\"},"
+		      "{\"id\":\"9\",\"name\":\"Pkg Kernel\"}"
+		      "]"
+		      "}"
+		      "}");
 }
 
 /**
  * @brief Man get section pages json.
  * @param area Parameter used by this function.
  * @param section Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 char *
 man_get_section_pages_json(const char *area, const char *section)
@@ -442,7 +451,7 @@ man_get_section_pages_json(const char *area, const char *section)
 		/* Filter: filename must parse to the requested section. */
 		char resolved_section[16];
 		if (!parse_section_from_filename(de->d_name, resolved_section,
-		    sizeof(resolved_section)))
+						 sizeof(resolved_section)))
 			continue;
 		if (strcmp(resolved_section, section) != 0)
 			continue;
@@ -450,9 +459,8 @@ man_get_section_pages_json(const char *area, const char *section)
 		/* Extract base name (everything before the first dot). */
 		char name[128];
 		char *dot = strchr(de->d_name, '.');
-		size_t name_len = dot
-		    ? (size_t)(dot - de->d_name)
-		    : strlen(de->d_name);
+		size_t name_len =
+		    dot ? (size_t)(dot - de->d_name) : strlen(de->d_name);
 		if (name_len >= sizeof(name))
 			name_len = sizeof(name) - 1;
 		memcpy(name, de->d_name, name_len);
@@ -478,10 +486,8 @@ man_get_section_pages_json(const char *area, const char *section)
 		}
 
 		n = snprintf(json + used,
-		    MAX_JSON_SIZE - used - JSON_CLOSE_RESERVE,
-		    "%s\"%s\"",
-		    first ? "" : ",",
-		    pages[i]);
+			     MAX_JSON_SIZE - used - JSON_CLOSE_RESERVE,
+			     "%s\"%s\"", first ? "" : ",", pages[i]);
 		free(pages[i]);
 		if (n > 0) {
 			used += (size_t)n;
@@ -509,7 +515,7 @@ man_get_section_pages_json(const char *area, const char *section)
  */
 char *
 man_get_page_metadata_json(const char *area, const char *section,
-					   const char *name)
+			   const char *name)
 {
 	char *filepath = resolve_man_path(name, section);
 	if (!filepath)
@@ -521,9 +527,9 @@ man_get_page_metadata_json(const char *area, const char *section,
 		return strdup("{\"error\":\"OOM\"}");
 	}
 	snprintf(json, 1024,
-			 "{\"name\":\"%s\",\"section\":\"%s\",\"area\":\"%s\",\"path\":"
-			 "\"%s\"}",
-		  name, section, area, filepath);
+		 "{\"name\":\"%s\",\"section\":\"%s\",\"area\":\"%s\",\"path\":"
+		 "\"%s\"}",
+		 name, section, area, filepath);
 
 	free(filepath);
 	return json;
@@ -532,7 +538,8 @@ man_get_page_metadata_json(const char *area, const char *section,
 /**
  * @brief Man api search.
  * @param query Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 char *
 man_api_search(const char *query)
@@ -541,12 +548,12 @@ man_api_search(const char *query)
 		return strdup("");
 
 	char *const argv[] = {"apropos", "-M",
-		"/usr/share/man:/usr/local/man:/usr/X11R6/man",
-		(char *)query, NULL};
-		char *output = safe_popen_read_argv("/usr/bin/apropos", argv,
-											MAX_OUTPUT_SIZE, 5, NULL);
-		if (!output)
-			return strdup("");
+			      "/usr/share/man:/usr/local/man:/usr/X11R6/man",
+			      (char *)query, NULL};
+	char *output = safe_popen_read_argv("/usr/bin/apropos", argv,
+					    MAX_OUTPUT_SIZE, 5, NULL);
+	if (!output)
+		return strdup("");
 
 	return output;
 }
@@ -555,21 +562,21 @@ man_api_search(const char *query)
 /**
  * @brief Area from path.
  * @param filepath Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 static const char *
 area_from_path(const char *filepath)
 {
-	if (strncmp(filepath, "/usr/X11R6/", 11) == 0) return "x11";
-	if (strncmp(filepath, "/usr/local/",  11) == 0) return "packages";
+	if (strncmp(filepath, "/usr/X11R6/", 11) == 0)
+		return "x11";
+	if (strncmp(filepath, "/usr/local/", 11) == 0)
+		return "packages";
 	return "system";
 }
 
 /**
- * @brief Mkdir p.
- * @param dir Parameter used by this function.
- * @param base_dir Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * Crea le directory necessarie per il caching
  */
 static int
 mkdir_p(const char *dir, const char *base_dir)
@@ -580,9 +587,7 @@ mkdir_p(const char *dir, const char *base_dir)
 	char tmp[512];
 	strlcpy(tmp, dir, sizeof(tmp));
 
-	/* Under unveil, attempting mkdir() on parent paths outside base_dir
-	 * can return ENOENT even when those parents exist. Start recursive
-	 * creation from the unveiled static_dir prefix. */
+	/* Parti dalla directory base */
 	char *start = tmp;
 	if (base_dir && *base_dir) {
 		size_t base_len = strlen(base_dir);
@@ -593,27 +598,31 @@ mkdir_p(const char *dir, const char *base_dir)
 		}
 	}
 
+	/* Crea ricorsivamente le directory */
 	for (char *p = start; *p; p++) {
 		if (*p != '/')
 			continue;
 		*p = '\0';
-		if (mkdir(tmp, 0755) < 0 && errno != EEXIST)
+		if (mkdir(tmp, 0755) < 0 && errno != EEXIST) {
+			log_debug("[MAN] mkdir failed for %s: %s", tmp,
+				  strerror(errno));
 			return -1;
+		}
 		*p = '/';
 	}
 
-	if (mkdir(tmp, 0755) < 0 && errno != EEXIST)
+	/* Crea la directory finale */
+	if (mkdir(tmp, 0755) < 0 && errno != EEXIST) {
+		log_debug("[MAN] mkdir failed for %s: %s", tmp,
+			  strerror(errno));
 		return -1;
+	}
 
 	return 0;
 }
 
 /**
- * @brief Write file binary.
- * @param path Request or filesystem path to evaluate.
- * @param buf Input buffer containing textual data.
- * @param len Destination buffer length.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * Scrive un file binario su disco
  */
 static int
 write_file_binary(const char *path, const char *buf, size_t len)
@@ -621,14 +630,19 @@ write_file_binary(const char *path, const char *buf, size_t len)
 	if (!path || !buf || len == 0)
 		return -1;
 
+	log_debug("[MAN] Writing cache file: %s (%zu bytes)", path, len);
+
 	int fd = open(path, O_CREAT | O_TRUNC | O_WRONLY, 0644);
-	if (fd < 0)
+	if (fd < 0) {
+		log_debug("[MAN] open failed: %s", strerror(errno));
 		return -1;
+	}
 
 	size_t off = 0;
 	while (off < len) {
 		ssize_t w = write(fd, buf + off, len - off);
 		if (w <= 0) {
+			log_debug("[MAN] write failed: %s", strerror(errno));
 			close(fd);
 			return -1;
 		}
@@ -636,13 +650,92 @@ write_file_binary(const char *path, const char *buf, size_t len)
 	}
 
 	close(fd);
+	log_debug("[MAN] Cache write successful");
+	return 0;
+}
+
+/**
+ * Verifica se un file in cache è ancora valido
+ */
+static int
+is_hot_man_cache_hit(const char *cache_abs, const char *format)
+{
+	if (!cache_abs || !format)
+		return 0;
+
+	/* Solo html e md hanno caching */
+	if (strcmp(format, "html") != 0 && strcmp(format, "md") != 0)
+		return 0;
+
+	struct stat st;
+	if (stat(cache_abs, &st) != 0) {
+		log_debug("[MAN] Cache file not found: %s", cache_abs);
+		return 0;
+	}
+
+	time_t now = time(NULL);
+	int hit = (now - st.st_mtime) <= MAN_HOT_CACHE_TTL_SEC;
+
+	if (hit) {
+		log_debug("[MAN] Cache HIT for %s (age: %ld sec)", cache_abs,
+			  (long)(now - st.st_mtime));
+	} else {
+		log_debug("[MAN] Cache MISS for %s (age: %ld sec > %d)",
+			  cache_abs, (long)(now - st.st_mtime),
+			  MAN_HOT_CACHE_TTL_SEC);
+	}
+
+	return hit;
+}
+
+/**
+ * Verifica se un formato è cachabile su filesystem
+ */
+static int
+is_static_cache_format(const char *format)
+{
+	return strcmp(format, "html") == 0 || strcmp(format, "txt") == 0 ||
+	       strcmp(format, "md") == 0 || strcmp(format, "ps") == 0 ||
+	       strcmp(format, "pdf") == 0;
+}
+
+/**
+ * Costruisce i path per la cache (relativo e assoluto)
+ */
+static int
+build_cache_paths(const char *area, const char *section, const char *page,
+		  const char *format, char *rel, size_t rel_len, char *abs,
+		  size_t abs_len)
+{
+	if (!area || !section || !page || !format || !rel || !abs)
+		return -1;
+
+	/* Path relativo per URL: /static/man/area/section/page.format */
+	int n = snprintf(rel, rel_len, "/static/man/%s/%s/%s.%s", area, section,
+			 page, format);
+	if (n < 0 || (size_t)n >= rel_len) {
+		log_debug("[MAN] rel path too long");
+		return -1;
+	}
+
+	/* Path assoluto su filesystem: static_dir/man/area/section/page.format
+	 */
+	n = snprintf(abs, abs_len, "%s/man/%s/%s/%s.%s", config_static_dir,
+		     area, section, page, format);
+	if (n < 0 || (size_t)n >= abs_len) {
+		log_debug("[MAN] abs path too long");
+		return -1;
+	}
+
+	log_debug("[MAN] Cache paths: rel=%s, abs=%s", rel, abs);
 	return 0;
 }
 
 /**
  * @brief Mime for format.
  * @param format Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 static const char *
 mime_for_format(const char *format)
@@ -665,94 +758,33 @@ mime_for_format(const char *format)
  * @param page Manual page name used for filename.
  */
 static void
-add_content_disposition_for_format(http_response_t *resp,
-				   const char *format,
+add_content_disposition_for_format(http_response_t *resp, const char *format,
 				   const char *page)
 {
 	char content_disp[256];
 
 	if (strcmp(format, "pdf") == 0) {
-		snprintf(content_disp, sizeof(content_disp), "inline; filename=\"%s.pdf\"", page);
-		http_response_add_header(resp, "Content-Disposition", content_disp);
+		snprintf(content_disp, sizeof(content_disp),
+			 "inline; filename=\"%s.pdf\"", page);
+		http_response_add_header(resp, "Content-Disposition",
+					 content_disp);
 	} else if (strcmp(format, "md") == 0) {
 		http_response_add_header(resp, "Content-Disposition", "inline");
 	} else if (strcmp(format, "txt") == 0) {
 		http_response_add_header(resp, "Content-Disposition", "inline");
 	} else if (strcmp(format, "ps") == 0) {
-		snprintf(content_disp, sizeof(content_disp), "attachment; filename=\"%s.ps\"", page);
-		http_response_add_header(resp, "Content-Disposition", content_disp);
+		snprintf(content_disp, sizeof(content_disp),
+			 "attachment; filename=\"%s.ps\"", page);
+		http_response_add_header(resp, "Content-Disposition",
+					 content_disp);
 	}
-}
-
-/**
- * @brief Send a previously rendered manpage from cache storage.
- * @param req Request context.
- * @param cache_abs Absolute cache file path.
- * @param format Output format.
- * @param page Manual page name.
- * @return HTTP send result code or -1 on read/build failures.
- */
-static int
-is_hot_man_cache_hit(const char *cache_abs, const char *format)
-{
-	if (!cache_abs || !format)
-		return 0;
-	if (strcmp(format, "html") != 0 && strcmp(format, "md") != 0)
-		return 0;
-
-	struct stat st;
-	if (stat(cache_abs, &st) != 0)
-		return 0;
-
-	time_t now = time(NULL);
-	return (now - st.st_mtime) <= MAN_HOT_CACHE_TTL_SEC;
-}
-
-static int
-is_static_cache_format(const char *format)
-{
-	return strcmp(format, "html") == 0 || strcmp(format, "txt") == 0 ||
-		strcmp(format, "md") == 0 || strcmp(format, "ps") == 0 ||
-		strcmp(format, "pdf") == 0;
-}
-
-/**
- * @brief Compute relative and absolute paths for manpage cache files.
- * @param area Manual area identifier.
- * @param section Manual section identifier.
- * @param page Manual page name.
- * @param format Output format extension.
- * @param rel Output buffer for the relative URL path.
- * @param rel_len Size of rel buffer.
- * @param abs Output buffer for the absolute filesystem path.
- * @param abs_len Size of abs buffer.
- * @return 0 on success, -1 if input is invalid or buffers are too small.
- */
-static int
-build_cache_paths(const char *area, const char *section, const char *page,
-				  const char *format, char *rel, size_t rel_len,
-				  char *abs, size_t abs_len)
-{
-	if (!area || !section || !page || !format || !rel || !abs)
-		return -1;
-
-	int n = snprintf(rel, rel_len, "/static/man/%s/%s/%s.%s", area,
-				 section, page, format);
-	if (n < 0 || (size_t)n >= rel_len)
-		return -1;
-
-	n = snprintf(abs, abs_len, "%s/man/%s/%s/%s.%s", config_static_dir,
-			 area, section, page, format);
-	if (n < 0 || (size_t)n >= abs_len)
-		return -1;
-
-	return 0;
 }
 
 /**
  * @brief Man api search raw.
  * @param query Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 char *
 man_api_search_raw(const char *query)
@@ -768,7 +800,8 @@ man_api_search_raw(const char *query)
 	 * is_valid_token rejects whitespace and shell-significant characters.
 	 * Queries such as "ls -l" or "open files" contain spaces and are
 	 * rejected; the FE search box should send single-keyword queries.
-	 * If multi-word support is needed, widen the validator to accept spaces.
+	 * If multi-word support is needed, widen the validator to accept
+	 * spaces.
 	 *
 	 * execv (used by safe_popen_read_argv) is not a shell — there is no
 	 * injection risk — but invalid tokens produce garbage apropos output
@@ -779,24 +812,23 @@ man_api_search_raw(const char *query)
 
 	/* Use the full manual search path so results can include /usr/local/man
 	 * after the local makewhatis database has been generated. */
-	char *const argv[] = {
-		"apropos", "-M",
-		"/usr/share/man:/usr/local/man:/usr/X11R6/man",
-		(char *)query, NULL
-	};
+	char *const argv[] = {"apropos", "-M",
+			      "/usr/share/man:/usr/local/man:/usr/X11R6/man",
+			      (char *)query, NULL};
 
 	/* Increase buffer size because apropos may return a lot of text. */
 	char *output = safe_popen_read_argv("/usr/bin/apropos", argv,
-	    1024 * 1024, 5, NULL);
+					    1024 * 1024, 5, NULL);
 
 	if (!output)
 		output = strdup("");
 
 	/*
 	 * Some installations do not have a populated whatis/apropos DB, which
-	 * makes apropos return no lines even for valid pages.  Keep the endpoint
-	 * useful by falling back to a direct page resolve and emitting one
-	 * apropos-like line so the frontend parser still gets a non-empty payload.
+	 * makes apropos return no lines even for valid pages.  Keep the
+	 * endpoint useful by falling back to a direct page resolve and emitting
+	 * one apropos-like line so the frontend parser still gets a non-empty
+	 * payload.
 	 */
 	if (output[0] == '\0') {
 		char *filepath = resolve_man_path(query, "1");
@@ -804,11 +836,14 @@ man_api_search_raw(const char *query)
 			filepath = resolve_man_path(query, "8");
 		if (!filepath) {
 			char *const argv_w[] = {
-				"man", "-M", "/usr/share/man:/usr/local/man:/usr/X11R6/man",
-				"-w", (char *)query, NULL
-			};
-			filepath = safe_popen_read_argv("/usr/bin/man", argv_w, 1024, 5,
-				NULL);
+			    "man",
+			    "-M",
+			    "/usr/share/man:/usr/local/man:/usr/X11R6/man",
+			    "-w",
+			    (char *)query,
+			    NULL};
+			filepath = safe_popen_read_argv("/usr/bin/man", argv_w,
+							1024, 5, NULL);
 			if (filepath)
 				filepath[strcspn(filepath, "\r\n")] = 0;
 		}
@@ -817,12 +852,13 @@ man_api_search_raw(const char *query)
 			char section[16] = {0};
 			const char *base = strrchr(filepath, '/');
 			base = base ? base + 1 : filepath;
-			if (!parse_section_from_filename(base, section, sizeof(section)))
+			if (!parse_section_from_filename(base, section,
+							 sizeof(section)))
 				strlcpy(section, "?", sizeof(section));
 
 			char line[256];
-			snprintf(line, sizeof(line), "%s (%s) - manual page", query,
-				 section);
+			snprintf(line, sizeof(line), "%s (%s) - manual page",
+				 query, section);
 			free(output);
 			output = strdup(line);
 		}
@@ -834,13 +870,20 @@ man_api_search_raw(const char *query)
 /* --- HTTP handlers (using the native http_send_* helpers) --- */
 /**
  * Handle JSON API requests for manual pages.
+ * Endpoints supportati:
+ *   /api/man/sections                     - Lista di tutte le sezioni
+ *   /api/man/pages?section=X&area=Y       - Pagine in una sezione (con query
+ * string) /api/man/search?q=QUERY                - Ricerca apropos (con query
+ * string) /api/man/search/QUERY                   - Ricerca apropos (path
+ * style) /api/man/resolve?name=X&section=Y      - Risolvi path canonico
+ *   /api/man/{area}/{section}              - Pagine in una sezione (path style)
  */
 int
 man_api_handler(http_request_t *req)
 {
 	char *json = NULL;
 
-	/* 1. Find the command segment after /api/man */
+	/* 1. Trova il path dopo /api/man */
 	const char *api_base = "/api/man";
 	const char *path = strstr(req->url, api_base);
 	if (!path) {
@@ -848,199 +891,214 @@ man_api_handler(http_request_t *req)
 	}
 	path += strlen(api_base);
 
-	/* 2. Isolate query string from the path segment. */
+	/* 2. Separa query string dal path */
 	const char *query_string = strchr(path, '?');
 	size_t path_len =
-	query_string ? (size_t)(query_string - path) : strlen(path);
+	    query_string ? (size_t)(query_string - path) : strlen(path);
 
 	/* --- Routing logic --- */
 
-	/* /api/man/resolve?name=kqueue&section=2
-	 * Resolves the real area+path of a man page via 'man -w' so the FE
-	 * can build a correct /man/{area}/{section}/{name} link without guessing. */
-	if (path_matches_endpoint(path, "/resolve")) {
-		char name_buf[64]    = {0};
+	/* ENDPOINT: /api/man/sections */
+	if (path_matches_endpoint(path, "/sections")) {
+		json = man_get_sections_json();
+	}
+
+	/* ENDPOINT: /api/man/pages?section=X&area=Y */
+	else if (path_matches_endpoint(path, "/pages")) {
+		char section[16] = {0};
+		char area[16] = "system"; /* default area */
+
+		if (get_query_value(req->url, "section", section,
+				    sizeof(section))) {
+			(void)get_query_value(req->url, "area", area,
+					      sizeof(area));
+			json = man_get_section_pages_json(area, section);
+		} else {
+			json =
+			    strdup("{\"error\":\"Missing section parameter\"}");
+		}
+	}
+
+	/* ENDPOINT: /api/man/resolve?name=X&section=Y */
+	else if (path_matches_endpoint(path, "/resolve")) {
+		char name_buf[64] = {0};
 		char section_buf[16] = {0};
 
-		/* Extract name= and section= from query string */
-		(void)query_string;
-		(void)get_query_value(req->url, "name", name_buf, sizeof(name_buf));
+		/* Estrai parametri dalla query string */
+		(void)get_query_value(req->url, "name", name_buf,
+				      sizeof(name_buf));
 		(void)get_query_value(req->url, "section", section_buf,
 				      sizeof(section_buf));
 
 		if (name_buf[0] == '\0' || !is_valid_token(name_buf) ||
-			(section_buf[0] != '\0' && !is_valid_section(section_buf))) {
-			json = strdup("{\"error\":\"name parameter required\"}");
+		    (section_buf[0] != '\0' &&
+		     !is_valid_section(section_buf))) {
+			json =
+			    strdup("{\"error\":\"name parameter required\"}");
+		} else {
+			char *filepath = NULL;
+
+			/* Se è specificata una sezione, usala direttamente */
+			if (section_buf[0] != '\0') {
+				filepath =
+				    resolve_man_path(name_buf, section_buf);
 			} else {
-				char *filepath = NULL;
-				if (section_buf[0] != '\0') {
-					filepath = resolve_man_path(name_buf, section_buf);
-				} else {
-					const char *probe_sections[] = {"1", "8", "2", "3", "5", "7", "6", "4", "9", "3p"};
-					for (size_t i = 0; i < sizeof(probe_sections) / sizeof(probe_sections[0]); i++) {
-						filepath = resolve_man_path(name_buf, probe_sections[i]);
-						if (filepath) {
-							strlcpy(section_buf, probe_sections[i], sizeof(section_buf));
-							break;
-						}
+				/* Altrimenti cerca in tutte le sezioni comuni
+				 */
+				const char *probe_sections[] = {
+				    "1", "8", "2", "3", "5",
+				    "7", "6", "4", "9", "3p"};
+				for (size_t i = 0;
+				     i < sizeof(probe_sections) /
+					     sizeof(probe_sections[0]);
+				     i++) {
+					filepath = resolve_man_path(
+					    name_buf, probe_sections[i]);
+					if (filepath) {
+						strlcpy(section_buf,
+							probe_sections[i],
+							sizeof(section_buf));
+						break;
 					}
 				}
-				if (!filepath || filepath[0] == '\0') {
-					free(filepath);
-					json = strdup("{\"error\":\"not found\"}");
-				} else {
-					const char *area = area_from_path(filepath);
+			}
 
-					/* Extract section from filename: ls.1 -> "1" */
-					char resolved_section[16] = {0};
-					const char *base = strrchr(filepath, '/');
-					base = base ? base + 1 : filepath;
-					if (!parse_section_from_filename(base,
-								 resolved_section,
-								 sizeof(resolved_section))) {
-						strlcpy(resolved_section, section_buf,
-							sizeof(resolved_section));
-					}
+			if (!filepath || filepath[0] == '\0') {
+				free(filepath);
+				json = strdup("{\"error\":\"not found\"}");
+			} else {
+				const char *area = area_from_path(filepath);
 
-
-					/* Escape filepath for JSON — paths from 'man -w'
-					 * can contain spaces on unusual installations and
-					 * can be up to PATH_MAX bytes long. A fixed 1024-
-					 * byte stack buffer was too small; use a dynamically
-					 * sized allocation instead. */
-					char *escaped_path = json_escape_string(filepath);
-					if (!escaped_path)
-						escaped_path = strdup("");
-
-					const char *sec_out =
-					    resolved_section[0] ? resolved_section
-					                        : section_buf;
-
-					/* Calculate the exact required size, then allocate. */
-					int needed = snprintf(NULL, 0,
-					    "{\"name\":\"%s\","
-					    "\"section\":\"%s\","
-					    "\"area\":\"%s\","
-					    "\"path\":\"%s\"}",
-					    name_buf, sec_out, area,
-					    escaped_path);
-					if (needed > 0) {
-						json = malloc((size_t)needed + 1);
-						if (json) {
-							snprintf(json, (size_t)needed + 1,
-							    "{\"name\":\"%s\","
-							    "\"section\":\"%s\","
-							    "\"area\":\"%s\","
-							    "\"path\":\"%s\"}",
-							    name_buf, sec_out, area,
-							    escaped_path);
-						}
-					}
-					free(escaped_path);
-					free(filepath);
+				/* Estrai sezione dal filename: ls.1 -> "1" */
+				char resolved_section[16] = {0};
+				const char *base = strrchr(filepath, '/');
+				base = base ? base + 1 : filepath;
+				if (!parse_section_from_filename(
+					base, resolved_section,
+					sizeof(resolved_section))) {
+					strlcpy(resolved_section, section_buf,
+						sizeof(resolved_section));
 				}
-			}
-	} else {
-		/* Casi semplici: stringhe esatte senza parametri nel path */
-		if (path_matches_endpoint(path, "/sections")) {
-			json = man_get_sections_json();
-		} else if (path_matches_endpoint(path, "/pages")) {
-			/* Estrazione "section=" dalla query string */
-			char section[16] = {0};
-			char area[16] = "system";
 
-			if (get_query_value(req->url, "section", section,
-					    sizeof(section))) {
-				(void)get_query_value(req->url, "area", area,
-					      sizeof(area));
-				json = man_get_section_pages_json(area, section);
-			} else {
-				json =
-				strdup("{\"error\":\"Missing section parameter\"}");
-			}
-		} else if (strncmp(path, "/search/", 8) == 0 ||
-			   path_matches_endpoint(path, "/search")) {
-			const char *query = NULL;
-			char query_buf[256] = {0};
+				/* Escapa il path per JSON */
+				char *escaped_path =
+				    json_escape_string(filepath);
+				if (!escaped_path)
+					escaped_path = strdup("");
 
-			/* Check whether path is /api/man/search/open (JS format). */
-			if (path[7] == '/') {
-				query = path + 8; // Take everything after the slash
-			}
-			/* Check whether path is /api/man/search?q=open (curl format). */
-			else {
-				if (get_query_value(req->url, "q", query_buf,
-						    sizeof(query_buf)))
-					query = query_buf;
-			}
+				const char *sec_out = resolved_section[0]
+							  ? resolved_section
+							  : section_buf;
 
-			if (query && *query != '\0') {
-				/* Important: call the function that returns plain text,
-				 * not JSON. */
-				json = man_api_search_raw(query);
-			} else {
-				json = strdup("");
-			}
-		}
-		/* Dynamic endpoint case: /api/man/system/1 */
-		else {
-			char area[32] = {0};
-			char section[16] = {0};
-			/* Use a local path copy capped at path_len for sscanf. */
-			char path_tmp[64] = {0};
-			if (path_len < sizeof(path_tmp)) {
-				strncpy(path_tmp, path, path_len);
-				if (sscanf(path_tmp, "/%31[^/]/%15s", area, section) ==
-					2) {
-					json =
-					man_get_section_pages_json(area, section);
+				/* Costruisci JSON con la dimensione esatta */
+				int needed = snprintf(NULL, 0,
+						      "{\"name\":\"%s\","
+						      "\"section\":\"%s\","
+						      "\"area\":\"%s\","
+						      "\"path\":\"%s\"}",
+						      name_buf, sec_out, area,
+						      escaped_path);
+				if (needed > 0) {
+					json = malloc((size_t)needed + 1);
+					if (json) {
+						snprintf(json,
+							 (size_t)needed + 1,
+							 "{\"name\":\"%s\","
+							 "\"section\":\"%s\","
+							 "\"area\":\"%s\","
+							 "\"path\":\"%s\"}",
+							 name_buf, sec_out,
+							 area, escaped_path);
 					}
-			}
-
-			if (!json) {
-				json = strdup("{\"error\":\"Unknown API endpoint or "
-				"malformed path\"}");
+				}
+				free(escaped_path);
+				free(filepath);
 			}
 		}
 	}
 
-	/* 3. Send the response */
-		if (!json) {
-			return http_send_error(req, 500, "Internal Server Error");
+	/* ENDPOINT: /api/man/search?q=QUERY  o  /api/man/search/QUERY */
+	else if (strncmp(path, "/search", 7) == 0) {
+		const char *query = NULL;
+		char query_buf[256] = {0};
+
+		/* Path style: /api/man/search/QUERY */
+		if (path[7] == '/') {
+			query = path + 8; /* Prende tutto dopo lo slash */
+		}
+		/* Query string style: /api/man/search?q=QUERY */
+		else {
+			if (get_query_value(req->url, "q", query_buf,
+					    sizeof(query_buf)))
+				query = query_buf;
 		}
 
-		http_response_t *resp = http_response_create();
-		http_response_set_status(resp, 200);
-		/* For search responses, use text/plain for client-side JS handling. */
-		if (strncmp(path, "/search", 7) == 0) {
-			resp->content_type = "text/plain; charset=utf-8";
+		if (query && *query != '\0') {
+			/* Importante: usa la versione raw che ritorna plain
+			 * text */
+			json = man_api_search_raw(query);
 		} else {
-			resp->content_type = "application/json";
+			json = strdup("");
 		}
-		http_response_add_header(resp, "Access-Control-Allow-Origin", "*");
+	}
 
-		http_response_set_body(resp, json, strlen(json),
-			   1); /* 1 = free json */
+	/* ENDPOINT: /api/man/{area}/{section}  (es. /api/man/system/1) */
+	else {
+		char area[32] = {0};
+		char section[16] = {0};
+		char path_tmp[64] = {0};
 
-		int ret = http_response_send(req, resp);
-		http_response_free(resp);
+		if (path_len < sizeof(path_tmp)) {
+			strncpy(path_tmp, path, path_len);
+			path_tmp[path_len] = '\0';
 
-		return ret;
+			/* Prova a parsare come /area/section */
+			if (sscanf(path_tmp, "/%31[^/]/%15s", area, section) ==
+			    2) {
+				json =
+				    man_get_section_pages_json(area, section);
+			}
+		}
+
+		if (!json) {
+			json = strdup("{\"error\":\"Unknown API endpoint or "
+				      "malformed path\"}");
+		}
+	}
+
+	/* 3. Invia la risposta */
+	if (!json) {
+		return http_send_error(req, 500, "Internal Server Error");
+	}
+
+	http_response_t *resp = http_response_create();
+	http_response_set_status(resp, 200);
+
+	/* Per search responses, usa text/plain per il parsing lato client */
+	if (strstr(path, "/search") != NULL) {
+		resp->content_type = "text/plain; charset=utf-8";
+	} else {
+		resp->content_type = "application/json";
+	}
+
+	http_response_add_header(resp, "Access-Control-Allow-Origin", "*");
+	http_response_set_body(resp, json, strlen(json), 1); /* 1 = free json */
+
+	int ret = http_response_send(req, resp);
+	http_response_free(resp);
+
+	return ret;
 }
 
 /**
  * Renders a man page via mandoc. Supports html, pdf, ps, md formats.
- * area parameter is accepted for API compat but ignored - full MANPATH
- * is always used; real area is derived from the resolved filepath.
  */
 char *
 man_render_page(const char *area, const char *section, const char *page,
 				const char *format, size_t *out_len)
 {
 	/* area is accepted for API compatibility but we always use the full
-	 * MANPATH so any page in any of the three trees is found regardless of
-	 * what the caller passes. area_from_path() derives the real area from
-	 * the resolved filepath when needed. */
+	 * MANPATH so any page in any of the three trees is found */
 	(void)area;
 
 	/* 1. Resolve physical file path via 'man -w' with full MANPATH. */
@@ -1055,15 +1113,13 @@ man_render_page(const char *area, const char *section, const char *page,
 			"-w", (char *)page, NULL
 		};
 		filepath = safe_popen_read_argv("/usr/bin/man", argv_w, 1024, 5,
-			NULL);
+										NULL);
 	}
 
 	if (!filepath)
 		return NULL;
 
-	/* Validate: man -w must return an absolute path.
-	 * An empty string means the page was not found.
-	 * A non-'/' first byte means something went wrong. */
+	/* Validate: man -w must return an absolute path. */
 	if (filepath[0] != '/') {
 		free(filepath);
 		return NULL;
@@ -1080,11 +1136,8 @@ man_render_page(const char *area, const char *section, const char *page,
 	else if (strcmp(format, "txt") == 0)
 		t_arg = "ascii";
 
-	/* 4. Execute mandoc. Keep out_len as the authoritative output size. */
-	/* For HTML output, pass -O style= so mandoc links our stylesheet
-	 * instead of embedding its own minimal inline CSS.
-	 * Other formats (pdf, ps, markdown) do not support -O style. */
-	char *argv_m[10]; /* Sufficient argument buffer. */
+	/* 4. Execute mandoc. */
+	char *argv_m[10];
 	int argc = 0;
 
 	argv_m[argc++] = "mandoc";
@@ -1102,44 +1155,30 @@ man_render_page(const char *area, const char *section, const char *page,
 	char *output = safe_popen_read_argv("/usr/bin/mandoc", argv_m,
 										MAX_OUTPUT_SIZE, 10, out_len);
 
-	/* Normalize mandoc ASCII output so text downloads/rendering are clean
-	 * across browsers (no nroff overstrike backspace sequences). */
+	/* Normalize mandoc ASCII output */
 	if (output && *out_len > 0 && strcmp(format, "txt") == 0) {
 		strip_overstrike_ascii(output, out_len);
 	}
 
-	/* Fallback for man(7) pages that cannot be converted to markdown.
-	 * Return plain ASCII text instead of surfacing a 404 for .md requests. */
+	/* Fallback for man(7) pages that cannot be converted to markdown */
 	if (!output && strcmp(format, "md") == 0) {
 		char *const argv_ascii[] = {
 			"mandoc", "-T", "ascii", filepath, NULL
 		};
 		output = safe_popen_read_argv("/usr/bin/mandoc", argv_ascii,
-							 MAX_OUTPUT_SIZE, 10, out_len);
+									  MAX_OUTPUT_SIZE, 10, out_len);
 		if (output && *out_len > 0) {
 			strip_overstrike_ascii(output, out_len);
 		}
 	}
 
-	/* Optional debug logging for PDF output verification. */
-	if (config_verbose && strcmp(format, "pdf") == 0 && output && *out_len > 0) {
-		log_debug("[MAN] PDF generated: size=%zu bytes", *out_len);
-		log_debug("[MAN] PDF signature: %02x %02x %02x %02x",
-				(unsigned char)output[0], (unsigned char)output[1],
-				(unsigned char)output[2], (unsigned char)output[3]);
-		/* A valid PDF starts with %PDF (25 50 44 46). */
-	}
-
-	/* Cleanup. */
 	free(filepath);
-
-	return output; /* output is raw binary, out_len contains the length
-				 exact length */
+	return output;
 }
 
 /**
-	* Handler for visual rendering of man pages.
-	* Expected URL: /man/{area}/{section}/{page}[.format]
+ * Handler for visual rendering of man pages.
+ * Expected URL: /man/{area}/{section}/{page}[.format]
  */
 int
 man_render_handler(http_request_t *req)
@@ -1148,8 +1187,6 @@ man_render_handler(http_request_t *req)
 	char section[16] = "";
 	char page[64] = "";
 	char format[16] = "html";
-	char cache_area[32] = "system";
-	char cache_section[16] = "";
 
 	/* 1. Parse URL (example: /man/system/1/ls.html). */
 	if (strncmp(req->url, "/man/", 5) != 0) {
@@ -1182,38 +1219,21 @@ man_render_handler(http_request_t *req)
 	/* 2. Minimal validation. */
 	if (page[0] == '\0' || section[0] == '\0') {
 		return http_send_error(req, 400,
-							   "Missing section or page name");
+				       "Missing section or page name");
 	}
 	if (strcmp(format, "html") != 0 && strcmp(format, "pdf") != 0 &&
-		strcmp(format, "ps") != 0 && strcmp(format, "md") != 0 &&
-		strcmp(format, "txt") != 0) {
+	    strcmp(format, "ps") != 0 && strcmp(format, "md") != 0 &&
+	    strcmp(format, "txt") != 0) {
 		return http_send_error(req, 400, "Unsupported format");
-	}
-
-	/* Canonicalize area/section for cache keys using the resolved file path so
-	 * aliases across MANPATH trees map to one cache location. */
-	strlcpy(cache_section, section, sizeof(cache_section));
-	char *resolved = resolve_man_path(page, section);
-	if (resolved) {
-		const char *resolved_area = area_from_path(resolved);
-		strlcpy(cache_area, resolved_area, sizeof(cache_area));
-
-		const char *base = strrchr(resolved, '/');
-		base = base ? base + 1 : resolved;
-		(void)parse_section_from_filename(base, cache_section,
-						     sizeof(cache_section));
-		free(resolved);
-	} else {
-		strlcpy(cache_area, area, sizeof(cache_area));
 	}
 
 	char cache_rel[512];
 	char cache_abs[512];
-	if (build_cache_paths(cache_area, cache_section, page, format, cache_rel,
-				  sizeof(cache_rel), cache_abs,
-				  sizeof(cache_abs)) == 0 &&
-		is_static_cache_format(format) && access(cache_abs, R_OK) == 0 &&
-		is_hot_man_cache_hit(cache_abs, format)) {
+	if (build_cache_paths(area, section, page, format, cache_rel,
+			      sizeof(cache_rel), cache_abs,
+			      sizeof(cache_abs)) == 0 &&
+	    is_static_cache_format(format) && access(cache_abs, R_OK) == 0 &&
+	    is_hot_man_cache_hit(cache_abs, format)) {
 		const char *old_url = req->url;
 		req->url = cache_rel;
 		int ret = static_handler(req);
@@ -1223,8 +1243,7 @@ man_render_handler(http_request_t *req)
 
 	/* 3. Render content. */
 	size_t out_len = 0;
-	char *output = man_render_page(cache_area, cache_section, page, format,
-				      &out_len);
+	char *output = man_render_page(area, section, page, format, &out_len);
 
 	if (!output) {
 		return http_send_error(req, 404, "Manual page not found");
@@ -1237,20 +1256,21 @@ man_render_handler(http_request_t *req)
 		*last_slash = '\0';
 
 		if (mkdir_p(cache_dir, config_static_dir) == 0) {
-			if (write_file_binary(cache_abs, output, out_len) != 0 &&
-				config_verbose) {
-				log_debug(
-					"[MAN] cache write failed: %s (errno=%d: %s)\n",
-					cache_abs, errno, strerror(errno));
+			if (write_file_binary(cache_abs, output, out_len) !=
+				0 &&
+			    config_verbose) {
+				log_debug("[MAN] cache write failed: %s "
+					  "(errno=%d: %s)\n",
+					  cache_abs, errno, strerror(errno));
 			} else if (config_verbose) {
 				log_debug(
-					"[MAN] cache write ok: %s (%zu bytes)\n",
-					cache_abs, out_len);
+				    "[MAN] cache write ok: %s (%zu bytes)\n",
+				    cache_abs, out_len);
 			}
 		} else if (config_verbose) {
-			log_debug(
-				"[MAN] cache directory create failed: %s (errno=%d: %s)\n",
-				cache_dir, errno, strerror(errno));
+			log_debug("[MAN] cache directory create failed: %s "
+				  "(errno=%d: %s)\n",
+				  cache_dir, errno, strerror(errno));
 		}
 	}
 
@@ -1273,7 +1293,8 @@ man_render_handler(http_request_t *req)
 	char clen[32];
 	snprintf(clen, sizeof(clen), "%zu", out_len);
 	http_response_add_header(resp, "Content-Length", clen);
-	http_response_add_header(resp, "Cache-Control", "no-cache, no-store, must-revalidate");
+	http_response_add_header(resp, "Cache-Control",
+				 "no-cache, no-store, must-revalidate");
 	http_response_add_header(resp, "Pragma", "no-cache");
 	http_response_add_header(resp, "Expires", "0");
 
@@ -1292,7 +1313,20 @@ man_render_handler(http_request_t *req)
 int
 man_module_attach_routes(struct router *r)
 {
-	if (router_register_prefix(r, "GET", "/man/", 2, man_render_handler) != 0)
+	// Registra il renderer per le pagine man
+	if (router_register_prefix(r, "GET", "/man/", 2, man_render_handler) !=
+	    0)
 		return -1;
-	return router_register_prefix(r, "GET", "/api/man", 0, man_api_handler);
+
+	// Registra tutti gli endpoint API man
+	if (router_register_prefix(r, "GET", "/api/man", 0, man_api_handler) !=
+	    0)
+		return -1;
+
+	// Registra anche i singoli endpoint per sicurezza
+	if (router_register(r, "GET", "/api/man/sections", man_api_handler) !=
+	    0)
+		return -1;
+
+	return 0;
 }
