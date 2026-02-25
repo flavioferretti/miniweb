@@ -1,3 +1,4 @@
+
 /* packages_module.c - pkg manager implementation */
 
 #include <ctype.h>
@@ -20,18 +21,18 @@
 #define PKG_WHICH_TIMEOUT 60
 
 /* Cache disabilitata per ora - commentata per evitare warning
- # *define PKG_SEARCH_CACHE_SIZE 64
- #define PKG_SEARCH_CACHE_TTL_SEC 30
-
- typedef struct {
- char *query;
- char *json;
- time_t created_at;
- time_t last_used_at;
- } pkg_search_cache_entry_t;
-
- static pkg_search_cache_entry_t g_pkg_search_cache[PKG_SEARCH_CACHE_SIZE];
- static pthread_mutex_t g_pkg_search_cache_lock = PTHREAD_MUTEX_INITIALIZER;
+ * # *define PKG_SEARCH_CACHE_SIZE 64
+ * #define PKG_SEARCH_CACHE_TTL_SEC 30
+ *
+ * typedef struct {
+ * char *query;
+ * char *json;
+ * time_t created_at;
+ * time_t last_used_at;
+ * } pkg_search_cache_entry_t;
+ *
+ * static pkg_search_cache_entry_t g_pkg_search_cache[PKG_SEARCH_CACHE_SIZE];
+ * static pthread_mutex_t g_pkg_search_cache_lock = PTHREAD_MUTEX_INITIALIZER;
  */
 
 /**
@@ -122,14 +123,15 @@ get_query_value(const char *url, const char *key, char *out, size_t out_size)
 			char encoded[1024];
 			size_t encoded_len = (size_t)(amp - (eq + 1));
 
-			if (encoded_len >= sizeof(encoded))
+			if (encoded_len >= sizeof(encoded)) {
 				return 0;
-
+			}
 			memcpy(encoded, eq + 1, encoded_len);
 			encoded[encoded_len] = '\0';
 
-			if (url_decode_into(encoded, out, out_size) != 0)
+			if (url_decode_into(encoded, out, out_size) != 0) {
 				return 0;
+			}
 			return 1;
 		}
 
@@ -366,9 +368,10 @@ make_raw_json(const char *output)
 char *
 pkg_info_json(const char *package_name)
 {
-	if (!is_safe_pkg_name(package_name))
+	if (!is_safe_pkg_name(package_name)) {
 		return strdup(
 		    "{\"found\":false,\"raw\":\"invalid package name\"}");
+	}
 
 	char *const argv[] = {"pkg_info", (char *)package_name, NULL};
 	char *output = safe_popen_read_argv("/usr/sbin/pkg_info", argv,
@@ -491,11 +494,11 @@ pkg_list_json(void)
 char *
 pkg_which_json(const char *file_path)
 {
-	if (!is_safe_path(file_path))
+	if (!is_safe_path(file_path)) {
 		return strdup(
 		    "{\"found\":false,\"raw\":\"path must be absolute and "
 		    "contain no shell metacharacters\"}");
-
+	}
 	char *const argv_w[] = {"pkg_info", "-W", (char *)file_path, NULL};
 	char *output =
 	    safe_popen_read_argv("/usr/sbin/pkg_info", argv_w,
@@ -510,6 +513,7 @@ pkg_which_json(const char *file_path)
 	}
 	char *json = make_raw_json(output);
 	free(output);
+
 	return json ? json : strdup("{\"found\":false,\"raw\":\"\"}");
 }
 
@@ -539,20 +543,17 @@ pkg_api_handler(http_request_t *req)
 		json = pkg_search_json(value);
 	} else if (path_matches_endpoint(path, "/info")) {
 		if (!get_query_value(req->url, "name", value, sizeof(value)))
-			return http_send_error(req, 400,
-					       "Missing name parameter");
+			return http_send_error(req, 400, "Missing name parameter");
 		log_debug("[PKG] Info for: %s", value);
 		json = pkg_info_json(value);
 	} else if (path_matches_endpoint(path, "/which")) {
 		if (!get_query_value(req->url, "path", value, sizeof(value)))
-			return http_send_error(req, 400,
-					       "Missing path parameter");
+			return http_send_error(req, 400, "Missing path parameter");
 		log_debug("[PKG] Which for path: %s", value);
 		json = pkg_which_json(value);
 	} else if (path_matches_endpoint(path, "/files")) {
 		if (!get_query_value(req->url, "name", value, sizeof(value)))
-			return http_send_error(req, 400,
-					       "Missing name parameter");
+			return http_send_error(req, 400, "Missing name parameter");
 		log_debug("[PKG] Files for: %s", value);
 		json = pkg_files_json(value);
 	} else if (path_matches_endpoint(path, "/list")) {
@@ -586,7 +587,7 @@ pkg_api_handler(http_request_t *req)
 int
 packages_module_attach_routes(struct router *r)
 {
-	/* Registra il prefisso per tutti gli endpoint packages */
+	/* Register the prefix route for all packages endpoints. */
 	if (router_register_prefix(r, "GET", "/api/packages", 0,
 				   pkg_api_handler) != 0)
 		return -1;

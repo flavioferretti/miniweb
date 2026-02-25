@@ -1,3 +1,4 @@
+
 #include <miniweb/net/server.h>
 
 #include <arpa/inet.h>
@@ -42,13 +43,13 @@ handle_accept(miniweb_server_runtime_t *rt)
 		}
 		set_nonblock(cfd);
 		miniweb_connection_t *conn = miniweb_connection_alloc(&rt->pool, cfd,
-		    &caddr, rt->config->max_conns);
+															  &caddr, rt->config->max_conns);
 		if (!conn) {
 			http_request_t req = {.fd = cfd,.method = "GET",.url = "/",
-			    .version = "HTTP/1.1",.keep_alive = 0};
-			(void)http_send_error(&req, 503, "Server busy");
-			close(cfd);
-			continue;
+				.version = "HTTP/1.1",.keep_alive = 0};
+				(void)http_send_error(&req, 503, "Server busy");
+				close(cfd);
+				continue;
 		}
 		struct kevent ev;
 		EV_SET(&ev, cfd, EVFILT_READ, EV_ADD | EV_DISPATCH, 0, 0, conn);
@@ -80,15 +81,15 @@ miniweb_server_run(miniweb_server_runtime_t *rt)
 	struct sockaddr_in sa;
 	pthread_t threads[MINIWEB_THREAD_POOL_SIZE];
 	miniweb_worker_runtime_t worker_rt = {.running = &rt->running,
-	    .kq_fd = &rt->kq_fd,.config = rt->config,.queue = &rt->queue,
-	    .pool = &rt->pool};
+		.kq_fd = &rt->kq_fd,.config = rt->config,.queue = &rt->queue,
+		.pool = &rt->pool};
 
-	rt->running = 1;
-	miniweb_work_queue_init(&rt->queue);
-	miniweb_connection_pool_init(&rt->pool);
-	rt->listen_fd = socket(AF_INET, SOCK_STREAM, 0);
-	if (rt->listen_fd < 0)
-		return -1;
+		rt->running = 1;
+		miniweb_work_queue_init(&rt->queue);
+		miniweb_connection_pool_init(&rt->pool);
+		rt->listen_fd = socket(AF_INET, SOCK_STREAM, 0);
+		if (rt->listen_fd < 0)
+			return -1;
 	int on = 1;
 	setsockopt(rt->listen_fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
 	set_nonblock(rt->listen_fd);
@@ -98,7 +99,7 @@ miniweb_server_run(miniweb_server_runtime_t *rt)
 	if (inet_pton(AF_INET, rt->config->bind_addr, &sa.sin_addr) != 1)
 		return -1;
 	if (bind(rt->listen_fd, (struct sockaddr *)&sa, sizeof(sa)) < 0 ||
-	    listen(rt->listen_fd, MINIWEB_LISTEN_BACKLOG) < 0)
+		listen(rt->listen_fd, MINIWEB_LISTEN_BACKLOG) < 0)
 		return -1;
 	rt->kq_fd = kqueue();
 	if (rt->kq_fd < 0)
@@ -133,7 +134,7 @@ miniweb_server_run(miniweb_server_runtime_t *rt)
 			int fd = (int)ev->ident;
 			miniweb_connection_t *conn = (miniweb_connection_t *)ev->udata;
 			if (fd < 0 || fd >= MINIWEB_MAX_CONNECTIONS ||
-			    miniweb_connection_is_stale(&rt->pool, fd, conn))
+				miniweb_connection_is_stale(&rt->pool, fd, conn))
 				continue;
 			if (ev->flags & (EV_EOF | EV_ERROR)) {
 				close(fd);

@@ -1,3 +1,4 @@
+
 /* utils.c - Utility functions: JSON escaping, string sanitization,
  *                subprocess execution.
  *
@@ -19,15 +20,16 @@
 
 /* JSON string escaping — caller must free() */
 /**
- * @brief TODO: Describe json_escape_string.
- * @param src TODO: Describe this parameter.
- * @return TODO: Describe the return value.
+ * @brief Produce a heap-allocated JSON-escaped copy of @p src.
+ *
+ * Special characters (double-quote, backslash, and ASCII control codes)
+ * are escaped with their JSON backslash sequences.  The caller must free
+ * the returned string.
+ *
+ * @param src Source string, or NULL (returns an empty string).
+ * @return Newly allocated escaped string, or an empty strdup on failure.
  */
-/**
- * @brief Json escape string.
- * @param src Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
- */
+/* See json_escape_string() Doxygen block above. */
 char *
 json_escape_string(const char *src)
 {
@@ -58,14 +60,12 @@ json_escape_string(const char *src)
 }
 
 /**
- * @brief TODO: Describe sanitize_string.
- * @param s TODO: Describe this parameter.
- */
-/* Replace characters unsafe for filesystem use with '_'.
- * Permits: alphanumeric, '.', '-', '_', '+' */
-/**
- * @brief Sanitize string.
- * @param s Input string to parse or sanitize.
+ * @brief Replace characters that are unsafe for filesystem paths with '_'.
+ *
+ * Permitted characters: alphanumeric, '.', '-', '_', '+'.
+ * All other bytes are overwritten in-place.
+ *
+ * @param s NUL-terminated string to sanitise. Modified in-place.
  */
 void
 sanitize_string(char *s)
@@ -96,7 +96,7 @@ safe_popen_read_argv(const char *path, char *const argv[],
 		return NULL;
 	}
 
-	/* Usa vfork() invece di fork() - più sicuro con pledge */
+	/* Use vfork() instead of fork() — safer when pledge(2) is active. */
 	pid_t pid = vfork();
 	if (pid == -1) {
 		log_debug("[UTILS] vfork() failed: %s", strerror(errno));
@@ -106,7 +106,7 @@ safe_popen_read_argv(const char *path, char *const argv[],
 	}
 
 	if (pid == 0) {
-		/* Child process - in vfork condividiamo la memoria col parent */
+		/* Child process — shares address space with parent until execv(). */
 		close(pipefd[0]);
 
 		/* Redirect stdout to pipe */
@@ -120,10 +120,10 @@ safe_popen_read_argv(const char *path, char *const argv[],
 			close(devnull);
 		}
 
-		/* Esegui il comando */
+		/* Execute the command. */
 		execv(path, argv);
 
-		/* Se arriviamo qui, execv è fallito */
+		/* If we reach here, execv() failed. */
 		_exit(127);
 	}
 
@@ -199,17 +199,16 @@ safe_popen_read_argv(const char *path, char *const argv[],
 
 /* Convenience wrapper: run cmd through /bin/sh -c */
 /**
- * @brief TODO: Describe safe_popen_read.
- * @param cmd TODO: Describe this parameter.
- * @param max_size TODO: Describe this parameter.
- * @return TODO: Describe the return value.
+ * @brief Run a shell command and return its stdout as a heap buffer.
+ *
+ * Convenience wrapper around safe_popen_read_argv() that executes @p cmd
+ * via /bin/sh -c with a fixed 5-second timeout.
+ *
+ * @param cmd      Shell command string.
+ * @param max_size Maximum bytes to read from stdout.
+ * @return Heap-allocated NUL-terminated output, or NULL on timeout/error.
  */
-/**
- * @brief Safe popen read.
- * @param cmd Parameter used by this function.
- * @param max_size Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
- */
+/* See safe_popen_read() Doxygen block above. */
 char *
 safe_popen_read(const char *cmd, size_t max_size)
 {

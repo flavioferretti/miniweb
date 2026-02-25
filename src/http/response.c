@@ -170,18 +170,18 @@ response_pool_init_locked(response_pool_t *pool)
  */
 static void
 file_cache_refill_budget_locked(file_cache_shard_t *shard, time_t now,
-					int shard_idx)
+								int shard_idx)
 {
 	if (shard->cache_insert_window == 0 || now != shard->cache_insert_window) {
 		if (shard->cache_insert_window != 0) {
 			log_debug("[FILE_CACHE] shard=%d/sec=%ld hits=%u misses=%u inserts=%u throttles=%u budget=%d",
-				  shard_idx,
-				  (long)shard->cache_insert_window,
-				  shard->window_hits,
-				  shard->window_misses,
-				  shard->window_inserts,
-				  shard->window_throttles,
-				  FILE_CACHE_INSERTS_PER_SEC);
+					  shard_idx,
+			 (long)shard->cache_insert_window,
+					  shard->window_hits,
+			 shard->window_misses,
+			 shard->window_inserts,
+			 shard->window_throttles,
+			 FILE_CACHE_INSERTS_PER_SEC);
 		}
 		shard->cache_insert_window = now;
 		shard->cache_insert_tokens = FILE_CACHE_INSERTS_PER_SEC;
@@ -225,7 +225,7 @@ file_cache_evict_stale_locked(file_cache_shard_t *shard, time_t now)
  */
 static int
 file_cache_admit_locked(file_cache_shard_t *shard, const char *path,
-				time_t now)
+						time_t now)
 {
 	int slot = -1;
 	time_t oldest = 0;
@@ -250,7 +250,7 @@ file_cache_admit_locked(file_cache_shard_t *shard, const char *path,
 		return 0;
 
 	strlcpy(shard->candidates[slot].path, path,
-		sizeof(shard->candidates[slot].path));
+			sizeof(shard->candidates[slot].path));
 	shard->candidates[slot].hits = 1;
 	shard->candidates[slot].atime = now;
 	return 0;
@@ -355,16 +355,16 @@ file_cache_lookup(const char *path, const struct stat *st, char **out,
 		if (strcmp(shard->entries[i].path, path) == 0 &&
 			shard->entries[i].mtime == st->st_mtime) {
 			*out = malloc(shard->entries[i].len);
-			if (*out) {
-				memcpy(*out, shard->entries[i].data,
-				       shard->entries[i].len);
-				*out_len = shard->entries[i].len;
-				shard->entries[i].atime = now;
-				shard->window_hits++;
-				found = 1;
-			}
-			break;
+		if (*out) {
+			memcpy(*out, shard->entries[i].data,
+				   shard->entries[i].len);
+			*out_len = shard->entries[i].len;
+			shard->entries[i].atime = now;
+			shard->window_hits++;
+			found = 1;
 		}
+		break;
+			}
 	}
 	if (!found)
 		shard->window_misses++;
@@ -634,33 +634,33 @@ http_response_free(http_response_t *resp)
 	}
 
 	if (resp->pool_shard_idx >= 0 &&
-	    resp->pool_shard_idx < RESPONSE_POOL_SHARDS) {
+		resp->pool_shard_idx < RESPONSE_POOL_SHARDS) {
 		response_pool_t *pool = &response_pools[resp->pool_shard_idx];
-		if (resp >= pool->items && resp < (pool->items + 1024)) {
-			ptrdiff_t idx = resp - pool->items;
-			pthread_mutex_lock(&pool->lock);
-			memset(resp, 0, sizeof(*resp));
-			if (pool->free_top < 1024)
-				pool->free_stack[pool->free_top++] = (int)idx;
-			pthread_mutex_unlock(&pool->lock);
-			return;
-		}
+	if (resp >= pool->items && resp < (pool->items + 1024)) {
+		ptrdiff_t idx = resp - pool->items;
+		pthread_mutex_lock(&pool->lock);
+		memset(resp, 0, sizeof(*resp));
+		if (pool->free_top < 1024)
+			pool->free_stack[pool->free_top++] = (int)idx;
+		pthread_mutex_unlock(&pool->lock);
+		return;
 	}
-
-	for (int shard_idx = 0; shard_idx < RESPONSE_POOL_SHARDS; shard_idx++) {
-		response_pool_t *pool = &response_pools[shard_idx];
-		if (resp >= pool->items && resp < (pool->items + 1024)) {
-			ptrdiff_t idx = resp - pool->items;
-			pthread_mutex_lock(&pool->lock);
-			memset(resp, 0, sizeof(*resp));
-			if (pool->free_top < 1024)
-				pool->free_stack[pool->free_top++] = (int)idx;
-			pthread_mutex_unlock(&pool->lock);
-			return;
 		}
-	}
 
-	free(resp);
+		for (int shard_idx = 0; shard_idx < RESPONSE_POOL_SHARDS; shard_idx++) {
+			response_pool_t *pool = &response_pools[shard_idx];
+			if (resp >= pool->items && resp < (pool->items + 1024)) {
+				ptrdiff_t idx = resp - pool->items;
+				pthread_mutex_lock(&pool->lock);
+				memset(resp, 0, sizeof(*resp));
+				if (pool->free_top < 1024)
+					pool->free_stack[pool->free_top++] = (int)idx;
+				pthread_mutex_unlock(&pool->lock);
+				return;
+			}
+		}
+
+		free(resp);
 }
 
 /* Get request header - writes into caller-supplied buffer, thread-safe */
@@ -807,10 +807,10 @@ http_send_error(http_request_t *req, int status_code, const char *message)
 
 /* Send JSON response */
 /**
- * @brief Http send json.
- * @param req Request context for response generation.
- * @param json Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @brief Build and send a 200 application/json response.
+ * @param req  Incoming request context.
+ * @param json NUL-terminated JSON string to send.
+ * @return 0 on success, -1 on write failure.
  */
 int
 http_send_json(http_request_t *req, const char *json)
@@ -829,10 +829,10 @@ http_send_json(http_request_t *req, const char *json)
 
 /* Send HTML response */
 /**
- * @brief Http send html.
- * @param req Request context for response generation.
- * @param html Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @brief Build and send a 200 text/html response.
+ * @param req  Incoming request context.
+ * @param html NUL-terminated HTML string to send.
+ * @return 0 on success, -1 on write failure.
  */
 int
 http_send_html(http_request_t *req, const char *html)
@@ -848,13 +848,17 @@ http_send_html(http_request_t *req, const char *html)
 	return ret;
 }
 
-/* Versione corretta di http_send_file */
+/* Correct implementation of http_send_file with cache support. */
 /**
- * @brief Http send file.
- * @param req Request context for response generation.
- * @param path Request or filesystem path to evaluate.
- * @param mime Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @brief Serve a local file as an HTTP response with MIME type @p mime.
+ *
+ * Consults the sharded static file cache before falling back to direct
+ * read.  Returns 404 when the file cannot be opened.
+ *
+ * @param req  Incoming request context.
+ * @param path Absolute filesystem path of the file to serve.
+ * @param mime Content-Type header value.
+ * @return 0 on success, -1 on write failure.
  */
 int
 http_send_file(http_request_t *req, const char *path, const char *mime)
@@ -930,7 +934,7 @@ http_send_file(http_request_t *req, const char *path, const char *mime)
 	return 0;
 }
 
-/* In http_handler.c */
+
 /**
  * @brief Render an HTML template and send it as HTTP response.
  * @param req Request context.

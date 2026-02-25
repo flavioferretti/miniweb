@@ -15,9 +15,9 @@ static int              log_verbose = 0;
 static pthread_mutex_t  log_mutex   = PTHREAD_MUTEX_INITIALIZER;
 
 /**
- * @brief TODO: Describe log_timestamp.
- * @param buf TODO: Describe this parameter.
- * @param len TODO: Describe this parameter.
+ * @brief Write an ISO-8601 timestamp into @p buf.
+ * @param buf Destination buffer.
+ * @param len Capacity of @p buf in bytes.
  */
 static void
 log_timestamp(char *buf, size_t len)
@@ -30,10 +30,13 @@ log_timestamp(char *buf, size_t len)
 }
 
 /**
- * @brief TODO: Describe log_init.
- * @param path TODO: Describe this parameter.
- * @param verbose TODO: Describe this parameter.
- * @return TODO: Describe the return value.
+ * @brief Open the log destination and configure verbosity.
+ *
+ * When @p path is NULL or empty, log output goes to stderr.
+ *
+ * @param path    Log file path, or NULL/empty for stderr.
+ * @param verbose Non-zero to enable debug-level messages.
+ * @return 0 on success, -1 when the log file cannot be opened.
  */
 int
 log_init(const char *path, int verbose)
@@ -55,7 +58,7 @@ log_init(const char *path, int verbose)
 }
 
 /**
- * @brief TODO: Describe log_close.
+ * @brief Flush and close the log file opened by log_init().
  */
 void
 log_close(void)
@@ -69,8 +72,8 @@ log_close(void)
 }
 
 /**
- * @brief TODO: Describe log_set_verbose.
- * @param verbose TODO: Describe this parameter.
+ * @brief Enable or disable debug-level log output at runtime.
+ * @param verbose Non-zero to enable debug messages.
  */
 void
 log_set_verbose(int verbose)
@@ -79,10 +82,10 @@ log_set_verbose(int verbose)
 }
 
 /**
- * @brief TODO: Describe log_write.
- * @param level TODO: Describe this parameter.
- * @param fmt TODO: Describe this parameter.
- * @param ap TODO: Describe this parameter.
+ * @brief Format and emit one log line with the given severity label.
+ * @param level Severity label string (e.g., "INFO", "ERROR").
+ * @param fmt   printf-style format string.
+ * @param ap    Variadic argument list.
  */
 static void
 log_write(const char *level, const char *fmt, va_list ap)
@@ -102,9 +105,8 @@ log_write(const char *level, const char *fmt, va_list ap)
 }
 
 /**
- * @brief TODO: Describe log_info.
- * @param fmt TODO: Describe this parameter.
- * @param param TODO: Describe this parameter.
+ * @brief Emit an INFO-level log message.
+ * @param fmt printf-style format string followed by variadic arguments.
  */
 void
 log_info(const char *fmt, ...)
@@ -116,9 +118,8 @@ log_info(const char *fmt, ...)
 }
 
 /**
- * @brief TODO: Describe log_debug.
- * @param fmt TODO: Describe this parameter.
- * @param param TODO: Describe this parameter.
+ * @brief Emit a DEBUG-level log message (only when verbose mode is active).
+ * @param fmt printf-style format string followed by variadic arguments.
  */
 void
 log_debug(const char *fmt, ...)
@@ -132,9 +133,8 @@ log_debug(const char *fmt, ...)
 }
 
 /**
- * @brief TODO: Describe log_error.
- * @param fmt TODO: Describe this parameter.
- * @param param TODO: Describe this parameter.
+ * @brief Emit an ERROR-level log message.
+ * @param fmt printf-style format string followed by variadic arguments.
  */
 void
 log_error(const char *fmt, ...)
@@ -146,8 +146,8 @@ log_error(const char *fmt, ...)
 }
 
 /**
- * @brief TODO: Describe log_errno.
- * @param context TODO: Describe this parameter.
+ * @brief Emit an ERROR-level log message that includes strerror(errno).
+ * @param context Short description of the operation that failed.
  */
 void
 log_errno(const char *context)

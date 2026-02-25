@@ -1,3 +1,4 @@
+
 /* man_module.c - man generation implementation */
 
 #include <ctype.h>
@@ -21,7 +22,7 @@
 #include <miniweb/router/routes.h>
 
 #define MAX_JSON_SIZE (256 * 1024)
-#define MAX_OUTPUT_SIZE (10 * 1024 * 1024) // 10 MB!
+#define MAX_OUTPUT_SIZE (10 * 1024 * 1024) /* 10 MiB hard ceiling. */
 #define MAN_HOT_CACHE_TTL_SEC 30
 
 static int is_valid_section(const char *section);
@@ -31,10 +32,10 @@ static char *select_resolved_man_path(char *raw_output);
 static int compare_string_ptrs(const void *a, const void *b);
 
 /**
- * @brief Return non-zero when an API endpoint matches exactly.
- * @param path Request URL path after /api/man.
- * @param endpoint Endpoint token such as "/sections".
- * @return 1 when @p path is @p endpoint, optionally followed by query string.
+ * @brief Compare two string pointers for qsort/bsearch compatibility.
+ * @param a Pointer to a (const char *).
+ * @param b Pointer to a (const char *).
+ * @return Negative, zero, or positive as per strcmp(3).
  */
 static int
 compare_string_ptrs(const void *a, const void *b)
@@ -85,14 +86,14 @@ url_decode_into(const char *src, char *dst, size_t dst_size)
 		}
 
 		if (src[si] == '%' && isxdigit((unsigned char)src[si + 1]) &&
-		    isxdigit((unsigned char)src[si + 2])) {
+			isxdigit((unsigned char)src[si + 2])) {
 			char hex[3] = {src[si + 1], src[si + 2], '\0'};
-			dst[di++] = (char)strtol(hex, NULL, 16);
-			si += 2;
-			continue;
-		}
+		dst[di++] = (char)strtol(hex, NULL, 16);
+		si += 2;
+		continue;
+			}
 
-		dst[di++] = src[si];
+			dst[di++] = src[si];
 	}
 
 	dst[di] = '\0';
@@ -136,19 +137,19 @@ get_query_value(const char *url, const char *key, char *out, size_t out_size)
 		}
 
 		if ((size_t)(eq - entry) == key_len &&
-		    strncmp(entry, key, key_len) == 0) {
+			strncmp(entry, key, key_len) == 0) {
 			char encoded[512];
 			size_t encoded_len = (size_t)(amp - (eq + 1));
 
-			if (encoded_len >= sizeof(encoded))
+			if (encoded_len >= sizeof(encoded)){
 				return 0;
+			}
 
 			memcpy(encoded, eq + 1, encoded_len);
 			encoded[encoded_len] = '\0';
 
 			return url_decode_into(encoded, out, out_size) == 0;
 		}
-
 		qs = (*amp == '&') ? amp + 1 : amp;
 	}
 
@@ -164,27 +165,27 @@ get_query_value(const char *url, const char *key, char *out, size_t out_size)
  */
 static int
 parse_section_from_filename(const char *filename, char *section_out,
-			    size_t section_out_len)
+							size_t section_out_len)
 {
 	static const char *compressed_suffixes[] = {".gz", ".bz2", ".xz",
-						    ".zst"};
-	char tmp[256];
+		".zst"};
+		char tmp[256];
 
-	if (!filename || !section_out || section_out_len == 0)
-		return 0;
+		if (!filename || !section_out || section_out_len == 0)
+			return 0;
 
 	strlcpy(tmp, filename, sizeof(tmp));
 
 	for (size_t i = 0;
-	     i < sizeof(compressed_suffixes) / sizeof(compressed_suffixes[0]);
-	     i++) {
+		 i < sizeof(compressed_suffixes) / sizeof(compressed_suffixes[0]);
+	i++) {
 		size_t tlen = strlen(tmp);
 		size_t slen = strlen(compressed_suffixes[i]);
 		if (tlen > slen &&
-		    strcmp(tmp + tlen - slen, compressed_suffixes[i]) == 0) {
+			strcmp(tmp + tlen - slen, compressed_suffixes[i]) == 0) {
 			tmp[tlen - slen] = '\0';
-			break;
-		}
+		break;
+			}
 	}
 
 	char *dot = strrchr(tmp, '.');
@@ -198,9 +199,13 @@ parse_section_from_filename(const char *filename, char *section_out,
 /* Remove nroff overstrike sequences (for example "N\bN", "_\bX")
  * from mandoc ASCII output so markdown fallback remains readable. */
 /**
- * @brief Strip overstrike ascii.
- * @param text Parameter used by this function.
- * @param len Destination buffer length.
+ * @brief Remove nroff overstrike sequences (e.g., "N\bN") from mandoc ASCII
+ * output.
+ *
+ * Overwrites @p text in-place and updates *@p len accordingly.
+ *
+ * @param text Buffer containing mandoc ASCII output.
+ * @param len  Pointer to the buffer length; updated after stripping.
  */
 static void
 strip_overstrike_ascii(char *text, size_t *len)
@@ -226,10 +231,12 @@ strip_overstrike_ascii(char *text, size_t *len)
 }
 
 /**
- * @brief Is valid token.
- * @param s Input string to parse or sanitize.
- * @return Returns 0 on success or a negative value on failure unless documented
- * otherwise.
+ * @brief Return non-zero when @p s is a safe man-page name token.
+ *
+ * Permits alphanumeric characters plus '.', '_', '-', and '+'.
+ *
+ * @param s String to validate.
+ * @return 1 when valid, 0 otherwise.
  */
 static int
 is_valid_token(const char *s)
@@ -238,17 +245,19 @@ is_valid_token(const char *s)
 		return 0;
 	for (const unsigned char *p = (const unsigned char *)s; *p; p++) {
 		if (!isalnum(*p) && *p != '.' && *p != '_' && *p != '-' &&
-		    *p != '+')
+			*p != '+')
 			return 0;
 	}
 	return 1;
 }
 
 /**
- * @brief Is valid section.
- * @param section Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented
- * otherwise.
+ * @brief Return non-zero when @p section is an acceptable man section string.
+ *
+ * Valid sections are 1–8 characters of alphanumeric text.
+ *
+ * @param section Section string to validate.
+ * @return 1 when valid, 0 otherwise.
  */
 static int
 is_valid_section(const char *section)
@@ -264,11 +273,10 @@ is_valid_section(const char *section)
 
 /* Resolve the man page path using 'man -w'. */
 /**
- * @brief Resolve man path.
- * @param name Parameter used by this function.
- * @param section Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented
- * otherwise.
+ * @brief Resolve the filesystem path of a man page using man(1) -w.
+ * @param name    Man page name (e.g., "ls").
+ * @param section Section string (e.g., "1").
+ * @return Heap-allocated path string the caller must free(), or NULL.
  */
 static char *
 resolve_man_path(const char *name, const char *section)
@@ -277,14 +285,14 @@ resolve_man_path(const char *name, const char *section)
 		return NULL;
 
 	char *const argv[] = {"man",
-			      "-M",
-			      "/usr/share/man:/usr/local/man:/usr/X11R6/man",
-			      "-w",
-			      (char *)section,
-			      (char *)name,
-			      NULL};
-	char *raw = safe_popen_read_argv("/usr/bin/man", argv, 2048, 5, NULL);
-	return select_resolved_man_path(raw);
+		"-M",
+		"/usr/share/man:/usr/local/man:/usr/X11R6/man",
+		"-w",
+		(char *)section,
+		(char *)name,
+		NULL};
+		char *raw = safe_popen_read_argv("/usr/bin/man", argv, 2048, 5, NULL);
+		return select_resolved_man_path(raw);
 }
 
 static char *
@@ -302,7 +310,7 @@ select_resolved_man_path(char *raw_output)
 
 	char *saveptr = NULL;
 	for (char *tok = strtok_r(raw_output, " ", &saveptr); tok;
-	     tok = strtok_r(NULL, " ", &saveptr)) {
+		 tok = strtok_r(NULL, " ", &saveptr)) {
 		if (tok[0] != '/')
 			continue;
 
@@ -313,16 +321,16 @@ select_resolved_man_path(char *raw_output)
 			selected = tok;
 			break;
 		}
-	}
+		 }
 
-	if (!selected || selected[0] == '\0') {
-		free(raw_output);
-		return NULL;
-	}
+		 if (!selected || selected[0] == '\0') {
+			 free(raw_output);
+			 return NULL;
+		 }
 
-	char *resolved = strdup(selected);
-	free(raw_output);
-	return resolved;
+		 char *resolved = strdup(selected);
+		 free(raw_output);
+		 return resolved;
 }
 
 /* --- API JSON --- */
@@ -335,50 +343,50 @@ char *
 man_get_sections_json(void)
 {
 	return strdup("{"
-		      "\"system\":{"
-		      "\"name\":\"OpenBSD Base System\","
-		      "\"path\":\"/usr/share/man\","
-		      "\"sections\":["
-		      "{\"id\":\"1\",\"name\":\"General Commands\"},"
-		      "{\"id\":\"2\",\"name\":\"System Calls\"},"
-		      "{\"id\":\"3\",\"name\":\"Library Functions\"},"
-		      "{\"id\":\"3p\",\"name\":\"Perl Library\"},"
-		      "{\"id\":\"4\",\"name\":\"Device Drivers\"},"
-		      "{\"id\":\"5\",\"name\":\"File Formats\"},"
-		      "{\"id\":\"6\",\"name\":\"Games\"},"
-		      "{\"id\":\"7\",\"name\":\"Miscellaneous\"},"
-		      "{\"id\":\"8\",\"name\":\"System Administration\"},"
-		      "{\"id\":\"9\",\"name\":\"Kernel Internals\"}"
-		      "]"
-		      "},"
-		      "\"x11\":{"
-		      "\"name\":\"X11 Window System\","
-		      "\"path\":\"/usr/X11R6/man\","
-		      "\"sections\":["
-		      "{\"id\":\"1\",\"name\":\"X11 Commands\"},"
-		      "{\"id\":\"3\",\"name\":\"X11 Library\"},"
-		      "{\"id\":\"4\",\"name\":\"X11 Drivers\"},"
-		      "{\"id\":\"5\",\"name\":\"X11 Formats\"},"
-		      "{\"id\":\"7\",\"name\":\"X11 Misc\"}"
-		      "]"
-		      "},"
-		      "\"packages\":{"
-		      "\"name\":\"Local Packages\","
-		      "\"path\":\"/usr/local/man\","
-		      "\"sections\":["
-		      "{\"id\":\"1\",\"name\":\"Pkg General\"},"
-		      "{\"id\":\"2\",\"name\":\"Pkg Calls\"},"
-		      "{\"id\":\"3\",\"name\":\"Pkg Lib\"},"
-		      "{\"id\":\"3p\",\"name\":\"Pkg Perl\"},"
-		      "{\"id\":\"4\",\"name\":\"Pkg Drivers\"},"
-		      "{\"id\":\"5\",\"name\":\"Pkg Formats\"},"
-		      "{\"id\":\"6\",\"name\":\"Pkg Games\"},"
-		      "{\"id\":\"7\",\"name\":\"Pkg Misc\"},"
-		      "{\"id\":\"8\",\"name\":\"Pkg Admin\"},"
-		      "{\"id\":\"9\",\"name\":\"Pkg Kernel\"}"
-		      "]"
-		      "}"
-		      "}");
+	"\"system\":{"
+	"\"name\":\"OpenBSD Base System\","
+	"\"path\":\"/usr/share/man\","
+	"\"sections\":["
+	"{\"id\":\"1\",\"name\":\"General Commands\"},"
+	"{\"id\":\"2\",\"name\":\"System Calls\"},"
+	"{\"id\":\"3\",\"name\":\"Library Functions\"},"
+	"{\"id\":\"3p\",\"name\":\"Perl Library\"},"
+	"{\"id\":\"4\",\"name\":\"Device Drivers\"},"
+	"{\"id\":\"5\",\"name\":\"File Formats\"},"
+	"{\"id\":\"6\",\"name\":\"Games\"},"
+	"{\"id\":\"7\",\"name\":\"Miscellaneous\"},"
+	"{\"id\":\"8\",\"name\":\"System Administration\"},"
+	"{\"id\":\"9\",\"name\":\"Kernel Internals\"}"
+	"]"
+	"},"
+	"\"x11\":{"
+	"\"name\":\"X11 Window System\","
+	"\"path\":\"/usr/X11R6/man\","
+	"\"sections\":["
+	"{\"id\":\"1\",\"name\":\"X11 Commands\"},"
+	"{\"id\":\"3\",\"name\":\"X11 Library\"},"
+	"{\"id\":\"4\",\"name\":\"X11 Drivers\"},"
+	"{\"id\":\"5\",\"name\":\"X11 Formats\"},"
+	"{\"id\":\"7\",\"name\":\"X11 Misc\"}"
+	"]"
+	"},"
+	"\"packages\":{"
+	"\"name\":\"Local Packages\","
+	"\"path\":\"/usr/local/man\","
+	"\"sections\":["
+	"{\"id\":\"1\",\"name\":\"Pkg General\"},"
+	"{\"id\":\"2\",\"name\":\"Pkg Calls\"},"
+	"{\"id\":\"3\",\"name\":\"Pkg Lib\"},"
+	"{\"id\":\"3p\",\"name\":\"Pkg Perl\"},"
+	"{\"id\":\"4\",\"name\":\"Pkg Drivers\"},"
+	"{\"id\":\"5\",\"name\":\"Pkg Formats\"},"
+	"{\"id\":\"6\",\"name\":\"Pkg Games\"},"
+	"{\"id\":\"7\",\"name\":\"Pkg Misc\"},"
+	"{\"id\":\"8\",\"name\":\"Pkg Admin\"},"
+	"{\"id\":\"9\",\"name\":\"Pkg Kernel\"}"
+	"]"
+	"}"
+	"}");
 }
 
 /**
@@ -427,7 +435,7 @@ man_get_section_pages_json(const char *area, const char *section)
 	 * Reserve 4 bytes at the end for the mandatory "]}" terminator plus a
 	 * NUL and one byte of safety margin.
 	 */
-#define JSON_CLOSE_RESERVE 4
+	#define JSON_CLOSE_RESERVE 4
 
 	int n = snprintf(json, MAX_JSON_SIZE, "{\"pages\":[");
 	size_t used = (n > 0) ? (size_t)n : 0;
@@ -451,7 +459,7 @@ man_get_section_pages_json(const char *area, const char *section)
 		/* Filter: filename must parse to the requested section. */
 		char resolved_section[16];
 		if (!parse_section_from_filename(de->d_name, resolved_section,
-						 sizeof(resolved_section)))
+			sizeof(resolved_section)))
 			continue;
 		if (strcmp(resolved_section, section) != 0)
 			continue;
@@ -460,7 +468,7 @@ man_get_section_pages_json(const char *area, const char *section)
 		char name[128];
 		char *dot = strchr(de->d_name, '.');
 		size_t name_len =
-		    dot ? (size_t)(dot - de->d_name) : strlen(de->d_name);
+		dot ? (size_t)(dot - de->d_name) : strlen(de->d_name);
 		if (name_len >= sizeof(name))
 			name_len = sizeof(name) - 1;
 		memcpy(name, de->d_name, name_len);
@@ -486,8 +494,8 @@ man_get_section_pages_json(const char *area, const char *section)
 		}
 
 		n = snprintf(json + used,
-			     MAX_JSON_SIZE - used - JSON_CLOSE_RESERVE,
-			     "%s\"%s\"", first ? "" : ",", pages[i]);
+					 MAX_JSON_SIZE - used - JSON_CLOSE_RESERVE,
+			   "%s\"%s\"", first ? "" : ",", pages[i]);
 		free(pages[i]);
 		if (n > 0) {
 			used += (size_t)n;
@@ -501,7 +509,7 @@ man_get_section_pages_json(const char *area, const char *section)
 	 */
 	(void)snprintf(json + used, MAX_JSON_SIZE - used, "]}");
 
-#undef JSON_CLOSE_RESERVE
+	#undef JSON_CLOSE_RESERVE
 
 	return json;
 }
@@ -515,7 +523,7 @@ man_get_section_pages_json(const char *area, const char *section)
  */
 char *
 man_get_page_metadata_json(const char *area, const char *section,
-			   const char *name)
+						   const char *name)
 {
 	char *filepath = resolve_man_path(name, section);
 	if (!filepath)
@@ -527,9 +535,9 @@ man_get_page_metadata_json(const char *area, const char *section,
 		return strdup("{\"error\":\"OOM\"}");
 	}
 	snprintf(json, 1024,
-		 "{\"name\":\"%s\",\"section\":\"%s\",\"area\":\"%s\",\"path\":"
-		 "\"%s\"}",
-		 name, section, area, filepath);
+			 "{\"name\":\"%s\",\"section\":\"%s\",\"area\":\"%s\",\"path\":"
+			 "\"%s\"}",
+		  name, section, area, filepath);
 
 	free(filepath);
 	return json;
@@ -548,12 +556,12 @@ man_api_search(const char *query)
 		return strdup("");
 
 	char *const argv[] = {"apropos", "-M",
-			      "/usr/share/man:/usr/local/man:/usr/X11R6/man",
-			      (char *)query, NULL};
-	char *output = safe_popen_read_argv("/usr/bin/apropos", argv,
-					    MAX_OUTPUT_SIZE, 5, NULL);
-	if (!output)
-		return strdup("");
+		"/usr/share/man:/usr/local/man:/usr/X11R6/man",
+		(char *)query, NULL};
+		char *output = safe_popen_read_argv("/usr/bin/apropos", argv,
+											MAX_OUTPUT_SIZE, 5, NULL);
+		if (!output)
+			return strdup("");
 
 	return output;
 }
@@ -605,7 +613,7 @@ mkdir_p(const char *dir, const char *base_dir)
 		*p = '\0';
 		if (mkdir(tmp, 0755) < 0 && errno != EEXIST) {
 			log_debug("[MAN] mkdir failed for %s: %s", tmp,
-				  strerror(errno));
+					  strerror(errno));
 			return -1;
 		}
 		*p = '/';
@@ -614,7 +622,7 @@ mkdir_p(const char *dir, const char *base_dir)
 	/* Crea la directory finale */
 	if (mkdir(tmp, 0755) < 0 && errno != EEXIST) {
 		log_debug("[MAN] mkdir failed for %s: %s", tmp,
-			  strerror(errno));
+				  strerror(errno));
 		return -1;
 	}
 
@@ -678,11 +686,11 @@ is_hot_man_cache_hit(const char *cache_abs, const char *format)
 
 	if (hit) {
 		log_debug("[MAN] Cache HIT for %s (age: %ld sec)", cache_abs,
-			  (long)(now - st.st_mtime));
+				  (long)(now - st.st_mtime));
 	} else {
 		log_debug("[MAN] Cache MISS for %s (age: %ld sec > %d)",
-			  cache_abs, (long)(now - st.st_mtime),
-			  MAN_HOT_CACHE_TTL_SEC);
+				  cache_abs, (long)(now - st.st_mtime),
+				  MAN_HOT_CACHE_TTL_SEC);
 	}
 
 	return hit;
@@ -695,8 +703,8 @@ static int
 is_static_cache_format(const char *format)
 {
 	return strcmp(format, "html") == 0 || strcmp(format, "txt") == 0 ||
-	       strcmp(format, "md") == 0 || strcmp(format, "ps") == 0 ||
-	       strcmp(format, "pdf") == 0;
+	strcmp(format, "md") == 0 || strcmp(format, "ps") == 0 ||
+	strcmp(format, "pdf") == 0;
 }
 
 /**
@@ -704,15 +712,15 @@ is_static_cache_format(const char *format)
  */
 static int
 build_cache_paths(const char *area, const char *section, const char *page,
-		  const char *format, char *rel, size_t rel_len, char *abs,
-		  size_t abs_len)
+				  const char *format, char *rel, size_t rel_len, char *abs,
+				  size_t abs_len)
 {
 	if (!area || !section || !page || !format || !rel || !abs)
 		return -1;
 
 	/* Path relativo per URL: /static/man/area/section/page.format */
 	int n = snprintf(rel, rel_len, "/static/man/%s/%s/%s.%s", area, section,
-			 page, format);
+					 page, format);
 	if (n < 0 || (size_t)n >= rel_len) {
 		log_debug("[MAN] rel path too long");
 		return -1;
@@ -721,7 +729,7 @@ build_cache_paths(const char *area, const char *section, const char *page,
 	/* Path assoluto su filesystem: static_dir/man/area/section/page.format
 	 */
 	n = snprintf(abs, abs_len, "%s/man/%s/%s/%s.%s", config_static_dir,
-		     area, section, page, format);
+				 area, section, page, format);
 	if (n < 0 || (size_t)n >= abs_len) {
 		log_debug("[MAN] abs path too long");
 		return -1;
@@ -759,24 +767,24 @@ mime_for_format(const char *format)
  */
 static void
 add_content_disposition_for_format(http_response_t *resp, const char *format,
-				   const char *page)
+								   const char *page)
 {
 	char content_disp[256];
 
 	if (strcmp(format, "pdf") == 0) {
 		snprintf(content_disp, sizeof(content_disp),
-			 "inline; filename=\"%s.pdf\"", page);
+				 "inline; filename=\"%s.pdf\"", page);
 		http_response_add_header(resp, "Content-Disposition",
-					 content_disp);
+								 content_disp);
 	} else if (strcmp(format, "md") == 0) {
 		http_response_add_header(resp, "Content-Disposition", "inline");
 	} else if (strcmp(format, "txt") == 0) {
 		http_response_add_header(resp, "Content-Disposition", "inline");
 	} else if (strcmp(format, "ps") == 0) {
 		snprintf(content_disp, sizeof(content_disp),
-			 "attachment; filename=\"%s.ps\"", page);
+				 "attachment; filename=\"%s.ps\"", page);
 		http_response_add_header(resp, "Content-Disposition",
-					 content_disp);
+								 content_disp);
 	}
 }
 
@@ -813,15 +821,15 @@ man_api_search_raw(const char *query)
 	/* Use the full manual search path so results can include /usr/local/man
 	 * after the local makewhatis database has been generated. */
 	char *const argv[] = {"apropos", "-M",
-			      "/usr/share/man:/usr/local/man:/usr/X11R6/man",
-			      (char *)query, NULL};
+		"/usr/share/man:/usr/local/man:/usr/X11R6/man",
+		(char *)query, NULL};
 
-	/* Increase buffer size because apropos may return a lot of text. */
-	char *output = safe_popen_read_argv("/usr/bin/apropos", argv,
-					    1024 * 1024, 5, NULL);
+		/* Increase buffer size because apropos may return a lot of text. */
+		char *output = safe_popen_read_argv("/usr/bin/apropos", argv,
+											1024 * 1024, 5, NULL);
 
-	if (!output)
-		output = strdup("");
+		if (!output)
+			output = strdup("");
 
 	/*
 	 * Some installations do not have a populated whatis/apropos DB, which
@@ -836,16 +844,16 @@ man_api_search_raw(const char *query)
 			filepath = resolve_man_path(query, "8");
 		if (!filepath) {
 			char *const argv_w[] = {
-			    "man",
-			    "-M",
-			    "/usr/share/man:/usr/local/man:/usr/X11R6/man",
-			    "-w",
-			    (char *)query,
-			    NULL};
-			filepath = safe_popen_read_argv("/usr/bin/man", argv_w,
-							1024, 5, NULL);
-			if (filepath)
-				filepath[strcspn(filepath, "\r\n")] = 0;
+				"man",
+				"-M",
+				"/usr/share/man:/usr/local/man:/usr/X11R6/man",
+				"-w",
+				(char *)query,
+				NULL};
+				filepath = safe_popen_read_argv("/usr/bin/man", argv_w,
+												1024, 5, NULL);
+				if (filepath)
+					filepath[strcspn(filepath, "\r\n")] = 0;
 		}
 
 		if (filepath && filepath[0] != '\0') {
@@ -853,12 +861,12 @@ man_api_search_raw(const char *query)
 			const char *base = strrchr(filepath, '/');
 			base = base ? base + 1 : filepath;
 			if (!parse_section_from_filename(base, section,
-							 sizeof(section)))
+				sizeof(section)))
 				strlcpy(section, "?", sizeof(section));
 
 			char line[256];
 			snprintf(line, sizeof(line), "%s (%s) - manual page",
-				 query, section);
+					 query, section);
 			free(output);
 			output = strdup(line);
 		}
@@ -894,7 +902,7 @@ man_api_handler(http_request_t *req)
 	/* 2. Separa query string dal path */
 	const char *query_string = strchr(path, '?');
 	size_t path_len =
-	    query_string ? (size_t)(query_string - path) : strlen(path);
+	query_string ? (size_t)(query_string - path) : strlen(path);
 
 	/* --- Routing logic --- */
 
@@ -909,14 +917,14 @@ man_api_handler(http_request_t *req)
 		char area[16] = "system"; /* default area */
 
 		if (get_query_value(req->url, "section", section,
-				    sizeof(section))) {
+			sizeof(section))) {
 			(void)get_query_value(req->url, "area", area,
-					      sizeof(area));
+								  sizeof(area));
 			json = man_get_section_pages_json(area, section);
-		} else {
-			json =
-			    strdup("{\"error\":\"Missing section parameter\"}");
-		}
+			} else {
+				json =
+				strdup("{\"error\":\"Missing section parameter\"}");
+			}
 	}
 
 	/* ENDPOINT: /api/man/resolve?name=X&section=Y */
@@ -926,95 +934,95 @@ man_api_handler(http_request_t *req)
 
 		/* Estrai parametri dalla query string */
 		(void)get_query_value(req->url, "name", name_buf,
-				      sizeof(name_buf));
+							  sizeof(name_buf));
 		(void)get_query_value(req->url, "section", section_buf,
-				      sizeof(section_buf));
+							  sizeof(section_buf));
 
 		if (name_buf[0] == '\0' || !is_valid_token(name_buf) ||
-		    (section_buf[0] != '\0' &&
-		     !is_valid_section(section_buf))) {
+			(section_buf[0] != '\0' &&
+			!is_valid_section(section_buf))) {
 			json =
-			    strdup("{\"error\":\"name parameter required\"}");
-		} else {
-			char *filepath = NULL;
-
-			/* Se è specificata una sezione, usala direttamente */
-			if (section_buf[0] != '\0') {
-				filepath =
-				    resolve_man_path(name_buf, section_buf);
+			strdup("{\"error\":\"name parameter required\"}");
 			} else {
-				/* Altrimenti cerca in tutte le sezioni comuni
-				 */
-				const char *probe_sections[] = {
-				    "1", "8", "2", "3", "5",
-				    "7", "6", "4", "9", "3p"};
-				for (size_t i = 0;
-				     i < sizeof(probe_sections) /
-					     sizeof(probe_sections[0]);
-				     i++) {
-					filepath = resolve_man_path(
-					    name_buf, probe_sections[i]);
-					if (filepath) {
-						strlcpy(section_buf,
-							probe_sections[i],
-							sizeof(section_buf));
-						break;
+				char *filepath = NULL;
+
+				/* Se è specificata una sezione, usala direttamente */
+				if (section_buf[0] != '\0') {
+					filepath =
+					resolve_man_path(name_buf, section_buf);
+				} else {
+					/* Altrimenti cerca in tutte le sezioni comuni
+					 */
+					const char *probe_sections[] = {
+						"1", "8", "2", "3", "5",
+						"7", "6", "4", "9", "3p"};
+						for (size_t i = 0;
+							 i < sizeof(probe_sections) /
+							 sizeof(probe_sections[0]);
+						i++) {
+							filepath = resolve_man_path(
+								name_buf, probe_sections[i]);
+							if (filepath) {
+								strlcpy(section_buf,
+										probe_sections[i],
+				sizeof(section_buf));
+								break;
+							}
+						}
+				}
+
+				if (!filepath || filepath[0] == '\0') {
+					free(filepath);
+					json = strdup("{\"error\":\"not found\"}");
+				} else {
+					const char *area = area_from_path(filepath);
+
+					/* Estrai sezione dal filename: ls.1 -> "1" */
+					char resolved_section[16] = {0};
+					const char *base = strrchr(filepath, '/');
+					base = base ? base + 1 : filepath;
+					if (!parse_section_from_filename(
+						base, resolved_section,
+						sizeof(resolved_section))) {
+						strlcpy(resolved_section, section_buf,
+								sizeof(resolved_section));
+						}
+
+						/* Escapa il path per JSON */
+						char *escaped_path =
+						json_escape_string(filepath);
+					if (!escaped_path)
+						escaped_path = strdup("");
+
+					const char *sec_out = resolved_section[0]
+					? resolved_section
+					: section_buf;
+
+					/* Costruisci JSON con la dimensione esatta */
+					int needed = snprintf(NULL, 0,
+										  "{\"name\":\"%s\","
+										  "\"section\":\"%s\","
+										  "\"area\":\"%s\","
+										  "\"path\":\"%s\"}",
+										  name_buf, sec_out, area,
+										  escaped_path);
+					if (needed > 0) {
+						json = malloc((size_t)needed + 1);
+						if (json) {
+							snprintf(json,
+									 (size_t)needed + 1,
+									 "{\"name\":\"%s\","
+									 "\"section\":\"%s\","
+									 "\"area\":\"%s\","
+									 "\"path\":\"%s\"}",
+				name_buf, sec_out,
+				area, escaped_path);
+						}
 					}
+					free(escaped_path);
+					free(filepath);
 				}
 			}
-
-			if (!filepath || filepath[0] == '\0') {
-				free(filepath);
-				json = strdup("{\"error\":\"not found\"}");
-			} else {
-				const char *area = area_from_path(filepath);
-
-				/* Estrai sezione dal filename: ls.1 -> "1" */
-				char resolved_section[16] = {0};
-				const char *base = strrchr(filepath, '/');
-				base = base ? base + 1 : filepath;
-				if (!parse_section_from_filename(
-					base, resolved_section,
-					sizeof(resolved_section))) {
-					strlcpy(resolved_section, section_buf,
-						sizeof(resolved_section));
-				}
-
-				/* Escapa il path per JSON */
-				char *escaped_path =
-				    json_escape_string(filepath);
-				if (!escaped_path)
-					escaped_path = strdup("");
-
-				const char *sec_out = resolved_section[0]
-							  ? resolved_section
-							  : section_buf;
-
-				/* Costruisci JSON con la dimensione esatta */
-				int needed = snprintf(NULL, 0,
-						      "{\"name\":\"%s\","
-						      "\"section\":\"%s\","
-						      "\"area\":\"%s\","
-						      "\"path\":\"%s\"}",
-						      name_buf, sec_out, area,
-						      escaped_path);
-				if (needed > 0) {
-					json = malloc((size_t)needed + 1);
-					if (json) {
-						snprintf(json,
-							 (size_t)needed + 1,
-							 "{\"name\":\"%s\","
-							 "\"section\":\"%s\","
-							 "\"area\":\"%s\","
-							 "\"path\":\"%s\"}",
-							 name_buf, sec_out,
-							 area, escaped_path);
-					}
-				}
-				free(escaped_path);
-				free(filepath);
-			}
-		}
 	}
 
 	/* ENDPOINT: /api/man/search?q=QUERY  o  /api/man/search/QUERY */
@@ -1029,7 +1037,7 @@ man_api_handler(http_request_t *req)
 		/* Query string style: /api/man/search?q=QUERY */
 		else {
 			if (get_query_value(req->url, "q", query_buf,
-					    sizeof(query_buf)))
+				sizeof(query_buf)))
 				query = query_buf;
 		}
 
@@ -1054,15 +1062,15 @@ man_api_handler(http_request_t *req)
 
 			/* Prova a parsare come /area/section */
 			if (sscanf(path_tmp, "/%31[^/]/%15s", area, section) ==
-			    2) {
+				2) {
 				json =
-				    man_get_section_pages_json(area, section);
-			}
+				man_get_section_pages_json(area, section);
+				}
 		}
 
 		if (!json) {
 			json = strdup("{\"error\":\"Unknown API endpoint or "
-				      "malformed path\"}");
+			"malformed path\"}");
 		}
 	}
 
@@ -1109,11 +1117,14 @@ man_render_page(const char *area, const char *section, const char *page,
 
 	if (!filepath) {
 		char *const argv_w[] = {
-			"man", "-M", "/usr/share/man:/usr/local/man:/usr/X11R6/man",
-			"-w", (char *)page, NULL
-		};
-		filepath = safe_popen_read_argv("/usr/bin/man", argv_w, 1024, 5,
-										NULL);
+			"man",
+			"-M",
+			"/usr/share/man:/usr/local/man:/usr/X11R6/man",
+			"-w",
+			(char *)page,
+			NULL};
+			filepath =
+			safe_popen_read_argv("/usr/bin/man", argv_w, 1024, 5, NULL);
 	}
 
 	if (!filepath)
@@ -1162,14 +1173,13 @@ man_render_page(const char *area, const char *section, const char *page,
 
 	/* Fallback for man(7) pages that cannot be converted to markdown */
 	if (!output && strcmp(format, "md") == 0) {
-		char *const argv_ascii[] = {
-			"mandoc", "-T", "ascii", filepath, NULL
-		};
-		output = safe_popen_read_argv("/usr/bin/mandoc", argv_ascii,
-									  MAX_OUTPUT_SIZE, 10, out_len);
-		if (output && *out_len > 0) {
-			strip_overstrike_ascii(output, out_len);
-		}
+		char *const argv_ascii[] = {"mandoc", "-T", "ascii", filepath,
+			NULL};
+			output = safe_popen_read_argv("/usr/bin/mandoc", argv_ascii,
+										  MAX_OUTPUT_SIZE, 10, out_len);
+			if (output && *out_len > 0) {
+				strip_overstrike_ascii(output, out_len);
+			}
 	}
 
 	free(filepath);
@@ -1219,113 +1229,113 @@ man_render_handler(http_request_t *req)
 	/* 2. Minimal validation. */
 	if (page[0] == '\0' || section[0] == '\0') {
 		return http_send_error(req, 400,
-				       "Missing section or page name");
+							   "Missing section or page name");
 	}
 	if (strcmp(format, "html") != 0 && strcmp(format, "pdf") != 0 &&
-	    strcmp(format, "ps") != 0 && strcmp(format, "md") != 0 &&
-	    strcmp(format, "txt") != 0) {
+		strcmp(format, "ps") != 0 && strcmp(format, "md") != 0 &&
+		strcmp(format, "txt") != 0) {
 		return http_send_error(req, 400, "Unsupported format");
-	}
+		}
 
-	char cache_rel[512];
+		char cache_rel[512];
 	char cache_abs[512];
 	if (build_cache_paths(area, section, page, format, cache_rel,
-			      sizeof(cache_rel), cache_abs,
-			      sizeof(cache_abs)) == 0 &&
-	    is_static_cache_format(format) && access(cache_abs, R_OK) == 0 &&
-	    is_hot_man_cache_hit(cache_abs, format)) {
+		sizeof(cache_rel), cache_abs,
+						  sizeof(cache_abs)) == 0 &&
+						  is_static_cache_format(format) && access(cache_abs, R_OK) == 0 &&
+						  is_hot_man_cache_hit(cache_abs, format)) {
 		const char *old_url = req->url;
-		req->url = cache_rel;
-		int ret = static_handler(req);
-		req->url = old_url;
-		return ret;
-	}
-
-	/* 3. Render content. */
-	size_t out_len = 0;
-	char *output = man_render_page(area, section, page, format, &out_len);
-
-	if (!output) {
-		return http_send_error(req, 404, "Manual page not found");
-	}
-
-	char cache_dir[512];
-	strlcpy(cache_dir, cache_abs, sizeof(cache_dir));
-	char *last_slash = strrchr(cache_dir, '/');
-	if (last_slash) {
-		*last_slash = '\0';
-
-		if (mkdir_p(cache_dir, config_static_dir) == 0) {
-			if (write_file_binary(cache_abs, output, out_len) !=
-				0 &&
-			    config_verbose) {
-				log_debug("[MAN] cache write failed: %s "
-					  "(errno=%d: %s)\n",
-					  cache_abs, errno, strerror(errno));
-			} else if (config_verbose) {
-				log_debug(
-				    "[MAN] cache write ok: %s (%zu bytes)\n",
-				    cache_abs, out_len);
-			}
-		} else if (config_verbose) {
-			log_debug("[MAN] cache directory create failed: %s "
-				  "(errno=%d: %s)\n",
-				  cache_dir, errno, strerror(errno));
-		}
-	}
-
-	if (is_static_cache_format(format) && access(cache_abs, R_OK) == 0) {
-		free(output);
-		const char *old_url = req->url;
-		req->url = cache_rel;
-		int ret = static_handler(req);
-		req->url = old_url;
-		return ret;
-	}
-
-	/* 4. Build response. */
-	http_response_t *resp = http_response_create();
-
-	/* Set the appropriate Content-Type. */
-	resp->content_type = mime_for_format(format);
-
-	/* 5. Add Content-Length (essential for binary formats like PDF). */
-	char clen[32];
-	snprintf(clen, sizeof(clen), "%zu", out_len);
-	http_response_add_header(resp, "Content-Length", clen);
-	http_response_add_header(resp, "Cache-Control",
-				 "no-cache, no-store, must-revalidate");
-	http_response_add_header(resp, "Pragma", "no-cache");
-	http_response_add_header(resp, "Expires", "0");
-
-	add_content_disposition_for_format(resp, format, page);
-
-	/* 6. Set body (http_response_set_body frees 'output' automatically). */
-	http_response_set_body(resp, output, out_len, 1);
-
-	/* 7. Send response. */
-	int ret = http_response_send(req, resp);
-	http_response_free(resp);
-
+	req->url = cache_rel;
+	int ret = static_handler(req);
+	req->url = old_url;
 	return ret;
+						  }
+
+						  /* 3. Render content. */
+						  size_t out_len = 0;
+						  char *output = man_render_page(area, section, page, format, &out_len);
+
+						  if (!output) {
+							  return http_send_error(req, 404, "Manual page not found");
+						  }
+
+						  char cache_dir[512];
+						  strlcpy(cache_dir, cache_abs, sizeof(cache_dir));
+						  char *last_slash = strrchr(cache_dir, '/');
+						  if (last_slash) {
+							  *last_slash = '\0';
+
+							  if (mkdir_p(cache_dir, config_static_dir) == 0) {
+								  if (write_file_binary(cache_abs, output, out_len) !=
+									  0 &&
+									  config_verbose) {
+									  log_debug("[MAN] cache write failed: %s "
+									  "(errno=%d: %s)\n",
+												cache_abs, errno, strerror(errno));
+									  } else if (config_verbose) {
+										  log_debug(
+											  "[MAN] cache write ok: %s (%zu bytes)\n",
+													cache_abs, out_len);
+									  }
+							  } else if (config_verbose) {
+								  log_debug("[MAN] cache directory create failed: %s "
+								  "(errno=%d: %s)\n",
+											cache_dir, errno, strerror(errno));
+							  }
+						  }
+
+						  if (is_static_cache_format(format) && access(cache_abs, R_OK) == 0) {
+							  free(output);
+							  const char *old_url = req->url;
+							  req->url = cache_rel;
+							  int ret = static_handler(req);
+							  req->url = old_url;
+							  return ret;
+						  }
+
+						  /* 4. Build response. */
+						  http_response_t *resp = http_response_create();
+
+						  /* Set the appropriate Content-Type. */
+						  resp->content_type = mime_for_format(format);
+
+						  /* 5. Add Content-Length (essential for binary formats like PDF). */
+						  char clen[32];
+						  snprintf(clen, sizeof(clen), "%zu", out_len);
+						  http_response_add_header(resp, "Content-Length", clen);
+						  http_response_add_header(resp, "Cache-Control",
+												   "no-cache, no-store, must-revalidate");
+						  http_response_add_header(resp, "Pragma", "no-cache");
+						  http_response_add_header(resp, "Expires", "0");
+
+						  add_content_disposition_for_format(resp, format, page);
+
+						  /* 6. Set body (http_response_set_body frees 'output' automatically). */
+						  http_response_set_body(resp, output, out_len, 1);
+
+						  /* 7. Send response. */
+						  int ret = http_response_send(req, resp);
+						  http_response_free(resp);
+
+						  return ret;
 }
 
 int
 man_module_attach_routes(struct router *r)
 {
-	// Registra il renderer per le pagine man
+	/* Register the man page renderer for the /man/ prefix. */
 	if (router_register_prefix(r, "GET", "/man/", 2, man_render_handler) !=
-	    0)
+		0)
 		return -1;
 
-	// Registra tutti gli endpoint API man
+	/* Register all /api/man prefix endpoints. */
 	if (router_register_prefix(r, "GET", "/api/man", 0, man_api_handler) !=
-	    0)
+		0)
 		return -1;
 
-	// Registra anche i singoli endpoint per sicurezza
+	/* Also register the specific section endpoint as an exact match. */
 	if (router_register(r, "GET", "/api/man/sections", man_api_handler) !=
-	    0)
+		0)
 		return -1;
 
 	return 0;

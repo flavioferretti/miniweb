@@ -1,4 +1,4 @@
-.Dd February 23, 2026
+.Dd February 25, 2026
 .Dt MINIWEB 1
 .Os OpenBSD
 .Sh NAME
@@ -869,23 +869,78 @@ Prepared statement stubs.
 .Bl -tag -width "Phase 6"
 .It Phase 1
 Module attach API and router separation.
-Complete: all modules use
+Complete: all modules register through
 .Fn miniweb_module_attach_enabled .
 .It Phase 2
 Single global heartbeat scheduler.
-Complete: metrics and networking modules both run named heartbeat tasks.
+Complete: metrics and networking both run as named heartbeat tasks.
 .It Phase 3
 Domain decomposition of metrics, networking, man, packages.
-Ongoing.
+Scaffolded:
+.Pa *_service.c
+and
+.Pa *_json.c
+stubs are present; function bodies still to be migrated.
 .It Phase 4
-Documentation and architecture transition (docs/miniweb.1 + README.md, module porting to enterprise paradigm).
-In progress.
+Documentation and architecture transition.
+Complete: README, man page, and all Doxygen blocks updated.
+All Italian-language source comments have been translated to English.
 .It Phase 5
 SQLite3 storage integration.
-Stub interfaces are defined.
+Stub interfaces are defined; no live backend yet.
 .It Phase 6
 Performance and observability hardening.
 Planned.
+.El
+.Sh NEXT STEPS FOR MODULARITY
+The following items are the immediate backlog for reaching low
+LOC-per-file and low LOC-per-function targets across the codebase.
+.Bl -enum -compact
+.It
+Migrate function bodies from
+.Pa *_module.c
+into the corresponding
+.Pa *_service.c
+(data collection) and
+.Pa *_json.c
+(JSON serialisation) units for all four feature modules.
+After migration,
+.Pa *_module.c
+should contain only route handler entry points and
+.Fn attach_routes .
+.It
+Split
+.Pa src/http/response.c
+(~973 LOC) into
+.Pa response_writer.c ,
+.Pa static_files.c ,
+and
+.Pa mime.c .
+.It
+Extract platform-specific collectors into dedicated translation units under
+.Pa src/platform/openbsd/
+for CPU, memory, disk, process, network interfaces, and routing table.
+Modules must consume only collector APIs; no direct sysctl or kvm calls
+should remain inside module files.
+.It
+Apply function-size limits (soft 40 LOC, review trigger 80 LOC) to
+.Fn miniweb_server_run ,
+.Fn man_render_handler ,
+and
+.Fn build_system_metrics_json .
+.It
+Upgrade
+.Pa tests/integration_endpoints.sh
+from reachability smoke tests to contract-level assertions: explicit
+status checks for 200/404/405 and JSON key-presence checks for core
+endpoints.
+.It
+Implement the SQLite3 backend (Phase 5): connect
+.Pa src/storage/
+stubs to real
+.Fn sqlite3_open_v2 ,
+prepared statements, and transactions; persist module flags and bounded
+metric snapshots.
 .El
 .Sh DESIGN REQUIREMENTS
 .Bl -bullet -compact
@@ -896,7 +951,13 @@ OpenBSD KNF style.
 .It
 Small, reusable functions with strict module ownership.
 .It
-Doxygen documentation for all exported APIs.
+File-size guideline: soft limit 350 LOC, review trigger 500 LOC.
+.It
+Function-size guideline: soft limit 40 LOC, review trigger 80 LOC.
+.It
+Doxygen documentation for all exported symbols.
+.It
+All source comments in English.
 .It
 Compatibility-first refactor: feature parity required at every phase.
 .El
@@ -913,35 +974,39 @@ Compatibility-first refactor: feature parity required at every phase.
 .Sh AUTHORS
 MiniWeb contributors.
 .Sh REFACTOR STATUS
-As of 2026-02-24, server runtime decomposition has progressed to dedicated
-networking translation units:
+As of 2026-02-25, server runtime decomposition is complete for the
+networking layer and documentation is up to date:
 .Bl -bullet
 .It
-Pa src/net/server.c
-(kqueue dispatcher and accept loop)
+.Pa src/net/server.c
+\(em kqueue dispatcher and accept loop.
 .It
-Pa src/net/connection_pool.c
-(fd-indexed pool with generation checks)
+.Pa src/net/connection_pool.c
+\(em fd-indexed connection pool with O(1) alloc/free and generation guards.
 .It
-Pa src/net/worker.c
-(worker request parsing and route dispatch)
+.Pa src/net/worker.c
+\(em worker request read, parse, and route dispatch.
 .El
-Module layering scaffolds were also added:
+Module decomposition scaffolds are in place for all four feature modules:
 .Bl -bullet
 .It
-Pa src/modules/metrics/metrics_service.c
+.Pa src/modules/metrics/metrics_service.c
 and
-Pa src/modules/metrics/metrics_json.c
+.Pa src/modules/metrics/metrics_json.c
 .It
-Pa src/modules/networking/networking_service.c
+.Pa src/modules/networking/networking_service.c
 and
-Pa src/modules/networking/networking_json.c
+.Pa src/modules/networking/networking_json.c
 .It
-Pa src/modules/man/man_service.c
+.Pa src/modules/man/man_service.c
 and
-Pa src/modules/man/man_json.c
+.Pa src/modules/man/man_json.c
 .It
-Pa src/modules/packages/packages_service.c
+.Pa src/modules/packages/packages_service.c
 and
-Pa src/modules/packages/packages_json.c
+.Pa src/modules/packages/packages_json.c
 .El
+All Doxygen
+.Sq TODO
+placeholder blocks have been replaced with accurate descriptions.
+All Italian-language source comments have been translated to English.

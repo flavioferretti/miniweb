@@ -1,3 +1,4 @@
+
 /* template_render.c - Template Engine Implementation */
 
 #include <dirent.h>
@@ -30,10 +31,10 @@ static time_t template_cache_last_refresh = 0;
 #define TEMPLATE_CACHE_TTL_SEC 60
 
 /**
- * @brief TODO: Describe read_file_content.
- * @param path TODO: Describe this parameter.
- * @param content TODO: Describe this parameter.
- * @return TODO: Describe the return value.
+ * @brief Read an entire file into a heap-allocated NUL-terminated buffer.
+ * @param path    Filesystem path of the file to read.
+ * @param content Output pointer receiving the allocated file contents.
+ * @return 0 on success, -1 on read failure.
  */
 /**
  * @brief Read an entire file into a newly allocated NUL-terminated buffer.
@@ -87,7 +88,7 @@ read_file_content(const char *path, char **content)
 }
 
 /**
- * @brief TODO: Describe template_cache_cleanup.
+ * @brief Free all cached template entries and release associated resources.
  */
 /**
  * @brief Free all cached templates.
@@ -110,7 +111,7 @@ template_cache_cleanup(void)
 }
 
 /**
- * @brief TODO: Describe template_cache_cleanup_locked.
+ * @brief Free all cached template entries while the cache mutex is held.
  */
 static void
 template_cache_cleanup_locked(void)
@@ -125,11 +126,11 @@ template_cache_cleanup_locked(void)
 }
 
 /**
- * @brief TODO: Describe add_template_to_cache.
- * @param filename TODO: Describe this parameter.
- * @param path TODO: Describe this parameter.
- * @param mtime TODO: Describe this parameter.
- * @return TODO: Describe the return value.
+ * @brief Load a template file from disk and insert it into the in-memory cache.
+ * @param filename Template base filename used as the cache key.
+ * @param path     Absolute path of the template file.
+ * @param mtime    File modification time for staleness tracking.
+ * @return 0 on success, -1 on allocation or I/O failure.
  */
 /**
  * @brief Add one file to the in-memory template cache.
@@ -147,7 +148,7 @@ add_template_to_cache(const char *filename, const char *path, time_t mtime)
 		return -1;
 
 	new_cache = realloc(template_cache, sizeof(*template_cache) *
-						(template_cache_count + 1));
+	(template_cache_count + 1));
 	if (!new_cache) {
 		free(content);
 		return -1;
@@ -168,8 +169,8 @@ add_template_to_cache(const char *filename, const char *path, time_t mtime)
 }
 
 /**
- * @brief TODO: Describe template_cache_reload_locked.
- * @return TODO: Describe the return value.
+ * @brief Reload all template files from disk while the cache mutex is held.
+ * @return 0 on success, -1 on any load failure.
  */
 /**
  * @brief Preload template files from configured directory into memory.
@@ -194,11 +195,11 @@ template_cache_reload_locked(void)
 		int n;
 
 		if (strcmp(entry->d_name, ".") == 0 ||
-		    strcmp(entry->d_name, "..") == 0)
+			strcmp(entry->d_name, "..") == 0)
 			continue;
 
 		n = snprintf(path, sizeof(path), "%s/%s", config_templates_dir,
-			     entry->d_name);
+					 entry->d_name);
 		if (n < 0 || (size_t)n >= sizeof(path)) {
 			closedir(dir);
 			template_cache_cleanup_locked();
@@ -211,12 +212,12 @@ template_cache_reload_locked(void)
 			continue;
 
 		if (add_template_to_cache(entry->d_name, path, st.st_mtime) !=
-		    0) {
+			0) {
 			closedir(dir);
-			template_cache_cleanup_locked();
-			return -1;
-		}
-		loaded = 1;
+		template_cache_cleanup_locked();
+		return -1;
+			}
+			loaded = 1;
 	}
 
 	closedir(dir);
@@ -225,8 +226,8 @@ template_cache_reload_locked(void)
 }
 
 /**
- * @brief TODO: Describe template_cache_init.
- * @return TODO: Describe the return value.
+ * @brief Initialise and preload the template cache at server startup.
+ * @return 0 on success, -1 on failure.
  */
 int
 template_cache_init(void)
@@ -241,8 +242,8 @@ template_cache_init(void)
 }
 
 /**
- * @brief TODO: Describe template_cache_refresh_locked.
- * @return TODO: Describe the return value.
+ * @brief Reload stale templates from disk while the cache mutex is held.
+ * @return 0 on success, -1 on reload failure.
  */
 static int
 template_cache_refresh_locked(void)
@@ -250,17 +251,17 @@ template_cache_refresh_locked(void)
 	time_t now = time(NULL);
 
 	if (template_cache_last_refresh != 0 &&
-	    (now - template_cache_last_refresh) < TEMPLATE_CACHE_TTL_SEC)
+		(now - template_cache_last_refresh) < TEMPLATE_CACHE_TTL_SEC)
 		return 0;
 
 	return template_cache_reload_locked();
 }
 
 /**
- * @brief TODO: Describe read_template_file.
- * @param filename TODO: Describe this parameter.
- * @param content TODO: Describe this parameter.
- * @return TODO: Describe the return value.
+ * @brief Read a template by base filename from the configured templates directory.
+ * @param filename Template base filename.
+ * @param content  Output pointer receiving the NUL-terminated file content.
+ * @return 0 on success, -1 when the file is not found or unreadable.
  */
 /**
  * @brief Load a template file from the in-memory cache.
@@ -286,23 +287,23 @@ read_template_file(const char *filename, char **content)
 		}
 	}
 
-out:
+	out:
 	pthread_mutex_unlock(&template_cache_lock);
 	return ret;
 }
 
 /* Forward declaration for the single placeholder replacement logic */
 static char *replace_single(const char *str, const char *needle,
-			    const char *value);
+							const char *value);
 
 /**
- * @brief TODO: Describe replace_all.
- * @param template_str TODO: Describe this parameter.
- * @param title TODO: Describe this parameter.
- * @param page_content TODO: Describe this parameter.
- * @param extra_head TODO: Describe this parameter.
- * @param extra_js TODO: Describe this parameter.
- * @return TODO: Describe the return value.
+ * @brief Substitute all standard placeholders ({{TITLE}}, {{PAGE_CONTENT}}, etc.) in a template.
+ * @param template_str Raw template text.
+ * @param title        Replacement for {{TITLE}}.
+ * @param page_content Replacement for {{PAGE_CONTENT}}.
+ * @param extra_head   Replacement for {{EXTRA_HEAD}}.
+ * @param extra_js     Replacement for {{EXTRA_JS}}.
+ * @return Heap-allocated expanded string the caller must free(), or NULL.
  */
 /**
  * @brief Replace all supported placeholders in the base template string.
@@ -315,8 +316,8 @@ static char *replace_single(const char *str, const char *needle,
  */
 static char *
 replace_all(const char *template_str, const char *title,
-	    const char *page_content, const char *extra_head,
-	    const char *extra_js)
+			const char *page_content, const char *extra_head,
+			const char *extra_js)
 {
 	char *result = NULL;
 	char *temp1 = NULL, *temp2 = NULL, *temp3 = NULL;
@@ -337,7 +338,7 @@ replace_all(const char *template_str, const char *title,
 
 	/* Replace {{page_content}} tag */
 	temp2 = replace_single(result, "{{page_content}}",
-			       page_content ? page_content : "");
+						   page_content ? page_content : "");
 	if (!temp2) {
 		free(result);
 		return NULL;
@@ -347,7 +348,7 @@ replace_all(const char *template_str, const char *title,
 
 	/* Replace {{extra_head}} tag */
 	temp3 = replace_single(result, "{{extra_head}}",
-			       extra_head ? extra_head : "");
+						   extra_head ? extra_head : "");
 	if (!temp3) {
 		free(result);
 		return NULL;
@@ -357,7 +358,7 @@ replace_all(const char *template_str, const char *title,
 
 	/* Replace {{extra_js}} tag */
 	temp1 =
-	    replace_single(result, "{{extra_js}}", extra_js ? extra_js : "");
+	replace_single(result, "{{extra_js}}", extra_js ? extra_js : "");
 	if (!temp1) {
 		free(result);
 		return NULL;
@@ -369,11 +370,11 @@ replace_all(const char *template_str, const char *title,
 }
 
 /**
- * @brief TODO: Describe replace_single.
- * @param str TODO: Describe this parameter.
- * @param needle TODO: Describe this parameter.
- * @param value TODO: Describe this parameter.
- * @return TODO: Describe the return value.
+ * @brief Replace the first occurrence of a named placeholder in @p str.
+ * @param str         String in which to replace the placeholder.
+ * @param placeholder Placeholder token to search for.
+ * @param value       Replacement value string.
+ * @return Heap-allocated result string the caller must free(), or NULL.
  */
 /**
  * @brief Replace the first occurrence of a token in a string.
@@ -404,16 +405,16 @@ replace_single(const char *str, const char *needle, const char *value)
 	memcpy(result, str, before_len);
 	memcpy(result + before_len, value, value_len);
 	memcpy(result + before_len + value_len, pos + needle_len,
-	       after_len + 1);
+		   after_len + 1);
 
 	return result;
 }
 
 /**
- * @brief TODO: Describe template_render_with_data.
- * @param data TODO: Describe this parameter.
- * @param output TODO: Describe this parameter.
- * @return TODO: Describe the return value.
+ * @brief Render a template using the layout and content fields in @p data.
+ * @param data   Template descriptor with layout name and page content.
+ * @param output Output pointer receiving the rendered HTML string.
+ * @return 0 on success, -1 on cache miss or rendering failure.
  */
 /**
  * @brief Render a full HTML page using base and content templates.
@@ -449,10 +450,10 @@ template_render_with_data(struct template_data *data, char **output)
 	/* Load optional header file if specified in template_data */
 	if (data->extra_head_file) {
 		if (read_template_file(data->extra_head_file, &extra_head) !=
-		    0) {
+			0) {
 			/* Fail silently if file is missing, keeping it empty */
 			extra_head = NULL;
-		}
+			}
 	}
 
 	/* Load optional JS file if specified in template_data */
@@ -464,8 +465,8 @@ template_render_with_data(struct template_data *data, char **output)
 
 	/* Execute placeholder replacements */
 	result =
-	    replace_all(base_template, data->title, page_content,
-			extra_head ? extra_head : "", extra_js ? extra_js : "");
+	replace_all(base_template, data->title, page_content,
+				extra_head ? extra_head : "", extra_js ? extra_js : "");
 	if (!result) {
 		goto cleanup;
 	}
@@ -473,7 +474,7 @@ template_render_with_data(struct template_data *data, char **output)
 	*output = result;
 	ret = 0;
 
-cleanup:
+	cleanup:
 	/* Ensure all intermediate buffers are freed */
 	if (base_template)
 		free(base_template);
@@ -488,9 +489,10 @@ cleanup:
 }
 
 /**
- * @brief TODO: Describe template_render_with_data.
- * @param output TODO: Describe this parameter.
- * @return TODO: Describe the return value.
+ * @brief Render a template using the layout and content fields in @p data.
+ * @param data   Template descriptor with layout name and page content.
+ * @param output Output pointer receiving the rendered HTML string.
+ * @return 0 on success, -1 on cache miss or rendering failure.
  */
 /**
  * @brief Backward-compatible wrapper around template_render_with_data().
@@ -505,9 +507,9 @@ int
 template_render(const char *page, char **output)
 {
 	struct template_data data = {.title = "MiniWeb",
-				     .page_content = page,
-				     .extra_head_file = NULL,
-				     .extra_js_file = NULL};
+		.page_content = page,
+		.extra_head_file = NULL,
+		.extra_js_file = NULL};
 
-	return template_render_with_data(&data, output);
+		return template_render_with_data(&data, output);
 }

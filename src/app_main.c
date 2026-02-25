@@ -24,17 +24,17 @@ static void
 usage(const char *prog)
 {
 	fprintf(stderr,
-	    "Usage: %s [options]\n"
-	    "  -f FILE   Config file (default: auto-detect)\n"
-	    "  -p PORT   Port (default %d)\n"
-	    "  -b ADDR   Bind address (default %s)\n"
-	    "  -t NUM    Worker threads (default %d, max %d)\n"
-	    "  -c NUM    Max connections (default %d)\n"
-	    "  -l FILE   Log file path (default: stderr)\n"
-	    "  -v        Verbose\n"
-	    "  -h        Help\n",
-	    prog, config.port, config.bind_addr, config.threads,
-	    MINIWEB_THREAD_POOL_SIZE, config.max_conns);
+			"Usage: %s [options]\n"
+			"  -f FILE   Config file (default: auto-detect)\n"
+			"  -p PORT   Port (default %d)\n"
+			"  -b ADDR   Bind address (default %s)\n"
+			"  -t NUM    Worker threads (default %d, max %d)\n"
+			"  -c NUM    Max connections (default %d)\n"
+			"  -l FILE   Log file path (default: stderr)\n"
+			"  -v        Verbose\n"
+			"  -h        Help\n",
+		 prog, config.port, config.bind_addr, config.threads,
+		 MINIWEB_THREAD_POOL_SIZE, config.max_conns);
 }
 
 /** Parse CLI/config values and propagate global module settings. */
@@ -47,22 +47,22 @@ parse_args(int argc, char *argv[])
 	int opt;
 	while ((opt = getopt(argc, argv, "f:p:b:t:c:l:vh")) != -1) {
 		switch (opt) {
-		case 'f': conf_file = optarg; break;
-		case 'p': cli_port = atoi(optarg); break;
-		case 'b': cli_bind = optarg; break;
-		case 't': cli_threads = atoi(optarg); break;
-		case 'c': cli_conns = atoi(optarg); break;
-		case 'l': cli_log_file = optarg; break;
-		case 'v': cli_verbose = 1; break;
-		case 'h': usage(argv[0]); exit(0);
-		default: usage(argv[0]); exit(1);
+			case 'f': conf_file = optarg; break;
+			case 'p': cli_port = atoi(optarg); break;
+			case 'b': cli_bind = optarg; break;
+			case 't': cli_threads = atoi(optarg); break;
+			case 'c': cli_conns = atoi(optarg); break;
+			case 'l': cli_log_file = optarg; break;
+			case 'v': cli_verbose = 1; break;
+			case 'h': usage(argv[0]); exit(0);
+			default: usage(argv[0]); exit(1);
 		}
 	}
 	conf_defaults(&config);
 	if (conf_load(conf_file, &config) != 0)
 		exit(1);
 	conf_apply_cli(&config, cli_port, cli_bind, cli_threads, cli_conns,
-	    cli_log_file, cli_verbose);
+				   cli_log_file, cli_verbose);
 	if (config.threads < 1)
 		config.threads = 1;
 	if (config.threads > MINIWEB_THREAD_POOL_SIZE)
@@ -94,9 +94,9 @@ main(int argc, char *argv[])
 	log_set_verbose(config.verbose);
 
 	log_info("MiniWeb starting on %s:%d (%d thread(s))",
-	    config.bind_addr, config.port, config.threads);
+			 config.bind_addr, config.port, config.threads);
 	log_info("Static dir: %s  Templates dir: %s",
-	    config.static_dir, config.templates_dir);
+			 config.static_dir, config.templates_dir);
 
 	if (config.verbose)
 		conf_dump(&config);

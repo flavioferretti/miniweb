@@ -19,8 +19,12 @@
 #include <miniweb/core/conf.h>
 
 /**
- * @brief TODO: Describe conf_defaults.
- * @param conf TODO: Describe this parameter.
+ * @brief Fill @p conf with compiled-in default values.
+ *
+ * Initialises every field so that callers need not zero the structure
+ * before calling conf_load() or conf_apply_cli().
+ *
+ * @param conf Configuration structure to initialise. Must not be NULL.
  */
 void
 conf_defaults(miniweb_conf_t *conf)
@@ -55,9 +59,9 @@ conf_defaults(miniweb_conf_t *conf)
 
 /* Strip leading whitespace; return pointer into s. */
 /**
- * @brief TODO: Describe ltrim.
- * @param s TODO: Describe this parameter.
- * @return TODO: Describe the return value.
+ * @brief Advance @p s past leading ASCII whitespace.
+ * @param s Input string pointer. Must not be NULL.
+ * @return Pointer into @p s at the first non-whitespace character.
  */
 static char *
 ltrim(char *s)
@@ -69,8 +73,8 @@ ltrim(char *s)
 
 /* Strip trailing whitespace in-place. */
 /**
- * @brief TODO: Describe rtrim.
- * @param s TODO: Describe this parameter.
+ * @brief Remove trailing ASCII whitespace from @p s in-place.
+ * @param s NUL-terminated string to trim. Must not be NULL.
  */
 static void
 rtrim(char *s)
@@ -81,65 +85,61 @@ rtrim(char *s)
 }
 
 /**
- * @brief TODO: Describe conf_apply_kv.
- * @param conf TODO: Describe this parameter.
- * @param key TODO: Describe this parameter.
- * @param val TODO: Describe this parameter.
- * @return TODO: Describe the return value.
+ * @brief Apply a single key/value pair from a config file line to @p conf.
+ * @param conf Destination configuration structure.
+ * @param key Directive name (case-insensitive).
+ * @param val Directive value string.
+ * @return 0 on success, -1 when @p key is not a recognised directive.
  */
-/* Apply one key=value pair to conf.
- * Returns 0 on success, -1 if the key is unknown. */
 static int
 conf_apply_kv(miniweb_conf_t *conf, const char *key, const char *val)
 {
     if (strcasecmp(key, "port") == 0) {
         conf->port = atoi(val);
     } else if (strcasecmp(key, "bind_addr") == 0 ||
-               strcasecmp(key, "bind") == 0) {
+        strcasecmp(key, "bind") == 0) {
         strlcpy(conf->bind_addr, val, sizeof(conf->bind_addr));
-    } else if (strcasecmp(key, "threads") == 0) {
-        conf->threads = atoi(val);
-    } else if (strcasecmp(key, "max_conns") == 0) {
-        conf->max_conns = atoi(val);
-    } else if (strcasecmp(key, "conn_timeout") == 0) {
-        conf->conn_timeout = atoi(val);
-    } else if (strcasecmp(key, "max_req_size") == 0) {
-        conf->max_req_size = atoi(val);
-    } else if (strcasecmp(key, "mandoc_timeout") == 0) {
-        conf->mandoc_timeout = atoi(val);
-    } else if (strcasecmp(key, "static_dir") == 0) {
-        strlcpy(conf->static_dir, val, sizeof(conf->static_dir));
-    } else if (strcasecmp(key, "templates_dir") == 0) {
-        strlcpy(conf->templates_dir, val, sizeof(conf->templates_dir));
-    } else if (strcasecmp(key, "mandoc_path") == 0) {
-        strlcpy(conf->mandoc_path, val, sizeof(conf->mandoc_path));
-    } else if (strcasecmp(key, "trusted_proxy") == 0) {
-        strlcpy(conf->trusted_proxy, val, sizeof(conf->trusted_proxy));
-    } else if (strcasecmp(key, "verbose") == 0) {
-        if (strcasecmp(val, "yes") == 0 || strcasecmp(val, "true") == 0)
-            conf->verbose = 1;
-        else if (strcasecmp(val, "no") == 0 || strcasecmp(val, "false") == 0)
-            conf->verbose = 0;
-        else
-            conf->verbose = atoi(val);
-    } else if (strcasecmp(key, "log_file") == 0) {
-        strlcpy(conf->log_file, val, sizeof(conf->log_file));
-    } else {
-        return -1;
-    }
-    return 0;
+        } else if (strcasecmp(key, "threads") == 0) {
+            conf->threads = atoi(val);
+        } else if (strcasecmp(key, "max_conns") == 0) {
+            conf->max_conns = atoi(val);
+        } else if (strcasecmp(key, "conn_timeout") == 0) {
+            conf->conn_timeout = atoi(val);
+        } else if (strcasecmp(key, "max_req_size") == 0) {
+            conf->max_req_size = atoi(val);
+        } else if (strcasecmp(key, "mandoc_timeout") == 0) {
+            conf->mandoc_timeout = atoi(val);
+        } else if (strcasecmp(key, "static_dir") == 0) {
+            strlcpy(conf->static_dir, val, sizeof(conf->static_dir));
+        } else if (strcasecmp(key, "templates_dir") == 0) {
+            strlcpy(conf->templates_dir, val, sizeof(conf->templates_dir));
+        } else if (strcasecmp(key, "mandoc_path") == 0) {
+            strlcpy(conf->mandoc_path, val, sizeof(conf->mandoc_path));
+        } else if (strcasecmp(key, "trusted_proxy") == 0) {
+            strlcpy(conf->trusted_proxy, val, sizeof(conf->trusted_proxy));
+        } else if (strcasecmp(key, "verbose") == 0) {
+            if (strcasecmp(val, "yes") == 0 || strcasecmp(val, "true") == 0)
+                conf->verbose = 1;
+            else if (strcasecmp(val, "no") == 0 || strcasecmp(val, "false") == 0)
+                conf->verbose = 0;
+            else
+                conf->verbose = atoi(val);
+        } else if (strcasecmp(key, "log_file") == 0) {
+            strlcpy(conf->log_file, val, sizeof(conf->log_file));
+        } else {
+            return -1;
+        }
+        return 0;
 }
 
 /**
- * @brief TODO: Describe exist.
- * @param fatal TODO: Describe this parameter.
- * @param conf TODO: Describe this parameter.
- * @return TODO: Describe the return value.
+ * @brief Parse a single configuration file into @p conf.
+ * @param path Filesystem path of the file to read.
+ * @param conf Destination configuration structure.
+ * @return  0 on success,
+ *          1 when the file does not exist (non-fatal),
+ *         -1 on a parse error.
  */
-/* Try to open and parse a single config file.
- * Returns  1  if the file does not exist (non-fatal, keep looking).
- * Returns  0  on success.
- * Returns -1  on parse error. */
 static int
 conf_parse_file(const char *path, miniweb_conf_t *conf)
 {
@@ -148,8 +148,9 @@ conf_parse_file(const char *path, miniweb_conf_t *conf)
     int    lineno = 0;
 
     fp = fopen(path, "r");
-    if (fp == NULL)
+    if (fp == NULL){
         return 1; /* file not found */
+    }
 
     while (fgets(line, sizeof(line), fp) != NULL) {
         char *p, *key, *val;
@@ -183,15 +184,20 @@ conf_parse_file(const char *path, miniweb_conf_t *conf)
         }
     }
 
-    fclose(fp);
-    return 0;
+        fclose(fp);
+        return 0;
 }
 
 /**
- * @brief TODO: Describe conf_load.
- * @param path TODO: Describe this parameter.
- * @param conf TODO: Describe this parameter.
- * @return TODO: Describe the return value.
+ * @brief Load configuration from a file into @p conf.
+ *
+ * When @p path is NULL the lookup order is: ./miniweb.conf,
+ * $HOME/.miniweb.conf, /etc/miniweb.conf (first found wins).
+ * Missing files are silently skipped; a parse error is always fatal.
+ *
+ * @param path Explicit config file path, or NULL for auto-detection.
+ * @param conf Destination configuration structure.
+ * @return 0 on success or when no file is found, -1 on error.
  */
 int
 conf_load(const char *path, miniweb_conf_t *conf)
@@ -226,11 +232,13 @@ conf_load(const char *path, miniweb_conf_t *conf)
         if (candidates[i] == NULL)
             continue;
         rc = conf_parse_file(candidates[i], conf);
-        if (rc == 0)
+        if (rc == 0){
             return 0;  /* found and parsed */
-        if (rc == -1)
+        }
+        if (rc == -1){
             return -1; /* parse error */
-        /* rc == 1: not found, try next */
+            /* rc == 1: not found, try next */
+        }
     }
 
     /* No config file found — fine, defaults stand */
@@ -238,14 +246,18 @@ conf_load(const char *path, miniweb_conf_t *conf)
 }
 
 /**
- * @brief TODO: Describe conf_apply_cli.
- * @param conf TODO: Describe this parameter.
- * @param cli_port TODO: Describe this parameter.
- * @param cli_bind TODO: Describe this parameter.
- * @param cli_threads TODO: Describe this parameter.
- * @param cli_max_conns TODO: Describe this parameter.
- * @param cli_log_file TODO: Describe this parameter.
- * @param cli_verbose TODO: Describe this parameter.
+ * @brief Override @p conf fields with values supplied on the command line.
+ *
+ * Only non-sentinel values are applied: negative integers and NULL
+ * pointers are treated as "not supplied" and leave the field unchanged.
+ *
+ * @param conf          Configuration structure to update.
+ * @param cli_port      Port from -p, or -1 when not supplied.
+ * @param cli_bind      Bind address from -b, or NULL.
+ * @param cli_threads   Thread count from -t, or -1.
+ * @param cli_max_conns Max connections from -c, or -1.
+ * @param cli_log_file  Log file path from -l, or NULL.
+ * @param cli_verbose   Non-zero when -v was given.
  */
 void
 conf_apply_cli(miniweb_conf_t *conf,
@@ -265,8 +277,8 @@ conf_apply_cli(miniweb_conf_t *conf,
 }
 
 /**
- * @brief TODO: Describe conf_dump.
- * @param conf TODO: Describe this parameter.
+ * @brief Print the active configuration to stderr in human-readable form.
+ * @param conf Configuration to display. Must not be NULL.
  */
 void
 conf_dump(const miniweb_conf_t *conf)

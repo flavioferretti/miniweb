@@ -131,9 +131,9 @@ heartbeat_unregister(const char *name)
  */
 int
 heartbeat_update(const char *name,
-	unsigned int period_sec,
-	unsigned int initial_delay_sec,
-	void *ctx)
+				 unsigned int period_sec,
+				 unsigned int initial_delay_sec,
+				 void *ctx)
 {
 	time_t now;
 
@@ -293,7 +293,7 @@ heartbeat_thread(void *arg)
 			g_hb_slots[i].stats.last_run = now;
 			g_hb_slots[i].stats.last_error = 0;
 			g_hb_slots[i].next_run += (time_t)((missed + 1U) *
-				(uint64_t)g_hb_slots[i].task.period_sec);
+			(uint64_t)g_hb_slots[i].task.period_sec);
 		}
 
 		should_stop = g_hb_stop_requested;

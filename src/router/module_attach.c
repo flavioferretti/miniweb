@@ -1,14 +1,7 @@
+
 /* module_attach.c - module attach facility */
 #include <miniweb/router/module_attach.h>
 
-/**
- * @brief TODO: Describe miniweb_module_attach_enabled.
- * @param r TODO: Describe this parameter.
- * @param modules TODO: Describe this parameter.
- * @param count TODO: Describe this parameter.
- * @param ctx TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
 /**
  * @brief Initialize and attach every enabled module to the router.
  * @param r Router facade used by module attach callbacks.
@@ -19,7 +12,7 @@
  */
 int
 miniweb_module_attach_enabled(struct router *r,
-	struct miniweb_module *modules, size_t count, void *ctx)
+							  struct miniweb_module *modules, size_t count, void *ctx)
 {
 	for (size_t i = 0; i < count; i++) {
 		if (!modules[i].enabled_by_default)

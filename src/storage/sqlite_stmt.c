@@ -1,3 +1,4 @@
+
 /* sqlite_stmt.c - statement prepare facility */
 #include <miniweb/storage/sqlite_stmt.h>
 
@@ -10,18 +11,11 @@ struct mw_stmt {
 };
 
 /**
- * @brief TODO: Describe mw_stmt_prepare.
- * @param db TODO: Describe this parameter.
- * @param sql TODO: Describe this parameter.
- * @param out_stmt TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
- * @brief Prepare an SQL statement.
- * @param db Open database handle.
- * @param sql SQL statement text.
+ * @brief Compile an SQL statement for repeated execution.
+ * @param db       Open database handle.
+ * @param sql      SQL statement text.
  * @param out_stmt Output pointer receiving the prepared statement handle.
- * @return 0 on success, -1 on failure.
+ * @return 0 on success, -1 on failure (stub: always -1 until implemented).
  */
 int
 mw_stmt_prepare(struct mw_db *db, const char *sql, struct mw_stmt **out_stmt)
@@ -32,13 +26,7 @@ mw_stmt_prepare(struct mw_db *db, const char *sql, struct mw_stmt **out_stmt)
 	return -1;
 }
 
-/**
- * @brief TODO: Describe mw_bind_text.
- * @param stmt TODO: Describe this parameter.
- * @param idx TODO: Describe this parameter.
- * @param value TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
+
 /**
  * @brief Bind a text value to a prepared-statement parameter.
  * @param stmt Prepared statement handle.
@@ -55,13 +43,7 @@ mw_bind_text(struct mw_stmt *stmt, int idx, const char *value)
 	return -1;
 }
 
-/**
- * @brief TODO: Describe mw_bind_int64.
- * @param stmt TODO: Describe this parameter.
- * @param idx TODO: Describe this parameter.
- * @param value TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
+
 /**
  * @brief Bind an int64 value to a prepared-statement parameter.
  * @param stmt Prepared statement handle.
@@ -78,12 +60,7 @@ mw_bind_int64(struct mw_stmt *stmt, int idx, int64_t value)
 	return -1;
 }
 
-/**
- * @brief TODO: Describe mw_bind_null.
- * @param stmt TODO: Describe this parameter.
- * @param idx TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
+
 /**
  * @brief Bind SQL NULL to a prepared-statement parameter.
  * @param stmt Prepared statement handle.
@@ -98,11 +75,7 @@ mw_bind_null(struct mw_stmt *stmt, int idx)
 	return -1;
 }
 
-/**
- * @brief TODO: Describe mw_stmt_step.
- * @param stmt TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
+
 /**
  * @brief Execute one step on a prepared statement.
  * @param stmt Prepared statement handle.
@@ -116,10 +89,7 @@ mw_stmt_step(struct mw_stmt *stmt)
 	return -1;
 }
 
-/**
- * @brief TODO: Describe mw_stmt_finalize.
- * @param stmt TODO: Describe this parameter.
- */
+
 /**
  * @brief Finalize and release a prepared statement.
  * @param stmt Prepared statement handle.

@@ -774,12 +774,30 @@ include/
 | Phase | Description | Status |
 |---|---|---|
 | 0 | Test freeze / safety net | Planned |
-| 1 | Module attach API + router separation | **Complete** (all modules use `miniweb_module_attach_enabled`) |
-| 2 | Single global heartbeat scheduler | **Complete** (metrics and networking both run on heartbeat tasks) |
-| 3 | Domain decomposition (metrics, networking, man, packages) | Ongoing |
-| 4 | Documentation and architecture transition (docs/miniweb.1 + README.md, port modules to enterprise paradigm) | In progress |
-| 5 | SQLite3 storage integration | Stub interfaces defined |
+| 1 | Module attach API + router separation | **Complete** — all modules use `miniweb_module_attach_enabled` |
+| 2 | Single global heartbeat scheduler | **Complete** — metrics and networking both run named heartbeat tasks |
+| 3 | Domain decomposition (metrics, networking, man, packages) | **Scaffolded** — `*_service.c` and `*_json.c` stubs present; function bodies still to be migrated |
+| 4 | Documentation and architecture transition | **Complete** — README, man page, and Doxygen updated to reflect current state |
+| 5 | SQLite3 storage integration | Stub interfaces defined; no live backend yet |
 | 6 | Performance and observability hardening | Planned |
+
+### Refactor progress update (2026-02-25)
+
+Server decomposition is complete for the networking layer:
+
+- `src/app_main.c` is now an orchestration-only bootstrap (~120 LOC): CLI parsing, log/template/route init, signal wiring, and top-level lifecycle.
+- Server runtime extracted to dedicated translation units:
+  - `src/net/server.c` — kqueue dispatcher, accept loop, idle sweep
+  - `src/net/connection_pool.c` — fd-indexed pool with O(1) alloc/free
+  - `src/net/worker.c` — request read, parse, route dispatch
+- Module decomposition scaffolds added for all four feature modules:
+  - `src/modules/metrics/{metrics_service.c,metrics_json.c}`
+  - `src/modules/networking/{networking_service.c,networking_json.c}`
+  - `src/modules/man/{man_service.c,man_json.c}`
+  - `src/modules/packages/{packages_service.c,packages_json.c}`
+- All Doxygen `TODO` placeholders resolved; all Italian-language source comments translated to English.
+
+> **Note:** The development environment is Linux-based and does not provide `sys/event.h`. Full binary builds for kqueue paths must be validated on OpenBSD.
 
 ---
 
@@ -787,22 +805,73 @@ include/
 
 - Language: **C99 only**
 - Style: **OpenBSD KNF**
-- Documentation: **Doxygen** for all exported APIs
+- Documentation: **Doxygen** for all exported symbols
 - Principle: small reusable functions, strict module ownership, minimal coupling
+- File size: soft limit 350 LOC, review trigger 500 LOC
+- Function size: soft limit 40 LOC, review trigger 80 LOC
+- Return convention: `0` success / `-1` failure unless documented otherwise
 - TLS: not implemented — run behind `relayd(8)` for TLS termination
 
-## Refactor progress update (2026-02-24)
+---
 
-Networking/server decomposition is now advanced:
-- `src/app_main.c` now focuses on process bootstrap, CLI config, signal wiring, and top-level lifecycle.
-- server internals were extracted into:
-  - `src/net/server.c`
-  - `src/net/connection_pool.c`
-  - `src/net/worker.c`
-- module decomposition scaffolds were added for enterprise separation of concerns:
-  - `src/modules/metrics/{metrics_service.c,metrics_json.c}`
-  - `src/modules/networking/{networking_service.c,networking_json.c}`
-  - `src/modules/man/{man_service.c,man_json.c}`
-  - `src/modules/packages/{packages_service.c,packages_json.c}`
+## Next steps for code modularity
 
-> Note: the current development environment is Linux-based and does not provide `sys/event.h`; full binary build for kqueue paths must be validated on OpenBSD.
+The following tasks are the immediate backlog for achieving low LOC-per-file and low LOC-per-function targets.
+
+### 1  Complete the `*_module.c` → `*_service.c` / `*_json.c` migration
+
+Each module's current `*_module.c` still mixes service logic (sysctl reads, subprocess calls), JSON serialisation, and HTTP route handlers in a single translation unit.  The decomposition scaffolds exist; the work is to move function bodies:
+
+- Move all data-collection helpers from `metrics_module.c` into `metrics_service.c`.
+- Move all JSON builders from `metrics_module.c` into `metrics_json.c`.
+- Repeat the pattern for `networking`, `man`, and `packages`.
+- After migration, `*_module.c` should contain only route handler entry points and the `attach_routes` function.
+
+### 2  Split `src/http/response.c` (~973 LOC)
+
+Decompose into three focused units:
+
+- `src/http/response_writer.c` — HTTP header serialisation, keep-alive logic, `write_all`.
+- `src/http/static_files.c` — sharded file cache, `http_send_file`, static asset serving.
+- `src/http/mime.c` — MIME type detection and the content-type lookup table.
+
+### 3  Extract `platform/openbsd/` collectors
+
+Platform-specific syscall code is currently embedded inside module files.  Each collector should become a standalone translation unit:
+
+- `src/platform/openbsd/cpu.c` — `sysctl` CPU tick reader.
+- `src/platform/openbsd/mem.c` — memory and swap via `sysctl`.
+- `src/platform/openbsd/disk.c` — mount stats via `getmntinfo(3)`.
+- `src/platform/openbsd/proc.c` — process list via `sysctl KERN_PROC`.
+- `src/platform/openbsd/net_iface.c` — interface stats via `getifaddrs(3)`.
+- `src/platform/openbsd/net_routes.c` — routing table via `sysctl`.
+
+Modules must consume only the collector APIs; no direct sysctl or kvm calls in module files.
+
+### 4  Enforce function-size limits
+
+Functions over 80 LOC should be flagged during review.  High-priority targets:
+
+- `miniweb_server_run()` in `src/net/server.c` — extract `bind_and_listen()`, `start_worker_pool()`, `event_loop_iteration()`.
+- `man_render_handler()` in `src/modules/man/man_module.c` — extract URL parsing, cache lookup, render dispatch, and response assembly into separate helpers.
+- `build_system_metrics_json()` in `src/modules/metrics/metrics_module.c` — extract per-section JSON builders (CPU, memory, disk, processes).
+
+### 5  Harden the integration test suite
+
+Upgrade `tests/integration_endpoints.sh` from reachability smoke tests to contract-level assertions:
+
+- Explicit HTTP status checks for 200, 404, and 405 on all registered endpoints.
+- JSON key presence checks for `/api/metrics`, `/api/networking`, and `/api/packages/list`.
+- Golden payload fixtures for stable fields (schema version, top-level keys).
+- CI gate: unit tests + integration tests on every commit.
+
+### 6  Activate the SQLite3 storage layer (Phase 5)
+
+The `src/storage/` facade is fully defined but all functions return `-1`.  Implementation tasks:
+
+- Link against `libsqlite3`; implement `mw_db_open`/`mw_db_close` with real `sqlite3_open_v2`.
+- Implement `mw_db_exec_schema`, `mw_db_migrate`, and the transaction helpers.
+- Implement `mw_stmt_prepare`, bind functions, `mw_stmt_step`, and `mw_stmt_finalize`.
+- Persist module enable/disable flags across restarts.
+- Persist bounded metric snapshots (ring-to-table with configurable retention).
+- Version all schemas through the explicit migration list.

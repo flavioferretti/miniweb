@@ -1,56 +1,53 @@
 
 /* metrics_module.c - System metrics collection (Native kqueue version) */
 
-#include <sys/types.h>
-#include <sys/param.h>
-#include <sys/socket.h>
-#include <sys/sysctl.h>
-#include <sys/sched.h>   /* CPUSTATES, CP_USER, CP_SYS, CP_IDLE, CP_INTR */
-#include <sys/mount.h>
-#include <sys/proc.h>
-#include <sys/swap.h>
-#include <sys/utsname.h>  /* Required for uname() and struct utsname. */
 #include <miniweb/router/router.h>
+#include <sys/mount.h>
+#include <sys/param.h>
+#include <sys/proc.h>
+#include <sys/sched.h> /* CPUSTATES, CP_USER, CP_SYS, CP_IDLE, CP_INTR */
+#include <sys/socket.h>
+#include <sys/swap.h>
+#include <sys/sysctl.h>
+#include <sys/types.h>
+#include <sys/utsname.h> /* Required for uname() and struct utsname. */
 
+#include <errno.h>
+#include <pthread.h>
+#include <pwd.h> /* For struct passwd (process usernames). */
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <errno.h>
 #include <time.h>
-#include <stdint.h>
-#include <pthread.h>
-#include <pwd.h>          /* For struct passwd (process usernames). */
+#include <unistd.h>
 
-#include <miniweb/modules/metrics.h>
 #include <miniweb/core/config.h>
+#include <miniweb/core/heartbeat.h>
+#include <miniweb/core/log.h>
 #include <miniweb/http/handler.h>
 #include <miniweb/http/utils.h>
-#include <miniweb/core/log.h>
-#include <miniweb/core/heartbeat.h>
+#include <miniweb/modules/metrics.h>
 
 #define JSON_BUFFER_SIZE 65536
 #define MB (1024 * 1024)
 #define RING_CAPACITY (1024 * 1024 / sizeof(MetricSample))
 #define METRICS_HISTORY_WINDOW 120
 
-
-
 /* Logging macro controlled by global configuration. */
-#define LOG(...)                            \
- do {                                      \
-	if (config_verbose)                     \
-		log_debug("[METRICS] " __VA_ARGS__); \
- } while (0)
-
+#define LOG(...)                                                               \
+	do {                                                                   \
+		if (config_verbose)                                            \
+			log_debug("[METRICS] " __VA_ARGS__);                   \
+	} while (0)
 
 static struct kinfo_proc *get_procs_snapshot(size_t *nprocs);
 static void append_process_json_sections(char *top_cpu_json,
-	size_t top_cpu_json_size,
-	char *top_mem_json,
-	size_t top_mem_json_size,
-	char *proc_stats_json,
-	size_t proc_stats_json_size);
+					 size_t top_cpu_json_size,
+					 char *top_mem_json,
+					 size_t top_mem_json_size,
+					 char *proc_stats_json,
+					 size_t proc_stats_json_size);
 
 /**
  * @brief Internal data structure.
@@ -90,8 +87,9 @@ static void metrics_heartbeat_cb(void *ctx);
 static void metrics_take_sample(MetricSample *sample);
 static int metrics_read_cpu_ticks(uint64_t *total_ticks, uint64_t *idle_ticks);
 static void append_metrics_history_json(char *buffer, size_t size,
-							MetricSample *history, size_t count);
-static char *build_system_metrics_json(MetricSample *history, size_t history_count);
+					MetricSample *history, size_t count);
+static char *build_system_metrics_json(MetricSample *history,
+				       size_t history_count);
 static void metrics_snapshot_update(void);
 
 static pthread_mutex_t g_metrics_snapshot_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -107,7 +105,7 @@ static time_t g_metrics_snapshot_updated_at = 0;
 static int
 metrics_read_cpu_ticks(uint64_t *total_ticks, uint64_t *idle_ticks)
 {
-	#ifdef __OpenBSD__
+#ifdef __OpenBSD__
 	int mib[2] = {CTL_KERN, KERN_CPTIME};
 	long cp_time[CPUSTATES];
 	size_t len = sizeof(cp_time);
@@ -128,11 +126,11 @@ metrics_read_cpu_ticks(uint64_t *total_ticks, uint64_t *idle_ticks)
 	*total_ticks = total;
 	*idle_ticks = (uint64_t)cp_time[CP_IDLE];
 	return 0;
-	#else
+#else
 	(void)total_ticks;
 	(void)idle_ticks;
 	return -1;
-	#endif
+#endif
 }
 
 /**
@@ -229,16 +227,18 @@ metrics_take_sample(MetricSample *sample)
 		sample->cpu_idle_ticks = idle_ticks;
 
 		if (ring_last(&g_metrics_ring, 1, &prev) == 1 &&
-			prev.cpu_total_ticks > 0 &&
-			total_ticks > prev.cpu_total_ticks) {
-			uint64_t total_delta = total_ticks - prev.cpu_total_ticks;
+		    prev.cpu_total_ticks > 0 &&
+		    total_ticks > prev.cpu_total_ticks) {
+			uint64_t total_delta =
+			    total_ticks - prev.cpu_total_ticks;
 			uint64_t idle_delta = 0;
 
 			if (idle_ticks >= prev.cpu_idle_ticks)
 				idle_delta = idle_ticks - prev.cpu_idle_ticks;
 
-			sample->cpu = (float)(100.0 *
-				(1.0 - ((double)idle_delta / (double)total_delta)));
+			sample->cpu =
+			    (float)(100.0 * (1.0 - ((double)idle_delta /
+						    (double)total_delta)));
 			if (sample->cpu < 0.0f)
 				sample->cpu = 0.0f;
 			if (sample->cpu > 100.0f)
@@ -251,9 +251,10 @@ metrics_take_sample(MetricSample *sample)
 	if (metrics_get_memory_stats(&mem) == 0) {
 		long used = mem.active_mb + mem.wired_mb;
 		sample->mem_used = (used > 0) ? (uint32_t)used : 0;
-		sample->mem_total = (mem.total_mb > 0) ? (uint32_t)mem.total_mb : 0;
+		sample->mem_total =
+		    (mem.total_mb > 0) ? (uint32_t)mem.total_mb : 0;
 		sample->swap_used =
-			(mem.swap_used_mb > 0) ? (uint32_t)mem.swap_used_mb : 0;
+		    (mem.swap_used_mb > 0) ? (uint32_t)mem.swap_used_mb : 0;
 	}
 }
 
@@ -294,7 +295,7 @@ metrics_ring_bootstrap(void)
 		.initial_delay_sec = 0,
 		.cb = metrics_heartbeat_cb,
 		.ctx = NULL,
-	}) < 0) {
+	    }) < 0) {
 		LOG("Failed to register metrics heartbeat task");
 		ring_free(&g_metrics_ring);
 		return;
@@ -318,8 +319,8 @@ metrics_ring_bootstrap(void)
  * @param count Number of history entries.
  */
 static void
-append_metrics_history_json(char *buffer, size_t size,
-	MetricSample *history, size_t count)
+append_metrics_history_json(char *buffer, size_t size, MetricSample *history,
+			    size_t count)
 {
 	char *ptr = buffer;
 	int written = snprintf(ptr, size, "\"history\": [");
@@ -332,14 +333,14 @@ append_metrics_history_json(char *buffer, size_t size,
 	size -= (size_t)written;
 
 	for (size_t i = 0; i < count && size > 0; i++) {
-		written = snprintf(ptr, size,
-			"%s{\"ts\": %lld, \"cpu\": %.2f, \"mem_used_mb\": %u, "
-			"\"mem_total_mb\": %u, \"swap_used_mb\": %u, "
-			"\"net_rx\": %u, \"net_tx\": %u}",
-			(i > 0) ? ", " : "",
-			(long long)history[i].ts, history[i].cpu,
-			history[i].mem_used, history[i].mem_total,
-			history[i].swap_used, history[i].net_rx, history[i].net_tx);
+		written = snprintf(
+		    ptr, size,
+		    "%s{\"ts\": %lld, \"cpu\": %.2f, \"mem_used_mb\": %u, "
+		    "\"mem_total_mb\": %u, \"swap_used_mb\": %u, "
+		    "\"net_rx\": %u, \"net_tx\": %u}",
+		    (i > 0) ? ", " : "", (long long)history[i].ts,
+		    history[i].cpu, history[i].mem_used, history[i].mem_total,
+		    history[i].swap_used, history[i].net_rx, history[i].net_tx);
 		if (written < 0 || (size_t)written >= size)
 			break;
 		ptr += written;
@@ -355,7 +356,8 @@ append_metrics_history_json(char *buffer, size_t size,
  * @brief Compare memory.
  * @param a Parameter used by this function.
  * @param b Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 static int
 compare_memory(const void *a, const void *b)
@@ -375,7 +377,8 @@ compare_memory(const void *a, const void *b)
 /**
  * @brief Get procs snapshot.
  * @param nprocs Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 static struct kinfo_proc *
 get_procs_snapshot(size_t *nprocs)
@@ -416,21 +419,22 @@ get_procs_snapshot(size_t *nprocs)
 		if (sysctl(mib, 6, kp, &size, NULL, 0) == 0) {
 			*nprocs = size / elem_size;
 			LOG("Successfully retrieved %zu processes (retry %d, "
-			"requested %d)",
-			*nprocs, retry, nelem);
+			    "requested %d)",
+			    *nprocs, retry, nelem);
 			return kp;
 		}
 
 		if (errno != ENOMEM) {
 			LOG("sysctl data query failed: %s", strerror(errno));
 			free(kp);
-			kp = NULL; /* Critical: reset pointer to NULL after free. */
+			kp = NULL; /* Critical: reset pointer to NULL after
+				      free. */
 			return NULL;
 		}
 
 		LOG("ENOMEM on retry %d (requested %d elements), trying "
-		"again...",
-		retry, nelem);
+		    "again...",
+		    retry, nelem);
 		free(kp);
 		kp = NULL; /* Critical: reset pointer to NULL after free. */
 	}
@@ -443,12 +447,13 @@ get_procs_snapshot(size_t *nprocs)
 /**
  * @brief Metrics get cpu stats.
  * @param stats Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 int
 metrics_get_cpu_stats(CpuStats *stats)
 {
-	#ifdef __OpenBSD__
+#ifdef __OpenBSD__
 	int mib[2] = {CTL_KERN, KERN_CPTIME};
 	long cp_time[CPUSTATES];
 	size_t len = sizeof(cp_time);
@@ -468,28 +473,29 @@ metrics_get_cpu_stats(CpuStats *stats)
 		return -1;
 	}
 
-	stats->user      = (int)((cp_time[CP_USER] * 100) / total);
-	stats->nice      = (int)((cp_time[CP_NICE] * 100) / total);
-	stats->system    = (int)((cp_time[CP_SYS]  * 100) / total);
+	stats->user = (int)((cp_time[CP_USER] * 100) / total);
+	stats->nice = (int)((cp_time[CP_NICE] * 100) / total);
+	stats->system = (int)((cp_time[CP_SYS] * 100) / total);
 	stats->interrupt = (int)((cp_time[CP_INTR] * 100) / total);
-	stats->idle      = (int)((cp_time[CP_IDLE] * 100) / total);
+	stats->idle = (int)((cp_time[CP_IDLE] * 100) / total);
 	return 0;
-	#else
+#else
 	stats->user = stats->nice = stats->system = 0;
 	stats->interrupt = stats->idle = 0;
 	return -1;
-	#endif
+#endif
 }
 
 /**
  * @brief Metrics get memory stats.
  * @param stats Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 int
 metrics_get_memory_stats(MemoryStats *stats)
 {
-	#ifdef __OpenBSD__
+#ifdef __OpenBSD__
 	int mib[2];
 	size_t len;
 
@@ -502,7 +508,7 @@ metrics_get_memory_stats(MemoryStats *stats)
 
 	unsigned long pagesize = uvm.pagesize;
 	unsigned long long physmem =
-	(unsigned long long)uvm.npages * (unsigned long long)pagesize;
+	    (unsigned long long)uvm.npages * (unsigned long long)pagesize;
 	stats->total_mb = physmem / MB;
 	stats->free_mb = (uvm.free * pagesize) / MB;
 	stats->active_mb = (uvm.active * pagesize) / MB;
@@ -534,16 +540,17 @@ metrics_get_memory_stats(MemoryStats *stats)
 	stats->swap_total_mb = (swap_total * 512) / MB;
 	stats->swap_used_mb = (swap_used * 512) / MB;
 	return 0;
-	#else
+#else
 	memset(stats, 0, sizeof(*stats));
 	return -1;
-	#endif
+#endif
 }
 
 /**
  * @brief Metrics get load average.
  * @param load Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 int
 metrics_get_load_average(LoadAverage *load)
@@ -567,7 +574,8 @@ metrics_get_load_average(LoadAverage *load)
  * @param release Parameter used by this function.
  * @param machine Parameter used by this function.
  * @param size Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 int
 metrics_get_os_info(char *type, char *release, char *machine, size_t size)
@@ -589,12 +597,13 @@ metrics_get_os_info(char *type, char *release, char *machine, size_t size)
  * @brief Metrics get uptime.
  * @param uptime_str Parameter used by this function.
  * @param size Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 int
 metrics_get_uptime(char *uptime_str, size_t size)
 {
-	#ifdef __OpenBSD__
+#ifdef __OpenBSD__
 	struct timeval boottime;
 	time_t now;
 	size_t len = sizeof(boottime);
@@ -611,23 +620,24 @@ metrics_get_uptime(char *uptime_str, size_t size)
 	long seconds = uptime_seconds % 60;
 	if (days > 0) {
 		snprintf(uptime_str, size, "%ld days, %ld:%02ld:%02ld", days,
-				 hours, minutes, seconds);
+			 hours, minutes, seconds);
 	} else {
 		snprintf(uptime_str, size, "%ld:%02ld:%02ld", hours, minutes,
-				 seconds);
+			 seconds);
 	}
 	return 0;
-	#else
+#else
 	strlcpy(uptime_str, "unsupported", size);
 	return -1;
-	#endif
+#endif
 }
 
 /**
  * @brief Metrics get hostname.
  * @param hostname Parameter used by this function.
  * @param size Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 int
 metrics_get_hostname(char *hostname, size_t size)
@@ -639,12 +649,13 @@ metrics_get_hostname(char *hostname, size_t size)
  * @brief Metrics get disk usage.
  * @param disks Parameter used by this function.
  * @param max_disks Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 int
 metrics_get_disk_usage(DiskInfo *disks, int max_disks)
 {
-	#ifdef __OpenBSD__
+#ifdef __OpenBSD__
 	struct statfs *mntbuf;
 	int mntsize, count = 0;
 	mntsize = getmntinfo(&mntbuf, MNT_NOWAIT);
@@ -653,37 +664,38 @@ metrics_get_disk_usage(DiskInfo *disks, int max_disks)
 	for (int i = 0; i < mntsize && count < max_disks; i++) {
 		struct statfs *fs = &mntbuf[i];
 		if (strcmp(fs->f_fstypename, "tmpfs") == 0 ||
-			strcmp(fs->f_fstypename, "procfs") == 0 ||
-			strcmp(fs->f_fstypename, "devfs") == 0 ||
-			strcmp(fs->f_fstypename, "fdescfs") == 0 ||
-			fs->f_blocks == 0)
+		    strcmp(fs->f_fstypename, "procfs") == 0 ||
+		    strcmp(fs->f_fstypename, "devfs") == 0 ||
+		    strcmp(fs->f_fstypename, "fdescfs") == 0 ||
+		    fs->f_blocks == 0)
 			continue;
 		DiskInfo *disk = &disks[count++];
 		strlcpy(disk->device, fs->f_mntfromname, sizeof(disk->device));
 		strlcpy(disk->mount_point, fs->f_mntonname,
-				sizeof(disk->mount_point));
+			sizeof(disk->mount_point));
 		unsigned long total = fs->f_blocks * fs->f_bsize;
 		unsigned long available = fs->f_bavail * fs->f_bsize;
 		disk->total_mb = total / MB;
 		disk->used_mb = (total - available) / MB;
 		disk->percent_used =
-		disk->total_mb > 0
-		? (int)((disk->used_mb * 100) / disk->total_mb)
-		: 0;
+		    disk->total_mb > 0
+			? (int)((disk->used_mb * 100) / disk->total_mb)
+			: 0;
 	}
 	return count;
-	#else
+#else
 	(void)disks;
 	(void)max_disks;
 	return 0;
-	#endif
+#endif
 }
 
 /**
  * @brief Metrics get top ports.
  * @param ports Parameter used by this function.
  * @param max_ports Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 int
 metrics_get_top_ports(PortInfo *ports, int max_ports)
@@ -697,7 +709,8 @@ metrics_get_top_ports(PortInfo *ports, int max_ports)
  * @brief Metrics get network interfaces.
  * @param interfaces Parameter used by this function.
  * @param max_interfaces Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 int
 metrics_get_network_interfaces(NetworkInterface *interfaces, int max_interfaces)
@@ -719,22 +732,19 @@ metrics_get_network_interfaces(NetworkInterface *interfaces, int max_interfaces)
  * @param proc_stats_json_size Size of proc_stats_json.
  */
 static void
-append_process_json_sections(char *top_cpu_json,
-	size_t top_cpu_json_size,
-	char *top_mem_json,
-	size_t top_mem_json_size,
-	char *proc_stats_json,
-	size_t proc_stats_json_size)
+append_process_json_sections(char *top_cpu_json, size_t top_cpu_json_size,
+			     char *top_mem_json, size_t top_mem_json_size,
+			     char *proc_stats_json, size_t proc_stats_json_size)
 {
 	size_t nprocs = 0;
 	struct kinfo_proc *kp = get_procs_snapshot(&nprocs);
 	if (!kp) {
 		snprintf(top_cpu_json, top_cpu_json_size,
-				 "\"top_cpu_processes\": []");
+			 "\"top_cpu_processes\": []");
 		snprintf(top_mem_json, top_mem_json_size,
-				 "\"top_memory_processes\": []");
+			 "\"top_memory_processes\": []");
 		snprintf(proc_stats_json, proc_stats_json_size,
-				 "\"process_stats\": null");
+			 "\"process_stats\": null");
 		return;
 	}
 
@@ -751,8 +761,8 @@ append_process_json_sections(char *top_cpu_json,
 			zombie++;
 	}
 	snprintf(proc_stats_json, proc_stats_json_size,
-			 "\"process_stats\": {\"total\": %d, \"running\": %d, "
-			 "\"sleeping\": %d, \"zombie\": %d}",
+		 "\"process_stats\": {\"total\": %d, \"running\": %d, "
+		 "\"sleeping\": %d, \"zombie\": %d}",
 		 total, running, sleeping, zombie);
 
 	/* Top CPU. */
@@ -763,7 +773,7 @@ append_process_json_sections(char *top_cpu_json,
 			continue;
 		top_cpu[top_cpu_count].pid = kp[i].p_pid;
 		top_cpu[top_cpu_count].cpu_percent =
-			(100.0f * kp[i].p_pctcpu) / FSCALE;
+		    (100.0f * kp[i].p_pctcpu) / FSCALE;
 		strlcpy(top_cpu[top_cpu_count].command, kp[i].p_comm,
 			sizeof(top_cpu[top_cpu_count].command));
 
@@ -771,20 +781,22 @@ append_process_json_sections(char *top_cpu_json,
 		struct passwd *result = NULL;
 		char pwbuf[1024];
 		if (getpwuid_r(kp[i].p_uid, &pwd, pwbuf, sizeof(pwbuf),
-			&result) == 0 && result != NULL) {
+			       &result) == 0 &&
+		    result != NULL) {
 			strlcpy(top_cpu[top_cpu_count].user, pwd.pw_name,
 				sizeof(top_cpu[top_cpu_count].user));
 		} else {
 			snprintf(top_cpu[top_cpu_count].user,
-				sizeof(top_cpu[top_cpu_count].user), "%d",
-				kp[i].p_uid);
+				 sizeof(top_cpu[top_cpu_count].user), "%d",
+				 kp[i].p_uid);
 		}
 		top_cpu_count++;
 	}
 
 	for (int i = 0; i < top_cpu_count - 1; i++) {
 		for (int j = 0; j < top_cpu_count - i - 1; j++) {
-			if (top_cpu[j].cpu_percent < top_cpu[j + 1].cpu_percent) {
+			if (top_cpu[j].cpu_percent <
+			    top_cpu[j + 1].cpu_percent) {
 				ProcessInfo tmp = top_cpu[j];
 				top_cpu[j] = top_cpu[j + 1];
 				top_cpu[j + 1] = tmp;
@@ -803,11 +815,12 @@ append_process_json_sections(char *top_cpu_json,
 			cpu_ptr += w;
 			cpu_left -= (size_t)w;
 		}
-		w = snprintf(cpu_ptr, cpu_left,
-			"{\"user\": \"%s\", \"pid\": %d, \"cpu_percent\": %.1f, "
-			"\"command\": \"%s\"}",
-			top_cpu[i].user, top_cpu[i].pid, top_cpu[i].cpu_percent,
-			top_cpu[i].command);
+		w = snprintf(
+		    cpu_ptr, cpu_left,
+		    "{\"user\": \"%s\", \"pid\": %d, \"cpu_percent\": %.1f, "
+		    "\"command\": \"%s\"}",
+		    top_cpu[i].user, top_cpu[i].pid, top_cpu[i].cpu_percent,
+		    top_cpu[i].command);
 		cpu_ptr += w;
 		cpu_left -= (size_t)w;
 	}
@@ -817,7 +830,7 @@ append_process_json_sections(char *top_cpu_json,
 	struct kinfo_proc *kmem = malloc(nprocs * sizeof(struct kinfo_proc));
 	if (!kmem) {
 		snprintf(top_mem_json, top_mem_json_size,
-				 "\"top_memory_processes\": []");
+			 "\"top_memory_processes\": []");
 		free(kp);
 		return;
 	}
@@ -837,15 +850,18 @@ append_process_json_sections(char *top_cpu_json,
 	mem_left -= (size_t)w;
 
 	int mem_count = 0;
-	for (size_t i = 0; i < nprocs && mem_count < 10 && mem_left > 100; i++) {
+	for (size_t i = 0; i < nprocs && mem_count < 10 && mem_left > 100;
+	     i++) {
 		if (kmem[i].p_stat == SZOMB)
 			continue;
 		ProcessInfo proc;
 		proc.pid = kmem[i].p_pid;
-		proc.memory_mb = (kmem[i].p_vm_rssize * page_size) / (1024 * 1024);
+		proc.memory_mb =
+		    (kmem[i].p_vm_rssize * page_size) / (1024 * 1024);
 		if (total_memory_kb > 0) {
 			long mem_kb = (kmem[i].p_vm_rssize * page_size) / 1024;
-			proc.memory_percent = (100.0f * mem_kb) / total_memory_kb;
+			proc.memory_percent =
+			    (100.0f * mem_kb) / total_memory_kb;
 		} else {
 			proc.memory_percent = 0.0f;
 		}
@@ -854,21 +870,24 @@ append_process_json_sections(char *top_cpu_json,
 		struct passwd *result = NULL;
 		char pwbuf[1024];
 		if (getpwuid_r(kmem[i].p_uid, &pwd, pwbuf, sizeof(pwbuf),
-			&result) == 0 && result != NULL) {
+			       &result) == 0 &&
+		    result != NULL) {
 			strlcpy(proc.user, pwd.pw_name, sizeof(proc.user));
 		} else {
-			snprintf(proc.user, sizeof(proc.user), "%d", kmem[i].p_uid);
+			snprintf(proc.user, sizeof(proc.user), "%d",
+				 kmem[i].p_uid);
 		}
 		if (mem_count > 0) {
 			w = snprintf(mem_ptr, mem_left, ", ");
 			mem_ptr += w;
 			mem_left -= (size_t)w;
 		}
-		w = snprintf(mem_ptr, mem_left,
-			"{\"user\": \"%s\", \"pid\": %d, \"memory_percent\": %.1f, "
-			"\"memory_mb\": %d, \"command\": \"%s\"}",
-			proc.user, proc.pid, proc.memory_percent,
-			proc.memory_mb, proc.command);
+		w = snprintf(
+		    mem_ptr, mem_left,
+		    "{\"user\": \"%s\", \"pid\": %d, \"memory_percent\": %.1f, "
+		    "\"memory_mb\": %d, \"command\": \"%s\"}",
+		    proc.user, proc.pid, proc.memory_percent, proc.memory_mb,
+		    proc.command);
 		mem_ptr += w;
 		mem_left -= (size_t)w;
 		mem_count++;
@@ -883,7 +902,8 @@ append_process_json_sections(char *top_cpu_json,
  * @brief Metrics get top cpu processes.
  * @param processes Parameter used by this function.
  * @param max_processes Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 int
 metrics_get_top_cpu_processes(ProcessInfo *processes, int max_processes)
@@ -911,9 +931,9 @@ metrics_get_top_cpu_processes(ProcessInfo *processes, int max_processes)
 
 		temp[valid_count].pid = kp[i].p_pid;
 		temp[valid_count].cpu_percent =
-		(100.0 * kp[i].p_pctcpu) / FSCALE;
+		    (100.0 * kp[i].p_pctcpu) / FSCALE;
 		strlcpy(temp[valid_count].command, kp[i].p_comm,
-				sizeof(temp[valid_count].command));
+			sizeof(temp[valid_count].command));
 
 		/* Critical: use getpwuid_r() instead of getpwuid(). */
 		struct passwd pwd;
@@ -921,17 +941,17 @@ metrics_get_top_cpu_processes(ProcessInfo *processes, int max_processes)
 		char pwbuf[1024];
 
 		if (getpwuid_r(kp[i].p_uid, &pwd, pwbuf, sizeof(pwbuf),
-			&result) == 0 &&
-			result != NULL) {
+			       &result) == 0 &&
+		    result != NULL) {
 			strlcpy(temp[valid_count].user, pwd.pw_name,
-					sizeof(temp[valid_count].user));
-			} else {
-				snprintf(temp[valid_count].user,
-						 sizeof(temp[valid_count].user), "%d",
-						 kp[i].p_uid);
-			}
+				sizeof(temp[valid_count].user));
+		} else {
+			snprintf(temp[valid_count].user,
+				 sizeof(temp[valid_count].user), "%d",
+				 kp[i].p_uid);
+		}
 
-			valid_count++;
+		valid_count++;
 	}
 
 	/* Sort by descending CPU usage. */
@@ -951,7 +971,7 @@ metrics_get_top_cpu_processes(ProcessInfo *processes, int max_processes)
 	}
 
 	LOG("Returning %d CPU processes (valid: %d, total: %zu)", count,
-		valid_count, nprocs);
+	    valid_count, nprocs);
 	free(temp);
 	free(kp);
 	return count;
@@ -961,7 +981,8 @@ metrics_get_top_cpu_processes(ProcessInfo *processes, int max_processes)
  * @brief Metrics get top memory processes.
  * @param processes Parameter used by this function.
  * @param max_processes Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 int
 metrics_get_top_memory_processes(ProcessInfo *processes, int max_processes)
@@ -993,18 +1014,18 @@ metrics_get_top_memory_processes(ProcessInfo *processes, int max_processes)
 
 		processes[count].pid = kp[i].p_pid;
 		processes[count].memory_mb =
-		(kp[i].p_vm_rssize * page_size) / (1024 * 1024);
+		    (kp[i].p_vm_rssize * page_size) / (1024 * 1024);
 
 		if (total_memory_kb > 0) {
 			long mem_kb = (kp[i].p_vm_rssize * page_size) / 1024;
 			processes[count].memory_percent =
-			(100.0 * mem_kb) / total_memory_kb;
+			    (100.0 * mem_kb) / total_memory_kb;
 		} else {
 			processes[count].memory_percent = 0.0;
 		}
 
 		strlcpy(processes[count].command, kp[i].p_comm,
-				sizeof(processes[count].command));
+			sizeof(processes[count].command));
 
 		/* Critical: use getpwuid_r() instead of getpwuid(). */
 		struct passwd pwd;
@@ -1012,17 +1033,17 @@ metrics_get_top_memory_processes(ProcessInfo *processes, int max_processes)
 		char pwbuf[1024];
 
 		if (getpwuid_r(kp[i].p_uid, &pwd, pwbuf, sizeof(pwbuf),
-			&result) == 0 &&
-			result != NULL) {
+			       &result) == 0 &&
+		    result != NULL) {
 			strlcpy(processes[count].user, pwd.pw_name,
-					sizeof(processes[count].user));
-			} else {
-				snprintf(processes[count].user,
-						 sizeof(processes[count].user), "%d",
-						 kp[i].p_uid);
-			}
+				sizeof(processes[count].user));
+		} else {
+			snprintf(processes[count].user,
+				 sizeof(processes[count].user), "%d",
+				 kp[i].p_uid);
+		}
 
-			count++;
+		count++;
 	}
 
 	LOG("Returning %d memory processes (total: %zu)", count, nprocs);
@@ -1037,7 +1058,8 @@ metrics_get_top_memory_processes(ProcessInfo *processes, int max_processes)
  * @param running Parameter used by this function.
  * @param sleeping Parameter used by this function.
  * @param zombie Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 int
 metrics_get_process_stats(int *total, int *running, int *sleeping, int *zombie)
@@ -1071,20 +1093,19 @@ append_cpu_stats_json(char *buffer, size_t size)
 {
 	CpuStats stats;
 	if (metrics_get_cpu_stats(&stats) == 0) {
-		int used = stats.user + stats.nice + stats.system + stats.interrupt;
+		int used =
+		    stats.user + stats.nice + stats.system + stats.interrupt;
 		snprintf(buffer, size,
-				 "\"cpu\": {"
-				 "\"used_pct\": %d,"
-				 "\"user_pct\": %d,"
-				 "\"nice_pct\": %d,"
-				 "\"system_pct\": %d,"
-				 "\"interrupt_pct\": %d,"
-				 "\"idle_pct\": %d"
-				 "}",
-		   used,
-		   stats.user, stats.nice,
-		   stats.system, stats.interrupt,
-		   stats.idle);
+			 "\"cpu\": {"
+			 "\"used_pct\": %d,"
+			 "\"user_pct\": %d,"
+			 "\"nice_pct\": %d,"
+			 "\"system_pct\": %d,"
+			 "\"interrupt_pct\": %d,"
+			 "\"idle_pct\": %d"
+			 "}",
+			 used, stats.user, stats.nice, stats.system,
+			 stats.interrupt, stats.idle);
 	} else {
 		snprintf(buffer, size, "\"cpu\": null");
 	}
@@ -1101,21 +1122,21 @@ append_memory_stats_json(char *buffer, size_t size)
 	MemoryStats stats;
 	if (metrics_get_memory_stats(&stats) == 0) {
 		snprintf(buffer, size,
-				 "\"memory\": {\"total_mb\": %ld, \"free_mb\": %ld, "
-				 "\"active_mb\": %ld, \"inactive_mb\": %ld, "
-				 "\"wired_mb\": %ld, "
-				 "\"cache_mb\": %ld}, "
-				 "\"swap\": {\"total_mb\": %ld, \"used_mb\": %ld}",
-		   stats.total_mb, stats.free_mb, stats.active_mb,
-		   stats.inactive_mb, stats.wired_mb, stats.cache_mb,
-		   stats.swap_total_mb, stats.swap_used_mb);
+			 "\"memory\": {\"total_mb\": %ld, \"free_mb\": %ld, "
+			 "\"active_mb\": %ld, \"inactive_mb\": %ld, "
+			 "\"wired_mb\": %ld, "
+			 "\"cache_mb\": %ld}, "
+			 "\"swap\": {\"total_mb\": %ld, \"used_mb\": %ld}",
+			 stats.total_mb, stats.free_mb, stats.active_mb,
+			 stats.inactive_mb, stats.wired_mb, stats.cache_mb,
+			 stats.swap_total_mb, stats.swap_used_mb);
 	} else {
 		snprintf(
-			buffer, size,
-		   "\"memory\": {\"total_mb\": 0, \"free_mb\": 0, "
-		   "\"active_mb\": 0, \"inactive_mb\": 0, \"wired_mb\": 0, "
-		   "\"cache_mb\": 0}, "
-		   "\"swap\": {\"total_mb\": 0, \"used_mb\": 0}");
+		    buffer, size,
+		    "\"memory\": {\"total_mb\": 0, \"free_mb\": 0, "
+		    "\"active_mb\": 0, \"inactive_mb\": 0, \"wired_mb\": 0, "
+		    "\"cache_mb\": 0}, "
+		    "\"swap\": {\"total_mb\": 0, \"used_mb\": 0}");
 	}
 }
 
@@ -1130,13 +1151,13 @@ append_load_average_json(char *buffer, size_t size)
 	LoadAverage load;
 	if (metrics_get_load_average(&load) == 0) {
 		snprintf(buffer, size,
-				 "\"load\": {\"1min\": %.2f, \"5min\": %.2f, "
-				 "\"15min\": %.2f}",
-		   load.load_1min, load.load_5min, load.load_15min);
+			 "\"load\": {\"1min\": %.2f, \"5min\": %.2f, "
+			 "\"15min\": %.2f}",
+			 load.load_1min, load.load_5min, load.load_15min);
 	} else {
 		snprintf(
-			buffer, size,
-		   "\"load\": {\"1min\": 0.0, \"5min\": 0.0, \"15min\": 0.0}");
+		    buffer, size,
+		    "\"load\": {\"1min\": 0.0, \"5min\": 0.0, \"15min\": 0.0}");
 	}
 }
 
@@ -1150,16 +1171,16 @@ append_os_info_json(char *buffer, size_t size)
 {
 	char os_type[64], os_release[64], machine[64];
 	if (metrics_get_os_info(os_type, os_release, machine,
-		sizeof(os_type)) == 0) {
+				sizeof(os_type)) == 0) {
 		snprintf(buffer, size,
-				 "\"os\": {\"type\": \"%s\", \"release\": \"%s\", "
-				 "\"machine\": \"%s\"}",
-		   os_type, os_release, machine);
-		} else {
-			snprintf(buffer, size,
-					 "\"os\": {\"type\": \"Unknown\", \"release\": "
-					 "\"Unknown\", \"machine\": \"Unknown\"}");
-		}
+			 "\"os\": {\"type\": \"%s\", \"release\": \"%s\", "
+			 "\"machine\": \"%s\"}",
+			 os_type, os_release, machine);
+	} else {
+		snprintf(buffer, size,
+			 "\"os\": {\"type\": \"Unknown\", \"release\": "
+			 "\"Unknown\", \"machine\": \"Unknown\"}");
+	}
 }
 
 /**
@@ -1203,11 +1224,11 @@ append_disk_info_json(char *buffer, size_t size)
 		}
 
 		written = snprintf(
-			ptr, size,
-			"{\"device\": \"%s\", \"mount\": \"%s\", \"total_mb\": "
-			"%ld, \"used_mb\": %ld, \"percent\": %d}",
-			disks[i].device, disks[i].mount_point, disks[i].total_mb,
-			disks[i].used_mb, disks[i].percent_used);
+		    ptr, size,
+		    "{\"device\": \"%s\", \"mount\": \"%s\", \"total_mb\": "
+		    "%ld, \"used_mb\": %ld, \"percent\": %d}",
+		    disks[i].device, disks[i].mount_point, disks[i].total_mb,
+		    disks[i].used_mb, disks[i].percent_used);
 		ptr += written;
 		size -= written;
 	}
@@ -1241,10 +1262,10 @@ append_top_ports_json(char *buffer, size_t size)
 		}
 
 		written = snprintf(ptr, size,
-						   "{\"port\": %d, \"protocol\": \"%s\", "
-						   "\"connections\": %d, \"state\": \"%s\"}",
-					 ports[i].port, ports[i].protocol,
-					 ports[i].connection_count, ports[i].state);
+				   "{\"port\": %d, \"protocol\": \"%s\", "
+				   "\"connections\": %d, \"state\": \"%s\"}",
+				   ports[i].port, ports[i].protocol,
+				   ports[i].connection_count, ports[i].state);
 		ptr += written;
 		size -= written;
 	}
@@ -1259,7 +1280,8 @@ append_top_ports_json(char *buffer, size_t size)
  */
 /**
  * @brief Get system metrics json.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 static char *
 build_system_metrics_json(MetricSample *history, size_t history_count)
@@ -1289,7 +1311,8 @@ build_system_metrics_json(MetricSample *history, size_t history_count)
 	time(&now);
 	struct tm *tm_ptr = localtime_r(&now, &tm_buf);
 	if (tm_ptr) {
-		strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", tm_ptr);
+		strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S",
+			 tm_ptr);
 	} else {
 		strlcpy(timestamp, "unknown", sizeof(timestamp));
 	}
@@ -1305,30 +1328,30 @@ build_system_metrics_json(MetricSample *history, size_t history_count)
 	append_disk_info_json(disks_json, sizeof(disks_json));
 	append_top_ports_json(ports_json, sizeof(ports_json));
 	append_process_json_sections(top_cpu_json, sizeof(top_cpu_json),
-		top_mem_json, sizeof(top_mem_json),
-		proc_stats_json, sizeof(proc_stats_json));
+				     top_mem_json, sizeof(top_mem_json),
+				     proc_stats_json, sizeof(proc_stats_json));
 	append_metrics_history_json(history_json, sizeof(history_json), history,
-		history_count);
+				    history_count);
 
 	snprintf(json, JSON_BUFFER_SIZE,
-			 "{"
-			 "\"timestamp\": \"%s\","
-			 "\"hostname\": \"%s\","
-			 "%s,"
-			 "%s,"
-			 "%s,"
-			 "%s,"
-			 "%s,"
-			 "%s,"
-			 "%s,"
-			 "%s,"
-			 "%s,"
-			 "%s,"
-			 "%s"
-			 "}",
-		  timestamp, hostname, cpu_json, memory_json, load_json, os_json,
-		  uptime_json, disks_json, ports_json,
-		  top_cpu_json, top_mem_json, proc_stats_json, history_json);
+		 "{"
+		 "\"timestamp\": \"%s\","
+		 "\"hostname\": \"%s\","
+		 "%s,"
+		 "%s,"
+		 "%s,"
+		 "%s,"
+		 "%s,"
+		 "%s,"
+		 "%s,"
+		 "%s,"
+		 "%s,"
+		 "%s,"
+		 "%s"
+		 "}",
+		 timestamp, hostname, cpu_json, memory_json, load_json, os_json,
+		 uptime_json, disks_json, ports_json, top_cpu_json,
+		 top_mem_json, proc_stats_json, history_json);
 	return json;
 }
 
@@ -1336,8 +1359,8 @@ static void
 metrics_snapshot_update(void)
 {
 	MetricSample history[METRICS_HISTORY_WINDOW];
-	size_t history_count = ring_last(&g_metrics_ring, METRICS_HISTORY_WINDOW,
-		history);
+	size_t history_count =
+	    ring_last(&g_metrics_ring, METRICS_HISTORY_WINDOW, history);
 	char *json = build_system_metrics_json(history, history_count);
 	if (!json)
 		return;
@@ -1360,7 +1383,7 @@ get_system_metrics_json(void)
 	if (g_metrics_snapshot_json == NULL) {
 		should_refresh = 1;
 	} else if (g_metrics_snapshot_updated_at == 0 ||
-		(now - g_metrics_snapshot_updated_at) > 5) {
+		   (now - g_metrics_snapshot_updated_at) > 5) {
 		/*
 		 * Fallback refresh: if the heartbeat has not updated the
 		 * snapshot for more than 5 seconds, regenerate it inline so
@@ -1381,12 +1404,11 @@ get_system_metrics_json(void)
 			return copy;
 	}
 
-	char *fallback = g_metrics_snapshot_json ? strdup(g_metrics_snapshot_json) : NULL;
+	char *fallback =
+	    g_metrics_snapshot_json ? strdup(g_metrics_snapshot_json) : NULL;
 	pthread_mutex_unlock(&g_metrics_snapshot_lock);
 	return fallback;
 }
-
-
 
 /**
  * Handler HTTP
@@ -1412,7 +1434,8 @@ metrics_handler(http_request_t *req)
 	http_response_add_header(resp, "Cache-Control", "no-store");
 
 	/* Attach JSON as response body.
-	 *      The '1' flag tells the response layer to free memory automatically. */
+	 *      The '1' flag tells the response layer to free memory
+	 * automatically. */
 	http_response_set_body(resp, json, strlen(json), 1);
 
 	int ret = http_response_send(req, resp);

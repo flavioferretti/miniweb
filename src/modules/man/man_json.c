@@ -1,3 +1,4 @@
+
 #include <miniweb/modules/man.h>
 
 /** Serialize manual section catalog into JSON. */

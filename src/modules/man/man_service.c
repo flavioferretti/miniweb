@@ -1,3 +1,4 @@
+
 #include <miniweb/modules/man.h>
 
 /** Run manpage search and return JSON response body. */

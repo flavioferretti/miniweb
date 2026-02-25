@@ -1,3 +1,4 @@
+
 #include <miniweb/net/worker.h>
 
 #include <errno.h>
@@ -60,8 +61,8 @@ static void
 send_error_response(int fd, int code, const char *msg)
 {
 	http_request_t req = {.fd = fd, .method = "GET", .url = "/",
-	    .version = "HTTP/1.1", .keep_alive = 0};
-	(void)http_send_error(&req, code, msg);
+		.version = "HTTP/1.1", .keep_alive = 0};
+		(void)http_send_error(&req, code, msg);
 }
 
 /** Close fd, remove kevent registration, and release pool bookkeeping. */
@@ -97,13 +98,13 @@ miniweb_worker_thread(void *arg)
 	miniweb_worker_runtime_t *rt = arg;
 	while (*rt->running) {
 		miniweb_connection_t *conn =
-		    (miniweb_connection_t *)miniweb_work_queue_pop(rt->queue, rt->running);
+		(miniweb_connection_t *)miniweb_work_queue_pop(rt->queue, rt->running);
 		if (!conn)
 			break;
 		int fd = conn->fd, close_conn = 1, done = 0;
 		while (!done) {
 			ssize_t n = recv(fd, conn->buffer + conn->bytes_read,
-			    (size_t)rt->config->max_req_size - conn->bytes_read - 1, 0);
+							 (size_t)rt->config->max_req_size - conn->bytes_read - 1, 0);
 			if (n < 0) {
 				if (errno == EAGAIN || errno == EWOULDBLOCK) {
 					struct kevent ev;
@@ -130,18 +131,18 @@ miniweb_worker_thread(void *arg)
 				int keep_alive = request_keep_alive(conn->buffer, version);
 				http_handler_t handler = route_match(method, path);
 				http_request_t req = {.fd = fd,.method = method,.url = path,
-				    .version = version,.keep_alive = keep_alive,.buffer = conn->buffer,
-				    .buffer_len = conn->bytes_read,.client_addr = &conn->addr};
-				if (handler) handler(&req);
-				else http_send_error(&req, route_path_known(path) ? 405 : 404,
-				    route_path_known(path) ? "Method Not Allowed" : "Not Found");
+					.version = version,.keep_alive = keep_alive,.buffer = conn->buffer,
+					.buffer_len = conn->bytes_read,.client_addr = &conn->addr};
+					if (handler) handler(&req);
+					else http_send_error(&req, route_path_known(path) ? 405 : 404,
+						route_path_known(path) ? "Method Not Allowed" : "Not Found");
 				if (req.keep_alive && try_rearm_keepalive(rt, conn))
 					close_conn = 0;
 			} else send_error_response(fd, 400, "Bad Request");
 		}
 		if (close_conn)
 			close_connection(rt, fd);
-	next:;
+		next:;
 	}
 	return NULL;
 }

@@ -1,3 +1,4 @@
+
 /*
  * networking_module.c - Network information collection for OpenBSD
  *
@@ -5,46 +6,46 @@
  * WITHOUT requiring root privileges (no pfctl)
  */
 
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/sysctl.h>
-#include <net/route.h>
-#include <net/if.h>
-#include <net/if_dl.h>
-#include <netinet/in.h>
 #include <arpa/inet.h>
 #include <ifaddrs.h>
 #include <miniweb/router/router.h>
+#include <net/if.h>
+#include <net/if_dl.h>
+#include <net/route.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <sys/sysctl.h>
+#include <sys/types.h>
 
+#include <errno.h>
+#include <pthread.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <pthread.h>
 #include <time.h>
-#include <stdarg.h>
+#include <unistd.h>
 
 /* Include del progetto */
+#include <miniweb/core/config.h>
+#include <miniweb/core/heartbeat.h>
+#include <miniweb/core/log.h>
+#include <miniweb/http/handler.h>
 #include <miniweb/modules/networking.h>
 #include <miniweb/render/template_engine.h>
-#include <miniweb/core/config.h>
-#include <miniweb/http/handler.h>
-#include <miniweb/core/log.h>
-#include <miniweb/core/heartbeat.h>
 
 #ifndef SA_SIZE
-#define SA_SIZE(sa)                                                   \
-(((sa)->sa_len == 0) ? sizeof(struct sockaddr) : (size_t)(sa)->sa_len)
+#define SA_SIZE(sa)                                                            \
+	(((sa)->sa_len == 0) ? sizeof(struct sockaddr) : (size_t)(sa)->sa_len)
 #endif
 
 /* Verbose logging */
 extern int config_verbose;
-#define LOG(...)                            \
- do {                                      \
-	if (config_verbose)                     \
-		log_debug("[NETWORK] " __VA_ARGS__); \
- } while (0)
+#define LOG(...)                                                               \
+	do {                                                                   \
+		if (config_verbose)                                            \
+			log_debug("[NETWORK] " __VA_ARGS__);                   \
+	} while (0)
 
 #define NETWORK_JSON_BUFFER_SIZE 65536
 #define NETWORK_RING_BYTES (1024 * 1024)
@@ -58,7 +59,8 @@ typedef struct {
 	int interface_count;
 } NetworkingSample;
 
-#define NETWORK_RING_CAPACITY ((size_t)(NETWORK_RING_BYTES / sizeof(NetworkingSample)))
+#define NETWORK_RING_CAPACITY                                                  \
+	((size_t)(NETWORK_RING_BYTES / sizeof(NetworkingSample)))
 
 typedef struct {
 	NetworkingSample *buf;
@@ -74,34 +76,26 @@ static NetworkingRing g_networking_ring;
 static pthread_once_t g_networking_once = PTHREAD_ONCE_INIT;
 
 static int networking_ring_init(NetworkingRing *r);
-static void networking_ring_push(NetworkingRing *r,
-		const NetworkingSample *s);
+static void networking_ring_push(NetworkingRing *r, const NetworkingSample *s);
 static int networking_ring_last(NetworkingRing *r, NetworkingSample *out);
 static void networking_collect_sample(NetworkingSample *sample);
 static void networking_heartbeat_cb(void *ctx);
 static void networking_ring_bootstrap(void);
 static char *networking_build_json(const NetworkingSample *sample);
-static int networking_json_append(char *dst, size_t dst_size,
-		size_t *offset, const char *fmt, ...);
+static int networking_json_append(char *dst, size_t dst_size, size_t *offset,
+				  const char *fmt, ...);
 static int networking_json_append_escaped(char *dst, size_t dst_size,
-		size_t *offset, const char *src);
-
+					  size_t *offset, const char *src);
 
 /* ========================================================================
  * ROUTING TABLE
  * ======================================================================== */
 
 /**
- * @brief TODO: Describe networking_get_routes.
- * @param routes TODO: Describe this parameter.
- * @param max_routes TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
- * @brief Collect kernel routing table entries.
- * @param routes Output array that receives route entries.
- * @param max_routes Maximum number of entries that can be written.
- * @return Number of routes stored, or -1 on fatal errors.
+ * @brief Read the kernel routing table into @p routes.
+ * @param routes     Caller-allocated array of route descriptor structs.
+ * @param max_routes Capacity of @p routes.
+ * @return Number of routes stored on success, -1 on failure.
  */
 int
 networking_get_routes(RouteEntry *routes, int max_routes)
@@ -145,82 +139,82 @@ networking_get_routes(RouteEntry *routes, int max_routes)
 
 	lim = buf + needed;
 	for (next = buf; next < lim && count < max_routes;
-		 next += rtm->rtm_msglen) {
+	     next += rtm->rtm_msglen) {
 		rtm = (struct rt_msghdr *)next;
 
-	if (rtm->rtm_version != RTM_VERSION) {
-		continue;
-	}
-	if (rtm->rtm_type != RTM_GET && rtm->rtm_type != RTM_ADD) {
-		continue;
-	}
+		if (rtm->rtm_version != RTM_VERSION) {
+			continue;
+		}
+		if (rtm->rtm_type != RTM_GET && rtm->rtm_type != RTM_ADD) {
+			continue;
+		}
 
-	sa = (struct sockaddr *)(rtm + 1);
+		sa = (struct sockaddr *)(rtm + 1);
 
-	/* Destination */
-	if (rtm->rtm_addrs & RTA_DST) {
-		if (sa->sa_family == AF_INET) {
-			sin = (struct sockaddr_in *)sa;
-			inet_ntop(AF_INET, &sin->sin_addr,
+		/* Destination */
+		if (rtm->rtm_addrs & RTA_DST) {
+			if (sa->sa_family == AF_INET) {
+				sin = (struct sockaddr_in *)sa;
+				inet_ntop(AF_INET, &sin->sin_addr,
 					  routes[count].destination,
-			 sizeof(routes[count].destination));
-		} else if (sa->sa_family == AF_INET6) {
-			sin6 = (struct sockaddr_in6 *)sa;
-			inet_ntop(AF_INET6, &sin6->sin6_addr,
+					  sizeof(routes[count].destination));
+			} else if (sa->sa_family == AF_INET6) {
+				sin6 = (struct sockaddr_in6 *)sa;
+				inet_ntop(AF_INET6, &sin6->sin6_addr,
 					  routes[count].destination,
-			 sizeof(routes[count].destination));
-		} else {
-			strlcpy(routes[count].destination, "-",
+					  sizeof(routes[count].destination));
+			} else {
+				strlcpy(routes[count].destination, "-",
 					sizeof(routes[count].destination));
+			}
+			sa = (struct sockaddr *)((char *)sa + SA_SIZE(sa));
 		}
-		sa = (struct sockaddr *)((char *)sa + SA_SIZE(sa));
-	}
 
-	/* Gateway */
-	if (rtm->rtm_addrs & RTA_GATEWAY) {
-		if (sa->sa_family == AF_INET) {
-			sin = (struct sockaddr_in *)sa;
-			inet_ntop(AF_INET, &sin->sin_addr,
+		/* Gateway */
+		if (rtm->rtm_addrs & RTA_GATEWAY) {
+			if (sa->sa_family == AF_INET) {
+				sin = (struct sockaddr_in *)sa;
+				inet_ntop(AF_INET, &sin->sin_addr,
 					  routes[count].gateway,
-			 sizeof(routes[count].gateway));
-		} else if (sa->sa_family == AF_INET6) {
-			sin6 = (struct sockaddr_in6 *)sa;
-			inet_ntop(AF_INET6, &sin6->sin6_addr,
+					  sizeof(routes[count].gateway));
+			} else if (sa->sa_family == AF_INET6) {
+				sin6 = (struct sockaddr_in6 *)sa;
+				inet_ntop(AF_INET6, &sin6->sin6_addr,
 					  routes[count].gateway,
-			 sizeof(routes[count].gateway));
-		} else if (sa->sa_family == AF_LINK) {
-			sdl = (struct sockaddr_dl *)sa;
-			strlcpy(routes[count].gateway, "link#",
+					  sizeof(routes[count].gateway));
+			} else if (sa->sa_family == AF_LINK) {
+				sdl = (struct sockaddr_dl *)sa;
+				strlcpy(routes[count].gateway, "link#",
 					sizeof(routes[count].gateway));
-		} else {
-			strlcpy(routes[count].gateway, "-",
+			} else {
+				strlcpy(routes[count].gateway, "-",
 					sizeof(routes[count].gateway));
+			}
+			sa = (struct sockaddr *)((char *)sa + SA_SIZE(sa));
 		}
-		sa = (struct sockaddr *)((char *)sa + SA_SIZE(sa));
-	}
 
-	/* Netmask */
-	if (rtm->rtm_addrs & RTA_NETMASK) {
-		if (sa->sa_family == AF_INET) {
-			sin = (struct sockaddr_in *)sa;
-			inet_ntop(AF_INET, &sin->sin_addr,
+		/* Netmask */
+		if (rtm->rtm_addrs & RTA_NETMASK) {
+			if (sa->sa_family == AF_INET) {
+				sin = (struct sockaddr_in *)sa;
+				inet_ntop(AF_INET, &sin->sin_addr,
 					  routes[count].netmask,
-			 sizeof(routes[count].netmask));
-		} else {
-			strlcpy(routes[count].netmask, "-",
+					  sizeof(routes[count].netmask));
+			} else {
+				strlcpy(routes[count].netmask, "-",
 					sizeof(routes[count].netmask));
+			}
+			sa = (struct sockaddr *)((char *)sa + SA_SIZE(sa));
 		}
-		sa = (struct sockaddr *)((char *)sa + SA_SIZE(sa));
-	}
 
-	/* Interface */
-	if (rtm->rtm_index > 0) {
-		if_indextoname(rtm->rtm_index, routes[count].interface);
-	}
+		/* Interface */
+		if (rtm->rtm_index > 0) {
+			if_indextoname(rtm->rtm_index, routes[count].interface);
+		}
 
-	/* Flags */
-	routes[count].flags = rtm->rtm_flags;
-	snprintf(routes[count].flags_str,
+		/* Flags */
+		routes[count].flags = rtm->rtm_flags;
+		snprintf(routes[count].flags_str,
 			 sizeof(routes[count].flags_str), "%s%s%s%s%s",
 			 (rtm->rtm_flags & RTF_UP) ? "U" : "",
 			 (rtm->rtm_flags & RTF_GATEWAY) ? "G" : "",
@@ -228,12 +222,12 @@ networking_get_routes(RouteEntry *routes, int max_routes)
 			 (rtm->rtm_flags & RTF_STATIC) ? "S" : "",
 			 (rtm->rtm_flags & RTF_DYNAMIC) ? "D" : "");
 
-	count++;
-		 }
+		count++;
+	}
 
-		 free(buf);
-		 LOG("Retrieved %d routes", count);
-		 return count;
+	free(buf);
+	LOG("Retrieved %d routes", count);
+	return count;
 }
 
 /* ========================================================================
@@ -241,14 +235,9 @@ networking_get_routes(RouteEntry *routes, int max_routes)
  * ======================================================================== */
 
 /**
- * @brief TODO: Describe networking_get_dns_config.
- * @param config TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
- * @brief Parse DNS resolver settings from /etc/resolv.conf.
- * @param config Output structure populated with resolver configuration.
- * @return Returns 0 on success or -1 on failure.
+ * @brief Read DNS resolver configuration into @p config.
+ * @param config Destination DNS configuration structure.
+ * @return 0 on success, -1 on failure.
  */
 int
 networking_get_dns_config(DnsConfig *config)
@@ -286,7 +275,8 @@ networking_get_dns_config(DnsConfig *config)
 			if (end)
 				*end = '\0';
 
-			strlcpy(config->nameservers[config->nameserver_count], p, sizeof(config->nameservers[0]));
+			strlcpy(config->nameservers[config->nameserver_count],
+				p, sizeof(config->nameservers[0]));
 			config->nameserver_count++;
 
 		} else if (strncmp(p, "domain", 6) == 0) {
@@ -322,16 +312,10 @@ networking_get_dns_config(DnsConfig *config)
  * ======================================================================== */
 
 /**
- * @brief TODO: Describe networking_get_if_stats.
- * @param stats TODO: Describe this parameter.
- * @param max_interfaces TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
- * @brief Collect per-interface IPv4/IPv6 and traffic statistics.
- * @param stats Output array for interface statistics entries.
- * @param max_interfaces Maximum number of entries to write.
- * @return Number of interfaces captured.
+ * @brief Collect per-interface statistics via getifaddrs(3).
+ * @param stats          Caller-allocated array of interface stat structs.
+ * @param max_interfaces Capacity of @p stats.
+ * @return Number of interfaces stored on success, -1 on failure.
  */
 int
 networking_get_if_stats(NetStats *stats, int max_interfaces)
@@ -358,8 +342,9 @@ networking_get_if_stats(NetStats *stats, int max_interfaces)
 
 			memset(&stats[count], 0, sizeof(NetStats));
 			strlcpy(stats[count].interface, ifa->ifa_name,
-					sizeof(stats[count].interface));
-			strlcpy(stats[count].ipv4, "-", sizeof(stats[count].ipv4));
+				sizeof(stats[count].interface));
+			strlcpy(stats[count].ipv4, "-",
+				sizeof(stats[count].ipv4));
 
 			stats[count].rx_packets = ifd->ifi_ipackets;
 			stats[count].rx_bytes = ifd->ifi_ibytes;
@@ -370,14 +355,15 @@ networking_get_if_stats(NetStats *stats, int max_interfaces)
 			stats[count].tx_bytes = ifd->ifi_obytes;
 			stats[count].tx_errors = ifd->ifi_oerrors;
 			stats[count].tx_dropped =
-			0; /* Not tracked by OpenBSD */
+			    0; /* Not tracked by OpenBSD */
 
 			count++;
 		}
 	}
 
 	for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
-		if (ifa->ifa_addr == NULL || ifa->ifa_addr->sa_family != AF_INET)
+		if (ifa->ifa_addr == NULL ||
+		    ifa->ifa_addr->sa_family != AF_INET)
 			continue;
 
 		sin = (struct sockaddr_in *)ifa->ifa_addr;
@@ -387,8 +373,9 @@ networking_get_if_stats(NetStats *stats, int max_interfaces)
 			if (strcmp(stats[i].ipv4, "-") != 0)
 				break;
 			if (!inet_ntop(AF_INET, &sin->sin_addr, stats[i].ipv4,
-					       sizeof(stats[i].ipv4))) {
-				strlcpy(stats[i].ipv4, "-", sizeof(stats[i].ipv4));
+				       sizeof(stats[i].ipv4))) {
+				strlcpy(stats[i].ipv4, "-",
+					sizeof(stats[i].ipv4));
 			}
 			break;
 		}
@@ -404,16 +391,10 @@ networking_get_if_stats(NetStats *stats, int max_interfaces)
  * ======================================================================== */
 
 /**
- * @brief TODO: Describe networking_get_connections.
- * @param conns TODO: Describe this parameter.
- * @param max_conns TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
- * @brief Return a snapshot of network connections.
- * @param conns Output array for connection records.
- * @param max_conns Maximum number of records to populate.
- * @return Number of records written, or -1 on error.
+ * @brief Enumerate active TCP/UDP connections via sysctl.
+ * @param conns     Caller-allocated array of connection descriptor structs.
+ * @param max_conns Capacity of @p conns.
+ * @return Number of connections stored on success, -1 on failure.
  */
 int
 networking_get_connections(NetworkConnection *conns, int max_conns)
@@ -429,9 +410,9 @@ networking_get_connections(NetworkConnection *conns, int max_conns)
 }
 
 /**
- * @brief TODO: Describe networking_ring_init.
- * @param r TODO: Describe this parameter.
- * @return TODO: Describe the return value.
+ * @brief Initialise the networking sample ring buffer.
+ * @param r Ring structure to initialise. Must not be NULL.
+ * @return 0 on success, -1 on allocation failure.
  */
 static int
 networking_ring_init(NetworkingRing *r)
@@ -449,9 +430,10 @@ networking_ring_init(NetworkingRing *r)
 }
 
 /**
- * @brief TODO: Describe networking_ring_push.
- * @param r TODO: Describe this parameter.
- * @param s TODO: Describe this parameter.
+ * @brief Push one networking sample into the ring, overwriting the oldest
+ * entry.
+ * @param r Ring buffer. Must not be NULL.
+ * @param s Sample to store. Must not be NULL.
  */
 static void
 networking_ring_push(NetworkingRing *r, const NetworkingSample *s)
@@ -465,10 +447,10 @@ networking_ring_push(NetworkingRing *r, const NetworkingSample *s)
 }
 
 /**
- * @brief TODO: Describe networking_ring_last.
- * @param r TODO: Describe this parameter.
- * @param out TODO: Describe this parameter.
- * @return TODO: Describe the return value.
+ * @brief Copy the most recent networking sample from the ring.
+ * @param r   Ring buffer. Must not be NULL.
+ * @param out Destination sample struct. Must not be NULL.
+ * @return 1 when a sample is available, 0 when the ring is empty.
  */
 static int
 networking_ring_last(NetworkingRing *r, NetworkingSample *out)
@@ -482,15 +464,17 @@ networking_ring_last(NetworkingRing *r, NetworkingSample *out)
 		return 0;
 	}
 
-	size_t idx = (r->head + NETWORK_RING_CAPACITY - 1) % NETWORK_RING_CAPACITY;
+	size_t idx =
+	    (r->head + NETWORK_RING_CAPACITY - 1) % NETWORK_RING_CAPACITY;
 	*out = r->buf[idx];
 	pthread_mutex_unlock(&r->lock);
 	return 1;
 }
 
 /**
- * @brief TODO: Describe networking_collect_sample.
- * @param sample TODO: Describe this parameter.
+ * @brief Collect one networking snapshot (routes, interfaces, connections,
+ * DNS).
+ * @param sample Destination sample structure. Must not be NULL.
  */
 static void
 networking_collect_sample(NetworkingSample *sample)
@@ -502,14 +486,15 @@ networking_collect_sample(NetworkingSample *sample)
 		sample->route_count = 0;
 	if (networking_get_dns_config(&sample->dns) != 0)
 		memset(&sample->dns, 0, sizeof(sample->dns));
-	sample->interface_count = networking_get_if_stats(sample->interfaces, 10);
+	sample->interface_count =
+	    networking_get_if_stats(sample->interfaces, 10);
 	if (sample->interface_count < 0)
 		sample->interface_count = 0;
 }
 
 /**
- * @brief TODO: Describe networking_heartbeat_cb.
- * @param ctx TODO: Describe this parameter.
+ * @brief Heartbeat callback that samples networking state every tick.
+ * @param ctx Unused context pointer (heartbeat API conformance).
  */
 static void
 networking_heartbeat_cb(void *ctx)
@@ -533,7 +518,8 @@ networking_heartbeat_cb(void *ctx)
 }
 
 /**
- * @brief TODO: Describe networking_ring_bootstrap.
+ * @brief One-time initialisation of the networking ring, called via
+ * pthread_once.
  */
 static void
 networking_ring_bootstrap(void)
@@ -549,7 +535,7 @@ networking_ring_bootstrap(void)
 		.initial_delay_sec = 0,
 		.cb = networking_heartbeat_cb,
 		.ctx = NULL,
-	}) < 0) {
+	    }) < 0) {
 		LOG("Failed to register networking heartbeat task");
 		free(g_networking_ring.buf);
 		g_networking_ring.buf = NULL;
@@ -561,12 +547,11 @@ networking_ring_bootstrap(void)
 		g_networking_ring.buf = NULL;
 		return;
 	}
-
 }
 
 static int
 networking_json_append(char *dst, size_t dst_size, size_t *offset,
-	const char *fmt, ...)
+		       const char *fmt, ...)
 {
 	va_list ap;
 	int written;
@@ -591,7 +576,7 @@ networking_json_append(char *dst, size_t dst_size, size_t *offset,
 
 static int
 networking_json_append_escaped(char *dst, size_t dst_size, size_t *offset,
-	const char *src)
+			       const char *src)
 {
 	const unsigned char *p = (const unsigned char *)src;
 
@@ -603,13 +588,16 @@ networking_json_append_escaped(char *dst, size_t dst_size, size_t *offset,
 
 	for (; *p != '\0'; p++) {
 		if (*p == '"' || *p == '\\') {
-			if (networking_json_append(dst, dst_size, offset, "\\%c", *p) != 0)
+			if (networking_json_append(dst, dst_size, offset,
+						   "\\%c", *p) != 0)
 				return -1;
 		} else if (*p < 0x20) {
-			if (networking_json_append(dst, dst_size, offset, "\\u%04x", *p) != 0)
+			if (networking_json_append(dst, dst_size, offset,
+						   "\\u%04x", *p) != 0)
 				return -1;
 		} else {
-			if (networking_json_append(dst, dst_size, offset, "%c", *p) != 0)
+			if (networking_json_append(dst, dst_size, offset, "%c",
+						   *p) != 0)
 				return -1;
 		}
 	}
@@ -622,12 +610,13 @@ networking_json_append_escaped(char *dst, size_t dst_size, size_t *offset,
  * ======================================================================== */
 
 /**
- * @brief TODO: Describe networking_get_json.
- * @return TODO: Describe the return value.
- */
-/**
- * @brief Build a JSON payload containing networking diagnostics.
- * @return Newly allocated JSON string, or NULL on failure.
+ * @brief Return the cached networking JSON snapshot.
+ *
+ * The snapshot is produced by the heartbeat task; this function serves
+ * the pre-built payload directly to avoid sysctl traversal on the
+ * HTTP request path.
+ *
+ * @return Heap-allocated JSON string that the caller must free(), or NULL.
  */
 static char *
 networking_build_json(const NetworkingSample *sample)
@@ -650,48 +639,61 @@ networking_build_json(const NetworkingSample *sample)
 	tm_ptr = localtime_r(&sample->ts, &tm_buf);
 	if (tm_ptr) {
 		strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S",
-				 tm_ptr);
+			 tm_ptr);
 	} else {
 		strlcpy(timestamp, "unknown", sizeof(timestamp));
 	}
 
 	if (networking_json_append(json, json_size, &offset,
-		"{\"timestamp\":") != 0)
+				   "{\"timestamp\":") != 0)
 		goto fail;
-	if (networking_json_append_escaped(json, json_size, &offset, timestamp) != 0)
+	if (networking_json_append_escaped(json, json_size, &offset,
+					   timestamp) != 0)
 		goto fail;
 	if (networking_json_append(json, json_size, &offset,
-		",\"timestamp_unix\":%lld,", (long long)sample->ts) != 0)
+				   ",\"timestamp_unix\":%lld,",
+				   (long long)sample->ts) != 0)
 		goto fail;
 
 	/* Routes */
-	if (networking_json_append(json, json_size, &offset, "\"routes\":[") != 0)
+	if (networking_json_append(json, json_size, &offset, "\"routes\":[") !=
+	    0)
 		goto fail;
 	for (int i = 0; i < sample->route_count; i++) {
-		if (networking_json_append(json, json_size, &offset, "%s{\"destination\":",
-			i > 0 ? "," : "") != 0)
+		if (networking_json_append(
+			json, json_size, &offset,
+			"%s{\"destination\":", i > 0 ? "," : "") != 0)
 			goto fail;
-		if (networking_json_append_escaped(json, json_size, &offset,
+		if (networking_json_append_escaped(
+			json, json_size, &offset,
 			sample->routes[i].destination) != 0)
 			goto fail;
-		if (networking_json_append(json, json_size, &offset, ",\"gateway\":") != 0)
+		if (networking_json_append(json, json_size, &offset,
+					   ",\"gateway\":") != 0)
 			goto fail;
 		if (networking_json_append_escaped(json, json_size, &offset,
-			sample->routes[i].gateway) != 0)
+						   sample->routes[i].gateway) !=
+		    0)
 			goto fail;
-		if (networking_json_append(json, json_size, &offset, ",\"netmask\":") != 0)
-			goto fail;
-		if (networking_json_append_escaped(json, json_size, &offset,
-			sample->routes[i].netmask) != 0)
-			goto fail;
-		if (networking_json_append(json, json_size, &offset, ",\"interface\":") != 0)
+		if (networking_json_append(json, json_size, &offset,
+					   ",\"netmask\":") != 0)
 			goto fail;
 		if (networking_json_append_escaped(json, json_size, &offset,
+						   sample->routes[i].netmask) !=
+		    0)
+			goto fail;
+		if (networking_json_append(json, json_size, &offset,
+					   ",\"interface\":") != 0)
+			goto fail;
+		if (networking_json_append_escaped(
+			json, json_size, &offset,
 			sample->routes[i].interface) != 0)
 			goto fail;
-		if (networking_json_append(json, json_size, &offset, ",\"flags\":") != 0)
+		if (networking_json_append(json, json_size, &offset,
+					   ",\"flags\":") != 0)
 			goto fail;
-		if (networking_json_append_escaped(json, json_size, &offset,
+		if (networking_json_append_escaped(
+			json, json_size, &offset,
 			sample->routes[i].flags_str) != 0)
 			goto fail;
 		if (networking_json_append(json, json_size, &offset, "}") != 0)
@@ -702,57 +704,64 @@ networking_build_json(const NetworkingSample *sample)
 
 	/* DNS */
 	if (networking_json_append(json, json_size, &offset,
-		"\"dns\":{\"nameservers\":[") != 0)
+				   "\"dns\":{\"nameservers\":[") != 0)
 		goto fail;
 	for (int i = 0; i < sample->dns.nameserver_count; i++) {
 		if (networking_json_append(json, json_size, &offset, "%s",
-			i > 0 ? "," : "") != 0)
+					   i > 0 ? "," : "") != 0)
 			goto fail;
-		if (networking_json_append_escaped(json, json_size, &offset,
-			sample->dns.nameservers[i]) != 0)
+		if (networking_json_append_escaped(
+			json, json_size, &offset, sample->dns.nameservers[i]) !=
+		    0)
 			goto fail;
 	}
-	if (networking_json_append(json, json_size, &offset,
-		"],\"domain\":") != 0)
+	if (networking_json_append(json, json_size, &offset, "],\"domain\":") !=
+	    0)
 		goto fail;
 	if (networking_json_append_escaped(json, json_size, &offset,
-		sample->dns.domain) != 0)
+					   sample->dns.domain) != 0)
 		goto fail;
-	if (networking_json_append(json, json_size, &offset,
-		",\"search\":") != 0)
+	if (networking_json_append(json, json_size, &offset, ",\"search\":") !=
+	    0)
 		goto fail;
 	if (networking_json_append_escaped(json, json_size, &offset,
-		sample->dns.search) != 0)
+					   sample->dns.search) != 0)
 		goto fail;
 	if (networking_json_append(json, json_size, &offset, "},") != 0)
 		goto fail;
 
 	/* Interface Stats */
 	if (networking_json_append(json, json_size, &offset,
-		"\"interfaces\":[") != 0)
+				   "\"interfaces\":[") != 0)
 		goto fail;
 	for (int i = 0; i < sample->interface_count; i++) {
-		if (networking_json_append(json, json_size, &offset,
+		if (networking_json_append(
+			json, json_size, &offset,
 			"%s{\"interface\":", i > 0 ? "," : "") != 0)
 			goto fail;
-		if (networking_json_append_escaped(json, json_size, &offset,
+		if (networking_json_append_escaped(
+			json, json_size, &offset,
 			sample->interfaces[i].interface) != 0)
 			goto fail;
 		if (networking_json_append(json, json_size, &offset,
-			",\"ipv4\":") != 0)
+					   ",\"ipv4\":") != 0)
 			goto fail;
-		if (networking_json_append_escaped(json, json_size, &offset,
-			sample->interfaces[i].ipv4) != 0)
+		if (networking_json_append_escaped(
+			json, json_size, &offset, sample->interfaces[i].ipv4) !=
+		    0)
 			goto fail;
 		if (networking_json_append(json, json_size, &offset,
-			",\"rx_packets\":%llu,\"rx_bytes\":%llu,\"rx_errors\":%llu,"
-			"\"tx_packets\":%llu,\"tx_bytes\":%llu,\"tx_errors\":%llu}",
-			sample->interfaces[i].rx_packets,
-			sample->interfaces[i].rx_bytes,
-			sample->interfaces[i].rx_errors,
-			sample->interfaces[i].tx_packets,
-			sample->interfaces[i].tx_bytes,
-			sample->interfaces[i].tx_errors) != 0)
+					   ",\"rx_packets\":%llu,\"rx_bytes\":%"
+					   "llu,\"rx_errors\":%llu,"
+					   "\"tx_packets\":%llu,\"tx_bytes\":%"
+					   "llu,\"tx_errors\":%llu}",
+					   sample->interfaces[i].rx_packets,
+					   sample->interfaces[i].rx_bytes,
+					   sample->interfaces[i].rx_errors,
+					   sample->interfaces[i].tx_packets,
+					   sample->interfaces[i].tx_bytes,
+					   sample->interfaces[i].tx_errors) !=
+		    0)
 			goto fail;
 	}
 	if (networking_json_append(json, json_size, &offset, "]") != 0)
@@ -794,7 +803,8 @@ networking_get_json(void)
 		free(g_networking_ring.cached_json);
 		g_networking_ring.cached_json = strdup(json);
 		if (g_networking_ring.cached_json != NULL) {
-			g_networking_ring.cached_json_len = strlen(g_networking_ring.cached_json);
+			g_networking_ring.cached_json_len =
+			    strlen(g_networking_ring.cached_json);
 			g_networking_ring.cached_json_ts = sample.ts;
 		}
 		pthread_mutex_unlock(&g_networking_ring.lock);
@@ -809,43 +819,33 @@ networking_get_json(void)
 
 /* Handler for the networking dashboard page. */
 /**
- * @brief TODO: Describe networking_handler.
- * @param req TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
- * @brief Networking handler.
- * @param req Request context for response generation.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @brief HTTP handler for the /networking view page.
+ * @param req Incoming HTTP request context.
+ * @return 0 on success, -1 on response write failure.
  */
 int
 networking_handler(http_request_t *req)
 {
 	struct template_data data = {
-		.title          = "MiniWeb - Network Configuration",
-		.page_content   = "networking.html",
-		.extra_head_file = "networking_extra_head.html",
-		.extra_js_file  = "networking_extra_js.html"
-	};
+	    .title = "MiniWeb - Network Configuration",
+	    .page_content = "networking.html",
+	    .extra_head_file = "networking_extra_head.html",
+	    .extra_js_file = "networking_extra_js.html"};
 	return http_render_template(req, &data, NULL);
 }
 
 /**
- * @brief TODO: Describe networking_api_handler.
- * @param req TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
- * @brief Networking api handler.
- * @param req Request context for response generation.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @brief HTTP handler for the /api/networking JSON endpoint.
+ * @param req Incoming HTTP request context.
+ * @return 0 on success, -1 on response write failure.
  */
 int
 networking_api_handler(http_request_t *req)
 {
 	char *json = networking_get_json();
 	if (!json) {
-		return http_send_error(req, 500, "Network data collection failed");
+		return http_send_error(req, 500,
+				       "Network data collection failed");
 	}
 
 	http_response_t *resp = http_response_create();
@@ -864,12 +864,13 @@ networking_api_handler(http_request_t *req)
 }
 
 /**
- * @brief TODO: Describe networking_module_attach_routes.
- * @param r TODO: Describe this parameter.
- * @return TODO: Describe the return value.
+ * @brief Register all networking routes with the router.
+ * @param r Router instance to attach routes to. Must not be NULL.
+ * @return 0 on success, -1 on registration failure.
  */
 int
 networking_module_attach_routes(struct router *r)
 {
-	return router_register(r, "GET", "/api/networking", networking_api_handler);
+	return router_register(r, "GET", "/api/networking",
+			       networking_api_handler);
 }

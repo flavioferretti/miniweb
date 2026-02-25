@@ -1,3 +1,4 @@
+
 /* route_table.c - Route handlers with native kqueue interface */
 
 #include <errno.h>
@@ -32,9 +33,9 @@ static hot_view_cache_entry_t g_hot_view_cache[HOT_VIEW_CACHE_MAX] = {
 static pthread_mutex_t g_hot_view_cache_lock = PTHREAD_MUTEX_INITIALIZER;
 
 /**
- * @brief TODO: Describe find_hot_view_cache_entry.
- * @param path TODO: Describe this parameter.
- * @return TODO: Describe the return value.
+ * @brief Return a cached hot-view entry for @p url, or NULL if absent/expired.
+ * @param url Request URL to look up.
+ * @return Pointer to the cache entry, or NULL.
  */
 static hot_view_cache_entry_t *
 find_hot_view_cache_entry(const char *path)
@@ -46,12 +47,7 @@ find_hot_view_cache_entry(const char *path)
 	return NULL;
 }
 
-/* Generic template-backed view handler */
-/**
- * @brief TODO: Describe view_template_handler.
- * @param req TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
+
 /**
  * @brief View template handler.
  * @param req Request context for response generation.
@@ -70,8 +66,9 @@ view_template_handler(http_request_t *req)
 			(now - cache_entry->created_at) <= HOT_VIEW_CACHE_TTL_SEC) {
 			char *cached = strdup(cache_entry->body);
 			pthread_mutex_unlock(&g_hot_view_cache_lock);
-			if (!cached)
+			if (!cached){
 				return http_send_error(req, 500, "Out of memory");
+			}
 			int ret = http_send_html(req, cached);
 			free(cached);
 			return ret;
@@ -119,12 +116,7 @@ view_template_handler(http_request_t *req)
 	return ret;
 }
 
-/* Favicon handler */
-/**
- * @brief TODO: Describe favicon_handler.
- * @param req TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
+
 /**
  * @brief Favicon handler.
  * @param req Request context for response generation.
@@ -138,59 +130,51 @@ favicon_handler(http_request_t *req)
 	return http_send_file(req, favicon_path, "image/svg+xml");
 }
 
-/* Static file handler */
-/* static_handler - Serve static CSS, JS, image, and HTML assets. */
-/* routes.c - static file serving helpers. */
 /**
- * @brief TODO: Describe static_handler.
- * @param req TODO: Describe this parameter.
- * @return TODO: Describe the return value.
- */
-/**
- * @brief Static handler.
- * @param req Request context for response generation.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
- */
-int
-static_handler(http_request_t *req)
-{
-	// req->url is like "/static/css/style.css"
-	// Remove the "/static/" prefix and serve from the configured static directory.
-	const char *path = req->url;
+  * @brief Static handler.
+  * @param req Request context for response generation.
+  * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+  */
+ int
+ static_handler(http_request_t *req)
+ {
+	 // req->url is like "/static/css/style.css"
+	 // Remove the "/static/" prefix and serve from the configured static directory.
+	 const char *path = req->url;
 
-	// Skip the "/static/" prefix.
-	if (strncmp(path, "/static/", 8) == 0) {
-		path += 8;  // now path is "css/style.css"
-	}
+	 // Skip the "/static/" prefix.
+	 if (strncmp(path, "/static/", 8) == 0) {
+		 path += 8;  // now path is "css/style.css"
+	 }
 
-	// Prevent directory traversal.
-	if (strstr(path, "..") || strstr(path, "//")) {
-		return http_send_error(req, 403, "Forbidden");
-	}
+	 // Prevent directory traversal.
+	 if (strstr(path, "..") || strstr(path, "//")) {
+		 return http_send_error(req, 403, "Forbidden");
+	 }
 
-	// Build absolute file path.
-	char fullpath[512];
-	snprintf(fullpath, sizeof(fullpath), "%s/%s", config_static_dir, path);
+	 // Build absolute file path.
+	 char fullpath[512];
+	 snprintf(fullpath, sizeof(fullpath), "%s/%s", config_static_dir, path);
 
-	// printf("DEBUG: static_handler trying to serve: %s\n", fullpath);
+	 // printf("DEBUG: static_handler trying to serve: %s\n", fullpath);
 
-	// Determine MIME type.
-	const char *mime = "application/octet-stream";
-	const char *ext = strrchr(path, '.');
-	if (ext) {
-		if (strcmp(ext, ".html") == 0) mime = "text/html";
-		else if (strcmp(ext, ".css") == 0) mime = "text/css";
-		else if (strcmp(ext, ".js") == 0) mime = "application/javascript";
-		else if (strcmp(ext, ".png") == 0) mime = "image/png";
-		else if (strcmp(ext, ".svg") == 0) mime = "image/svg+xml";
-		else if (strcmp(ext, ".jpg") == 0 || strcmp(ext, ".jpeg") == 0) mime = "image/jpeg";
-		else if (strcmp(ext, ".gif") == 0) mime = "image/gif";
-		else if (strcmp(ext, ".ico") == 0) mime = "image/x-icon";
-		else if (strcmp(ext, ".pdf") == 0) mime = "application/pdf";
-		else if (strcmp(ext, ".ps") == 0) mime = "application/postscript";
-		else if (strcmp(ext, ".md") == 0) mime = "text/markdown; charset=utf-8";
-		else if (strcmp(ext, ".txt") == 0) mime = "text/plain; charset=utf-8";
-	}
+	 // Determine MIME type.
+	 const char *mime = "application/octet-stream";
+	 const char *ext = strrchr(path, '.');
+	 if (ext) {
+		 if (strcmp(ext, ".html") == 0) mime = "text/html";
+		 else if (strcmp(ext, ".css") == 0) mime = "text/css";
+		 else if (strcmp(ext, ".js") == 0) mime = "application/javascript";
+		 else if (strcmp(ext, ".png") == 0) mime = "image/png";
+		 else if (strcmp(ext, ".svg") == 0) mime = "image/svg+xml";
+		 else if (strcmp(ext, ".jpg") == 0 || strcmp(ext, ".jpeg") == 0) mime = "image/jpeg";
+		 else if (strcmp(ext, ".gif") == 0) mime = "image/gif";
+		 else if (strcmp(ext, ".ico") == 0) mime = "image/x-icon";
+		 else if (strcmp(ext, ".pdf") == 0) mime = "application/pdf";
+		 else if (strcmp(ext, ".ps") == 0) mime = "application/postscript";
+		 else if (strcmp(ext, ".md") == 0) mime = "text/markdown; charset=utf-8";
+		 else if (strcmp(ext, ".txt") == 0) mime = "text/plain; charset=utf-8";
+	 }
 
-	return http_send_file(req, fullpath, mime);
-}
+	 return http_send_file(req, fullpath, mime);
+ }
