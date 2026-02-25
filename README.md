@@ -795,7 +795,7 @@ Server decomposition is complete for the networking layer:
   - `src/modules/networking/{networking_service.c,networking_json.c}`
   - `src/modules/man/{man_service.c,man_json.c}`
   - `src/modules/packages/{packages_service.c,packages_json.c}`
-- All Doxygen `TODO` placeholders resolved; all Italian-language source comments translated to English.
+- All Doxygen `TODO` placeholders resolved; majority Italian-language source comments translated to English.
 
 > **Note:** The development environment is Linux-based and does not provide `sys/event.h`. Full binary builds for kqueue paths must be validated on OpenBSD.
 

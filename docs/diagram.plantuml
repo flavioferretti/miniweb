@@ -18,20 +18,48 @@ skinparam component {
 ' AREA 1: PROJECT FUNCTIONS
 ' =========================
 package "<&layers*1> Project functions" #EAF4FF {
-  component "app_main.c\n(queue_*, worker_thread,\nconnection slab/free-stack, main)" as Main #A8D8FF
+
+  ' --- Bootstrap ---
+  component "src/app_main.c\n(parse_args, main, handle_signal:\nbootstrap-only orchestration)" as Main #A8D8FF
+
+  ' --- Net layer ---
+  component "src/net/server.c\n(miniweb_server_run/stop,\nhandle_accept, sweep_idle)" as Server #90C8F0
+  component "src/net/connection_pool.c\n(miniweb_connection_pool_init,\nminiweb_connection_alloc/free,\nminiweb_connection_is_stale)" as ConnPool #A0D0F8
+  component "src/net/worker.c\n(miniweb_worker_thread,\nparse_request_line, route dispatch,\ntry_rearm_keepalive)" as Worker #B0D8FF
+  component "src/net/work_queue.c\n(miniweb_work_queue_init/push/pop,\nbroadcast_shutdown)" as WQueue #B8DCFF
+
+  ' --- HTTP layer ---
   component "src/http/response.c\n(http_response_* pooled allocator,\nsharded file cache,\nhttp_send_*/http_render_template)" as HTTP #9ED9FF
+
+  ' --- Router layer ---
   component "src/router/url_registry.c\n(init_routes via module_attach,\nroute_match, register_route,\nview_routes[], find_view_route)" as URLS #B8E0FF
   component "src/router/route_table.c\n(view_template_handler,\nstatic_handler, favicon_handler,\nhot-view cache)" as Routes #C4E8FF
   component "src/router/router.c\n(router_register,\nrouter_register_prefix)" as RouterC #D0EAFF
   component "src/router/module_attach.c\n(miniweb_module_attach_enabled)" as ModAttach #DCF0FF
-  component "src/modules/metrics/\nmetrics_module.c\n(metrics_heartbeat_cb,\nring buffer, snapshot JSON)" as Metrics #D6EFFF
+
+  ' --- Feature modules ---
+  component "src/modules/metrics/\nmetrics_module.c\n(metrics_heartbeat_cb, ring buffer,\nsnapshot JSON, route handler)" as Metrics #D6EFFF
+  component "src/modules/metrics/\nmetrics_service.c\n[stub: metrics_service_build_payload]" as MetricsSvc #EAF6FF
+  component "src/modules/metrics/\nmetrics_json.c\n[stub: metrics_json_build]" as MetricsJson #EAF6FF
+
   component "src/modules/networking/\nnetworking_module.c\n(networking_heartbeat_cb,\nring buffer, cached JSON snapshot,\nnetworking_*_handler)" as Net #CFE6FF
+  component "src/modules/networking/\nnetworking_service.c\n[stub: networking_service_build_payload]" as NetSvc #E3F2FF
+  component "src/modules/networking/\nnetworking_json.c\n[stub: networking_json_build]" as NetJson #E3F2FF
+
   component "src/modules/man/\nman_module.c\n(man_api_handler, man_render_handler,\nfilesystem render cache)" as Man #E3F2FF
+  component "src/modules/man/\nman_service.c\n[stub: man_service_search_json]" as ManSvc #EEF8FF
+  component "src/modules/man/\nman_json.c\n[stub: man_json_sections]" as ManJson #EEF8FF
+
   component "src/modules/packages/\npackages_module.c\n(pkg_*_json, pkg_api_handler)" as Pkg #D9F7FF
+  component "src/modules/packages/\npackages_service.c\n[stub: packages_service_* — TBD]" as PkgSvc #E8FAFF
+  component "src/modules/packages/\npackages_json.c\n[stub: packages_json_list]" as PkgJson #E8FAFF
+
+  ' --- Render / core / storage ---
   component "src/render/template_render.c\n(template_cache_init/cleanup,\ntemplate_render_with_data,\ntemplate_render)" as Template #FFF2B2
   component "src/http/utils.c\n(json_escape_string,\nsafe_popen_read_argv,\nsafe_popen_read)" as Utils #FFE6B2
   component "src/core/conf.c\n(conf_defaults/load/apply_cli/dump)" as Conf #DFF7E2
   component "src/core/heartbeat.c\n(heartbeat_register/start/stop/shutdown,\nheartbeat_get_stats)" as Heartbeat #D4F7DC
+  component "src/platform/openbsd/security.c\n(miniweb_apply_openbsd_security:\nunveil + pledge)" as Security #D0F0D0
   component "src/storage/\nsqlite_db.c / sqlite_schema.c\nsqlite_stmt.c\n(stubs: mw_db_*, mw_stmt_*, mw_tx_*)" as Storage #EEE0FF
 }
 
@@ -59,85 +87,159 @@ package "<&cloud*1> Kernel / system calls" #FFE9EC {
 }
 
 ' -------------------------
-' Project -> Project calls
+' Bootstrap -> Net layer
 ' -------------------------
-Main --> HTTP : http_send_error(), http_request_*\n(miniweb/http/handler.h)
-Main --> URLS : init_routes(), route_match(),\nroute_path_known(), route_allow_methods()\n(miniweb/router/urls.h)
-Main --> Conf : conf_defaults/load/apply_cli/dump()\n(miniweb/core/conf.h)
+Main --> Server    : miniweb_server_run/stop()\n(miniweb/net/server.h)
+Main --> Conf      : conf_defaults/load/apply_cli/dump()\n(miniweb/core/conf.h)
+Main --> Template  : template_cache_init()\n(miniweb/render/template_engine.h)
+Main --> URLS      : init_routes()\n(miniweb/router/urls.h)
+Main --> Security  : miniweb_apply_openbsd_security()\n(miniweb/platform/openbsd/security.h)
 
+' -------------------------
+' Net layer internal calls
+' -------------------------
+Server --> ConnPool  : miniweb_connection_pool_init(),\nminiweb_connection_alloc/free(),\nminiweb_connection_is_stale()\n(miniweb/net/connection_pool.h)
+Server --> WQueue    : miniweb_work_queue_init(),\nminiweb_work_queue_push(),\nbroadcast_shutdown()\n(miniweb/net/work_queue.h)
+Server --> Worker    : pthread_create(miniweb_worker_thread)\n(miniweb/net/worker.h)
+Server --> HTTP      : http_send_error() [503 on queue full]\n(miniweb/http/handler.h)
+
+Worker --> WQueue    : miniweb_work_queue_pop()\n(miniweb/net/work_queue.h)
+Worker --> ConnPool  : miniweb_connection_free()\n(miniweb/net/connection_pool.h)
+Worker --> URLS      : route_match(), route_path_known()\n(miniweb/router/urls.h)
+Worker --> HTTP      : http_send_error() [400/404/405]\n(miniweb/http/handler.h)
+
+' -------------------------
+' Router layer
+' -------------------------
 URLS --> ModAttach : miniweb_module_attach_enabled()\n(miniweb/router/module_attach.h)
-ModAttach --> Routes : views_module_attach_routes()\n(miniweb/router/routes.h)
-ModAttach --> Metrics : metrics_module_attach_routes()\n(miniweb/modules/metrics.h)
-ModAttach --> Net : networking_module_attach_routes()\n(miniweb/modules/networking.h)
-ModAttach --> Man : man_module_attach_routes()\n(miniweb/modules/man.h)
-ModAttach --> Pkg : packages_module_attach_routes()\n(miniweb/modules/pkg_manager.h)
-ModAttach --> RouterC : router_register(),\nrouter_register_prefix()
+ModAttach --> Routes   : views_module_attach_routes()\n(miniweb/router/routes.h)
+ModAttach --> Metrics  : metrics_module_attach_routes()\n(miniweb/modules/metrics.h)
+ModAttach --> Net      : networking_module_attach_routes()\n(miniweb/modules/networking.h)
+ModAttach --> Man      : man_module_attach_routes()\n(miniweb/modules/man.h)
+ModAttach --> Pkg      : packages_module_attach_routes()\n(miniweb/modules/pkg_manager.h)
+ModAttach --> RouterC  : router_register(),\nrouter_register_prefix()
 
 Routes --> Template : template_render_with_data()\n(miniweb/render/template_engine.h)
-Routes --> HTTP : http_response_*, http_send_*\n(miniweb/http/handler.h)
+Routes --> HTTP     : http_response_*, http_send_*\n(miniweb/http/handler.h)
 
-Metrics --> HTTP : http_response_*, http_send_error()\n(miniweb/http/handler.h)
-Metrics --> Utils : json_escape_string()\n(miniweb/http/utils.h)
+' -------------------------
+' Module -> service/json stubs
+' -------------------------
+Metrics --> MetricsSvc  : metrics_service_build_payload() [stub]
+Metrics --> MetricsJson : metrics_json_build() [stub]
+Net     --> NetSvc      : networking_service_build_payload() [stub]
+Net     --> NetJson     : networking_json_build() [stub]
+Man     --> ManSvc      : man_service_search_json() [stub]
+Man     --> ManJson     : man_json_sections() [stub]
+Pkg     --> PkgSvc      : packages_service_* [stub — TBD]
+Pkg     --> PkgJson     : packages_json_list() [stub]
+
+' -------------------------
+' Modules -> shared services
+' -------------------------
+Metrics --> HTTP      : http_response_*, http_send_error()\n(miniweb/http/handler.h)
+Metrics --> Utils     : json_escape_string()\n(miniweb/http/utils.h)
 Metrics --> Heartbeat : heartbeat_register("metrics.sample"),\nheartbeat_start()\n(miniweb/core/heartbeat.h)
 
-Net --> HTTP : http_response_*, http_send_error(),\nhttp_render_template()\n(miniweb/http/handler.h)
+Net --> HTTP      : http_response_*, http_send_error(),\nhttp_render_template()\n(miniweb/http/handler.h)
 Net --> Heartbeat : heartbeat_register("networking.sample"),\nheartbeat_start()\n(miniweb/core/heartbeat.h)
 
-Man --> HTTP : http_response_*, http_send_error()\n(miniweb/http/handler.h)
-Man --> Utils : safe_popen_read_argv()\n(miniweb/http/utils.h)
-Man --> Routes : static_handler() (cache hit path)\n(miniweb/router/routes.h)
+Man --> HTTP   : http_response_*, http_send_error()\n(miniweb/http/handler.h)
+Man --> Utils  : safe_popen_read_argv()\n(miniweb/http/utils.h)
+Man --> Routes : static_handler() [cache hit path]\n(miniweb/router/routes.h)
 
-Pkg --> HTTP : http_response_*, http_send_json(),\nhttp_send_error()\n(miniweb/http/handler.h)
+Pkg --> HTTP  : http_response_*, http_send_json(),\nhttp_send_error()\n(miniweb/http/handler.h)
 Pkg --> Utils : safe_popen_read_argv(),\njson_escape_string()\n(miniweb/http/utils.h)
 
-Template --> Template : read_template_file(), replace_single(),\nreplace_all(), template_cache_init()
+Template --> Template : read_template_file(), replace_single(),\nreplace_all(), template_cache_refresh_locked()
 HTTP --> HTTP : write_all(), writev_all(),\nhttp_request_get_header(),\nhttp_request_get_client_ip()
 
 ' -----------------------------------
 ' Project -> Std C / POSIX lib calls
 ' -----------------------------------
 Conf --> LibStdio : fopen/fgets/fclose/fprintf/snprintf\n(<stdio.h>)
-Conf --> LibStd : memset/strtol/strcasecmp/strcmp/strlen/strlcpy\n(<string.h>, <stdlib.h>, <strings.h>)
-Conf --> LibProc : getenv/getpwuid/getuid\n(<stdlib.h>, <pwd.h>, <unistd.h>)
+Conf --> LibStd   : memset/strtol/strcasecmp/strcmp/strlen/strlcpy\n(<string.h>, <stdlib.h>, <strings.h>)
+Conf --> LibProc  : getenv\n(<stdlib.h>)
 
-Main --> LibPthread : pthread_create/join, mutex/cond ops\n(<pthread.h>)
-Main --> LibNet : inet_pton/ntop, htons\n(<arpa/inet.h>)
-Main --> LibFs : recv/write/close/fcntl\n(<sys/socket.h>, <unistd.h>, <fcntl.h>)
-Main --> LibProc : time/getopt/atoi/signal\n(<time.h>, <unistd.h>, <stdlib.h>, <signal.h>)
-Main --> LibStd : calloc/free/memcpy/memset/str*\n(<stdlib.h>, <string.h>)
+Main --> LibProc  : getopt, signal, atoi\n(<unistd.h>, <signal.h>, <stdlib.h>)
+Main --> LibStd   : strlcpy\n(<string.h>)
+
+Server --> LibPthread : pthread_create/join\n(<pthread.h>)
+Server --> LibNet     : inet_pton, htons\n(<arpa/inet.h>)
+Server --> LibProc    : time()\n(<time.h>)
+Server --> LibStd     : memset\n(<string.h>)
+
+Worker --> LibStd  : strchr/strstr/strcasestr/memcpy/strcmp\n(<string.h>)
+Worker --> LibProc : time(), recv()\n(<time.h>, <sys/socket.h>)
+
+ConnPool --> LibPthread : mutex ops\n(<pthread.h>)
+ConnPool --> LibProc    : time()\n(<time.h>)
+ConnPool --> LibStd     : memset/memcpy\n(<string.h>)
+
+WQueue --> LibPthread : mutex/cond ops\n(<pthread.h>)
+WQueue --> LibStd     : memset\n(<string.h>)
 
 HTTP --> LibStdio : snprintf\n(<stdio.h>)
-HTTP --> LibStd : calloc/malloc/free/memcpy/strlen/strchr/strstr\n(<stdlib.h>, <string.h>)
-HTTP --> LibNet : inet_ntop\n(<arpa/inet.h>)
-HTTP --> LibFs : open/read/write/writev/close/fstat\n(<fcntl.h>, <unistd.h>, <sys/uio.h>, <sys/stat.h>)
+HTTP --> LibStd   : calloc/malloc/free/memcpy/strlen/strchr/strstr\n(<stdlib.h>, <string.h>)
+HTTP --> LibNet   : inet_ntop\n(<arpa/inet.h>)
+HTTP --> LibFs    : open/read/write/writev/close/fstat\n(<fcntl.h>, <unistd.h>, <sys/uio.h>, <sys/stat.h>)
 
 Template --> LibStdio : fopen/fseek/ftell/fread/fclose/snprintf\n(<stdio.h>)
-Template --> LibStd : malloc/free/memcpy/strlen/strstr/strdup\n(<stdlib.h>, <string.h>)
+Template --> LibStd   : malloc/free/memcpy/strlen/strstr/strdup\n(<stdlib.h>, <string.h>)
 
 Heartbeat --> LibPthread : pthread_create/join/cond_timedwait\n(<pthread.h>)
-Heartbeat --> LibProc : time()\n(<time.h>)
+Heartbeat --> LibProc    : time()\n(<time.h>)
 
-Metrics --> LibProc : time/localtime_r/strftime\n(<time.h>)
-Metrics --> LibNet : getifaddrs/freeifaddrs/inet_ntop/gethostname\n(<ifaddrs.h>, <arpa/inet.h>, <unistd.h>)
-Metrics --> LibStd : malloc/calloc/free/qsort/snprintf/str*\n(<stdlib.h>, <string.h>, <stdio.h>)
-Metrics --> LibPthread : mutex ops\n(<pthread.h>)
+Metrics --> LibProc   : time/localtime_r/strftime\n(<time.h>)
+Metrics --> LibNet    : getifaddrs/freeifaddrs/inet_ntop/gethostname\n(<ifaddrs.h>, <arpa/inet.h>, <unistd.h>)
+Metrics --> LibStd    : malloc/calloc/free/qsort/snprintf/str*\n(<stdlib.h>, <string.h>, <stdio.h>)
+Metrics --> LibPthread: mutex ops\n(<pthread.h>)
 
-Net --> LibStdio : fopen/fgets/fclose/snprintf\n(<stdio.h>)
-Net --> LibNet : if_indextoname/inet_ntop/getifaddrs/freeifaddrs\n(<net/if.h>, <arpa/inet.h>, <ifaddrs.h>)
-Net --> LibStd : malloc/free/memset/str*\n(<stdlib.h>, <string.h>)
+Net --> LibStdio   : fopen/fgets/fclose/snprintf\n(<stdio.h>)
+Net --> LibNet     : if_indextoname/inet_ntop/getifaddrs/freeifaddrs\n(<net/if.h>, <arpa/inet.h>, <ifaddrs.h>)
+Net --> LibStd     : malloc/free/memset/str*\n(<stdlib.h>, <string.h>)
 Net --> LibPthread : mutex ops\n(<pthread.h>)
 
 Man --> LibStd : malloc/free/strdup/strlen/str*\n(<stdlib.h>, <string.h>)
-Man --> LibFs : opendir/readdir/closedir, mkdir_p, write_file_binary\n(<dirent.h>, <sys/stat.h>)
+Man --> LibFs  : opendir/readdir/closedir, mkdir_p, write_file_binary\n(<dirent.h>, <sys/stat.h>)
 Pkg --> LibStd : malloc/free/strtol/strtok_r/str*\n(<stdlib.h>, <string.h>)
 
-Routes --> LibStd : snprintf/strncmp/strstr/strlen/time\n(<stdio.h>, <string.h>, <time.h>)
-Routes --> LibPthread : mutex ops (hot-view cache)\n(<pthread.h>)
-URLS --> LibStd : strcmp/strncmp\n(<string.h>)
-Utils --> LibStd : malloc/strdup/strlen/isalnum\n(<stdlib.h>, <string.h>, <ctype.h>)
+Routes --> LibStd     : snprintf/strncmp/strstr/strlen/time\n(<stdio.h>, <string.h>, <time.h>)
+Routes --> LibPthread : mutex ops [hot-view cache]\n(<pthread.h>)
+URLS   --> LibStd     : strcmp/strncmp\n(<string.h>)
+Utils  --> LibStd     : malloc/strdup/strlen/isalnum\n(<stdlib.h>, <string.h>, <ctype.h>)
 
+' ----------------------
+' System call tracking
+' ----------------------
+Server --> Kevent : kqueue(), kevent()\n(<sys/event.h>)
+Server --> Ksock  : socket(), bind(), listen(), accept(), setsockopt()\n(<sys/socket.h>)
+Server --> Kio    : close(), fcntl()\n(<unistd.h>, <fcntl.h>)
+
+Worker --> Kio    : recv(), close()\n(<sys/socket.h>, <unistd.h>)
+Worker --> Kevent : kevent() [EV_ENABLE / EV_DELETE]\n(<sys/event.h>)
+
+Security --> Ksec : pledge(), unveil()\n(<unistd.h>)
+Main --> Ksec     : signal()\n(<signal.h>)
+
+HTTP     --> Kio  : open(), read(), write(), writev(), close()\n(<fcntl.h>, <unistd.h>, <sys/uio.h>)
+Metrics  --> Ksys : sysctl(KERN_CPTIME, KERN_PROC_ALL,\nvm.uvmexp, vm.loadavg, kern.*)\n(<sys/sysctl.h>)
+Net      --> Ksys : sysctl(NET_RT_DUMP)\n(<sys/sysctl.h>)
+
+' libc wrappers to kernel (conceptual)
+LibPthread --> Kio  : futex/sched primitives (platform-dependent)
+LibFs      --> Kio  : file descriptor syscalls
+LibNet     --> Ksock: socket stack syscalls
+LibProc    --> Ksys : time/proc/sysctl wrappers
+
+' ----------------------
+' Notes
+' ----------------------
 note right of Main
-  Hard caps (compiled):
+  Bootstrap only (~120 LOC):
+  parse_args → conf → log → template_cache
+  → init_routes → security → server_run
+  Hard caps (compile-time):
   MAX_CONNECTIONS=4096
   THREAD_POOL_SIZE=32
   REQUEST_BUFFER_SIZE=16384
@@ -145,31 +247,39 @@ note right of Main
   MAX_KEEPALIVE_REQUESTS=64
 end note
 
+note right of Server
+  Two-tier model:
+  - Dispatcher: kqueue accept loop + idle sweep
+  - Workers: N pthreads dequeue + dispatch
+  EV_DISPATCH prevents multi-worker races.
+  EMFILE guard: /dev/null spare fd trick.
+end note
+
 note right of HTTP
   Sharded static file cache:
-  - 16 shards x 32 slots (FNV path hash)
+  - 16 shards × 32 slots (FNV path hash)
   - 256 KiB/object max
   - 2-hit admission candidate table
-  - insertion token budget: 8/sec per shard
-  - age eviction: 120s
-  - mtime validation on cache hit
-  Response pool: 16 shards x 1024 slots
+  - token budget: 8 inserts/sec per shard
+  - age eviction: 120 s
+  - mtime validation on hit
+  Response pool: 16 shards × 1024 slots
   + heap fallback on exhaustion
 end note
 
 note bottom of URLS
   Route resolution order:
   1) exact registered routes (linear scan)
-  2) prefix routes (GET /man/, /api/man,
+  2) prefix routes (/man/, /api/man,
      /api/packages, /static/)
-  Known path + wrong method -> 405 + Allow
-  Unknown path -> 404
+  Known path + wrong method → 405 + Allow
+  Unknown path → 404
 end note
 
 note right of Net
   /api/networking fast path:
-  heartbeat task (1s) -> ring buffer
-  + cached prebuilt JSON snapshot
+  heartbeat task (1 s) → ring buffer
+  + pre-built cached JSON snapshot
   fallback: on-demand collect + serialize
   TCP/UDP connection enum: placeholder only
 end note
@@ -177,63 +287,60 @@ end note
 note right of Man
   Filesystem render cache path:
   {static_dir}/man/{area}/{section}/{page}.{fmt}
-  Cached formats: html / txt / md / ps / pdf
-  Cache hit -> served via static_handler
+  Cached formats: html / utf8 / md / ps / pdf
+  Cache hit → served via static_handler()
 end note
 
 note right of Template
-  templates_dir files are preloaded
-  at startup by template_cache_init()
-  and refreshed lazily after
-  TEMPLATE_CACHE_TTL_SEC (60s)
+  templates_dir preloaded at startup by
+  template_cache_init(); lazily refreshed
+  every TEMPLATE_CACHE_TTL_SEC (60 s).
   Placeholders: {{title}}, {{page_content}},
   {{extra_head}}, {{extra_js}}
 end note
 
 note right of Heartbeat
-  Up to HB_MAX_TASKS=32 named tasks
-  Tracks: runs, overruns, last_run, last_error
+  Up to HB_MAX_TASKS=32 named tasks.
+  Tracks: runs, overruns, last_run, last_error.
   heartbeat_shutdown(drain=1) executes
-  all tasks once before exiting
-  Currently drives:
-  - metrics.sample (1s)
-  - networking.sample (1s)
+  all tasks once before exit.
+  Active tasks:
+  - metrics.sample (1 s)
+  - networking.sample (1 s)
 end note
 
 note right of Storage
-  Phase 5 stubs - not yet implemented
-  All functions return -1
+  Phase 5 stubs — not yet implemented.
+  All functions return -1.
   APIs: mw_db_open/close,
   mw_db_exec_schema, mw_db_migrate,
   mw_tx_begin/commit/rollback,
   mw_stmt_prepare/bind/step/finalize
 end note
 
-' ----------------------
-' System call tracking
-' ----------------------
-Main --> Kevent : kqueue(), kevent()\n(<sys/event.h>)
-Main --> Ksock : socket(), bind(), listen(), accept(), setsockopt()\n(<sys/socket.h>)
-Main --> Kio : recv(), write(), close(), fcntl()\n(<sys/socket.h>, <unistd.h>, <fcntl.h>)
-Main --> Ksec : signal(), pledge(), unveil()\n(<signal.h>, <unistd.h>)
-
-HTTP --> Kio : open(), read(), write(), writev(), close()\n(<fcntl.h>, <unistd.h>, <sys/uio.h>)
-Metrics --> Ksys : sysctl(KERN_CPTIME, KERN_PROC_ALL,\nvm.uvmexp, vm.loadavg, kern.*)\n(<sys/sysctl.h>)
-Net --> Ksys : sysctl(NET_RT_DUMP)\n(<sys/sysctl.h>)
-
-' libc wrappers to kernel (conceptual)
-LibPthread --> Kio : futex/sched primitives (platform dependent)
-LibFs --> Kio : file descriptor syscalls
-LibNet --> Ksock : socket stack syscalls
-LibProc --> Ksys : time/proc/sysctl wrappers
+note bottom of MetricsSvc
+  Decomposition scaffold — Phase 3.
+  Function bodies to be migrated
+  from metrics_module.c.
+  Same applies to metrics_json.c,
+  net/man/packages *_service.c
+  and *_json.c counterparts.
+end note
 
 @enduml
 
-' 2026-02-24 incremental extraction update
-' AppMain -> Server runtime split:
-'   src/app_main.c => bootstrap only
-'   src/net/server.c => dispatch + accept
-'   src/net/connection_pool.c => connection lifecycle
-'   src/net/worker.c => request execution
-' Module split scaffolds introduced for metrics/networking/man/packages:
-'   *_module.c + *_service.c + *_json.c
+' Changelog:
+' 2026-02-25 — sync with codebase after decomposition sprint
+'   app_main.c split:
+'     src/net/server.c        — kqueue dispatcher + accept loop
+'     src/net/connection_pool.c — O(1) fd-indexed pool
+'     src/net/worker.c        — request read/parse/dispatch
+'     src/net/work_queue.c    — ring-buffer FIFO (pre-existing)
+'   platform/openbsd/security.c extracted from app_main
+'   Module decomposition scaffolds (Phase 3 stubs):
+'     metrics_service.c / metrics_json.c
+'     networking_service.c / networking_json.c
+'     man_service.c / man_json.c
+'     packages_service.c / packages_json.c
+'   All Doxygen TODO placeholders resolved.
+'   All Italian-language source comments translated to English.
