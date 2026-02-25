@@ -1,9 +1,24 @@
+.\" $OpenBSD$
+.\"
+.\" Copyright (c) 2026 MiniWeb contributors
+.\" Permission to use, copy, modify, and distribute this software for any
+.\" purpose with or without fee is hereby granted, provided that the above
+.\" copyright notice and this permission notice appear in all copies.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+.\" WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+.\" MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+.\" ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+.\" WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+.\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+.\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+.\"
 .Dd February 25, 2026
 .Dt MINIWEB 1
 .Os OpenBSD
 .Sh NAME
 .Nm miniweb
-.Nd OpenBSD-native C99 HTTP server
+.Nd OpenBSD-native C99 HTTP server with modular architecture
 .Sh SYNOPSIS
 .Nm
 .Op Fl hv
@@ -22,19 +37,14 @@ diagnostics, manual page browsing, and package management.
 The runtime uses a single
 .Xr kqueue 2
 dispatcher thread and a configurable worker-thread pool.
-Template-backed HTML views are served from an in-memory template cache.
-Static assets are served from a sharded file cache.
-A generic heartbeat scheduler fires periodic background tasks.
+All modules are registered through a central attach API and maintain
+their own ring buffer caches, updated by a global heartbeat scheduler.
 .Pp
 .Nm
 does not implement TLS directly.
 Run it behind
 .Xr relayd 8
 for TLS termination.
-.Pp
-The codebase is under an enterprise refactor program that adds modular
-boundaries, a module attach/detach API, a centralised heartbeat scheduler,
-and a reusable SQLite3 storage layer, while preserving all existing endpoints.
 .Sh OPTIONS
 .Bl -tag -width Ds
 .It Fl b Ar address
@@ -175,51 +185,6 @@ Default:
 Log file path.
 Empty or absent means stderr.
 .El
-
-.Sh PERFORMANCE
-For best throughput and tail latency, tune worker and cache settings together.
-.Pp
-Recommended tuning order:
-.Bl -enum -compact
-.It
-Increase
-.Cm threads
-incrementally while observing latency and CPU saturation.
-.It
-Set
-.Cm max_conns
-below host descriptor/memory limits to avoid overload collapse.
-.It
-Prefer cache-friendly assets and templates:
-.Bl -bullet -compact
-.It
-Template cache and hot-view cache reduce repeated render costs.
-.It
-Sharded static file cache reduces disk I/O for hot assets.
-.It
-Metrics/networking periodic snapshots avoid expensive rebuild on every request.
-.It
-Packages and man endpoints use query/result caches to reduce subprocess load.
-.El
-.It
-Move periodic collectors into heartbeat tasks with explicit periods.
-.It
-When SQLite backend is enabled, reuse prepared statements and group writes in
-transactions to reduce fsync overhead.
-.El
-.Pp
-Current SQLite facade functions are:
-.Fn mw_db_open ,
-.Fn mw_db_exec_schema ,
-.Fn mw_stmt_prepare ,
-.Fn mw_stmt_step ,
-and transaction helpers
-.Fn mw_tx_begin /
-.Fn mw_tx_commit /
-.Fn mw_tx_rollback .
-These APIs are designed for migration of feature flags, warm caches, and
-historical snapshots.
-
 .Sh RUNTIME ARCHITECTURE
 .Nm
 uses a two-tier threading model.
@@ -369,13 +334,33 @@ On timeout the child is sent
 .Dv SIGKILL
 before
 .Xr waitpid 2 .
-.Sh ROUTING
-Routes are stored in a flat array (up to
-.Dv MAX_ROUTES
-= 32 entries) registered at startup by
+.Sh ROUTING AND MODULES
+Routing is fully modular through the module attach API.
 .Fn init_routes
 in
-.Pa src/router/url_registry.c .
+.Pa src/router/url_registry.c
+builds a
+.Vt miniweb_module
+list and lets each enabled module attach its own endpoints through
+.Fn router_register .
+.Pp
+Routes are stored in two tables:
+.Bl -bullet -compact
+.It
+Exact routes: flat array of
+.Vt struct route
+(up to
+.Dv MAX_ROUTES
+= 32).
+.It
+Prefix routes: array of
+.Vt struct prefix_route
+(up to 16) for dynamic paths like
+.Pa /man/* ,
+.Pa /static/* ,
+and
+.Pa /api/packages/* .
+.El
 .Pp
 .Fn route_match
 resolves a handler in two passes:
@@ -383,175 +368,103 @@ resolves a handler in two passes:
 .It
 Exact match: linear scan comparing method and path strings.
 .It
-Dynamic prefix match (GET only):
-.Bl -bullet -compact
-.It
-.Pa /man/{area}/{section}/{page}[.fmt]
-\(em matched when the path begins with
-.Pa /man/
-and contains at least two additional slashes.
-.It
-.Pa /api/man/...
-\(em prefix match.
-.It
-.Pa /api/packages/...
-\(em prefix match.
-.It
-.Pa /static/...
-\(em prefix match.
-.El
+Prefix match: checks prefix routes with optional minimum slash requirements.
 .El
 .Pp
-When a path is known but the method is wrong, a
+When a path exists but the method doesn't match, a
 .Cm 405 Method Not Allowed
 response is sent with an
 .Dv Allow
-header.
+header built by
+.Fn route_allow_methods .
 Unknown paths receive
 .Cm 404 Not Found .
-.Sh ADDING AND REMOVING ROUTES, MODULES, AND WEB VIEWS
-.Ss Adding an API endpoint
-Implement an
-.Fn attach_routes
-callback in the new module and register routes via the router facade:
-.Bd -literal -offset indent
-int my_module_attach_routes(struct router *r)
-{
-    return router_register(r, "GET", "/api/myfeature",
-        my_feature_handler);
-}
-.Ed
-.Pp
-Add the module descriptor to the
-.Vt miniweb_module
-array in
-.Fn init_routes
-inside
-.Pa src/router/url_registry.c
-with
-.Va enabled_by_default
-set to 1.
-The handler must have the signature
-.Ft int Fn handler "http_request_t *req"
-and call one of the HTTP send helpers before returning.
-Raise
-.Dv MAX_ROUTES
-in
-.Pa include/miniweb/router/urls.h
-if more than 32 routes are needed.
-.Ss Adding a web view
-.Bl -enum
-.It
-Add an entry to the
-.Vt view_routes[]
-table in
-.Pa src/router/url_registry.c :
-.Bd -literal -offset indent
-{"GET", "/mypage", "MiniWeb - My Page",
- "mypage.html",
- "mypage_extra_head.html",
- "mypage_extra_js.html"},
-.Ed
-.It
-Create
-.Pa templates/mypage.html
-with the page body content.
-The base layout
-.Pa templates/base.html
-is injected automatically.
-The optional fragment files are silently skipped if absent.
-.It
-The URL is automatically registered by
-.Fn views_module_attach_routes
-at startup.
-Add the path to
-.Va g_hot_view_cache
-in
-.Pa src/router/route_table.c
-if the rendered HTML should be cached.
-.El
-.Ss Removing a route or view
-Remove the
-.Fn register_route
-call or delete the entry from
-.Va view_routes[] .
-Requests to that path will receive
-.Cm 404 .
-.Ss Module attach API
+.Sh MODULE SYSTEM
+Modules are registered through
 .Fn miniweb_module_attach_enabled
 in
-.Pa src/router/module_attach.c
-iterates a
-.Vt miniweb_module
-array and calls each enabled module's
-.Fn init
-and
-.Fn attach_routes
-callbacks.
-All built-in modules
-.Pq metrics, networking, man, packages, and views
-are registered through this contract at startup.
-.Sh TEMPLATE ENGINE AND VIEW CACHE
-.Ss Template engine
-All HTML files in
-.Cm templates_dir
-are preloaded into a heap-allocated in-memory cache at startup by
-.Fn template_cache_init .
-The cache is refreshed lazily every 60 seconds.
-.Pp
-.Fn template_render_with_data
-assembles a page by loading
-.Pa base.html ,
-the page-specific content file, and optional
-.Pa extra_head
-and
-.Pa extra_js
-fragments, then substituting the placeholders
-.Ql {{title}} ,
-.Ql {{page_content}} ,
-.Ql {{extra_head}} ,
-and
-.Ql {{extra_js}} .
-.Ss Hot view cache
-.Fn view_template_handler
-maintains a small cache of pre-rendered HTML for the five top-level pages
-.Pq Pa / , /docs , /networking , /packages , /apiroot .
-Entries are valid for 10 seconds.
-On a cache hit the rendered HTML is duplicated and returned without touching
-the template engine.
-.Sh STATIC FILE CACHE
-Static assets are served from a sharded in-memory cache:
+.Pa src/router/module_attach.c .
+Each module provides:
 .Bl -bullet -compact
 .It
-16 independent shards, each protecting 32 slots, keyed by file path.
+.Va name :
+Module identifier.
 .It
-Files larger than 256 KiB are never cached and are always streamed.
+.Fn init :
+Optional initialization callback.
 .It
-A two-stage admission policy requires at least two requests before a file
-is admitted to the cache.
+.Fn attach_routes :
+Registers endpoints with the router.
 .It
-Each shard limits insertions to 8 per second using a token bucket.
+.Fn shutdown :
+Optional cleanup callback.
 .It
-Entries older than 120 seconds are evicted on the next shard access.
-.It
-Cache hits are validated against
-.Dv st_mtime .
+.Va enabled_by_default :
+Flag for automatic enabling.
 .El
+.Pp
+All built-in modules (views, metrics, networking, man, packages) are attached
+at startup through this contract.
+.Sh CACHING ARCHITECTURE
+.Nm
+employs multiple caching layers for optimal performance.
+.Ss Ring buffer caches (per-module)
+.Bl -column "Module" "Cache Type" "Size" "TTL" "Description" -offset indent
+.It Em Module Ta Em Cache Type Ta Em Size Ta Em TTL Ta Em Description
+.It Metrics Ta Ring buffer Ta 1MB Ta 1s Ta Samples system metrics every second.
+.It Networking Ta Ring buffer Ta 1MB Ta 1s Ta Samples network stats every second.
+.It Packages Ta Ring buffer Ta 2MB Ta 30s Ta Caches all package queries (search, info, files, list, which).
+.It Man pages Ta Sharded render cache Ta 16×128 slots Ta 600s Ta Caches rendered man page content.
+.El
+.Ss Static file cache
+.Pa src/http/response.c
+implements a sharded in-memory file cache:
+.Bl -bullet -compact
+.It
+16 independent shards, each with 32 slots.
+.It
+Files up to 256 KiB are cached.
+.It
+Two-stage admission policy (requires 2 requests before caching).
+.It
+Token bucket rate limiting (8 inserts/sec per shard).
+.It
+120-second TTL with LRU eviction.
+.El
+.Ss Template cache
+.Pa src/render/template_render.c
+preloads all HTML templates at startup and refreshes them every 60 seconds.
+.Ss Hot view cache
+.Pa src/router/route_table.c
+caches rendered HTML for top-level pages
+.Pq Pa / , /docs , /networking , /packages , /apiroot
+with a 10-second TTL.
+.Pp
+All ring buffer caches track hit/miss ratios and log them periodically.
 .Sh HEARTBEAT SCHEDULER
 .Pa src/core/heartbeat.c
 provides a generic periodic task scheduler.
-Up to 32 named tasks can be registered with
+Up to
+.Dv HB_MAX_TASKS
+(32) named tasks can be registered with
 .Fn heartbeat_register .
 Each task specifies a callback, an opaque context pointer, a period in
 seconds, and an initial delay.
+.Pp
 .Fn heartbeat_register
-returns
+returns:
+.Bl -bullet -compact
+.It
 .Dv HB_REGISTER_INSERTED
-(1) on success,
+(1) on success.
+.It
 .Dv HB_REGISTER_DUPLICATE
-(0) for a duplicate name (non-fatal), and
+(0) for a duplicate name (non-fatal).
+.It
 .Dv HB_REGISTER_ERROR
 (-1) on invalid input or a full table.
+.El
+.Pp
 .Fn heartbeat_start
 spawns a single background thread that fires due tasks and tracks overrun
 counts per task.
@@ -560,123 +473,109 @@ stops the scheduler; when
 .Ar drain
 is non-zero, every active task is executed one final time before the thread
 exits.
-Per-task statistics (runs, overruns, last run, last error) are available via
-.Fn heartbeat_get_stats .
 .Pp
-Both the metrics and networking modules are fully migrated onto the heartbeat
-scheduler.
-Each module registers a named task
-.Pq Dq metrics.sample No and Dq networking.sample
-and drives its 1-second sampler through it.
+Registered heartbeat tasks:
+.Bl -column "Task Name" "Period" "Module" "Purpose" -offset indent
+.It Em Task Name Ta Em Period Ta Em Module Ta Em Purpose
+.It Dq metrics.sample Ta 1s Ta Metrics Ta Sample system metrics.
+.It Dq networking.sample Ta 1s Ta Networking Ta Sample network stats.
+.It Dq packages.snapshot Ta 60s Ta Packages Ta Refresh package list cache.
+.It Dq man.cache_cleanup Ta 60s Ta Man pages Ta Clean expired cache entries.
+.El
 .Sh MODULES
-All modules are registered at startup through
-.Fn miniweb_module_attach_enabled
-in
-.Pa src/router/url_registry.c .
-Each module provides an
-.Fn attach_routes
-callback that registers its endpoints through the
-.Vt struct router
-facade, and an optional
-.Fn init
-callback invoked first.
-.Ss Metrics
+.Ss Views module
+.Pq Pa src/router/route_table.c
+Provides the template-rendered HTML dashboard pages:
+.Pa / , /docs , /networking , /packages , /apiroot , /favicon.ico , /static/*
+Uses the hot view cache (10s TTL) for top-level pages.
+.Ss Metrics module
+.Pq Pa src/modules/metrics/
 Provides
 .Pa /api/metrics
-and the
-.Pa /
-dashboard.
-Collects CPU percentages
-.Pq Dv KERN_CPTIME ,
-memory and swap
-.Pq Dv vm.uvmexp ,
-load averages
-.Pq Dv vm.loadavg ,
-OS info, uptime, hostname, disk usage
-.Pq Xr getmntinfo 3 ,
-and top processes by CPU and RSS via
-.Dv KERN_PROC_ALL
-sysctl.
-A heartbeat task
-.Pq Dq metrics.sample
-samples every second, pushes into a ring buffer, and updates a cached JSON
-snapshot; handlers serve the snapshot rather than re-collecting on each request.
-.Ss Networking
+with comprehensive system metrics.
+.Pp
+Collection methods:
+.Xr sysctl 3
+.Pq Dv KERN_CPTIME , VM_UVMEXP , KERN_BOOTTIME , KERN_PROC_ALL ,
+.Xr swapctl 2 ,
+.Xr getloadavg 3 ,
+.Xr uname 3 ,
+.Xr getmntinfo 3 .
+.Pp
+Caching: 1MB ring buffer with 1-second samples, 120-sample history window,
+heartbeat-driven updates.
+.Ss Networking module
+.Pq Pa src/modules/networking/
 Provides
 .Pa /api/networking
-and the
-.Pa /networking
-view.
-Collects routing table entries via
-.Dv NET_RT_DUMP ,
-DNS configuration from
+with network diagnostics.
+.Pp
+Collection methods:
+.Xr sysctl 3
+.Pq Dv NET_RT_DUMP ,
+parsing of
 .Pa /etc/resolv.conf ,
-and per-interface statistics via
-.Xr getifaddrs 3 /
+.Xr getifaddrs 3
+with
 .Vt if_data .
-Active TCP/UDP connection enumeration is currently a placeholder.
-A heartbeat task
-.Pq Dq networking.sample
-samples every second and maintains a cached JSON snapshot to keep sysctl
-traversal off the HTTP request path.
-.Ss Manual pages
-Provides
-.Pa /man/{area}/{section}/{page}[.fmt]
-and the
-.Pa /api/man/...
-namespace.
-Renders man pages by forking
+.Pp
+Caching: 1MB ring buffer with 1-second samples, pre-built JSON snapshot updated
+every second.
+.Ss Man pages module
+.Pq Pa src/modules/man/
+Provides rendered man pages and JSON API.
+.Pp
+Endpoints:
+.Pa /man/{area}/{section}/{page}[.{html|txt|md|pdf|ps}] ,
+.Pa /api/man/sections ,
+.Pa /api/man/pages?section={s}&area={a} ,
+.Pa /api/man/search?q={query} ,
+.Pa /api/man/resolve?name={n}&section={s} .
+.Pp
+Rendering: Forks
 .Xr mandoc 1
-via
-.Fn safe_popen_read_argv
-with the configured timeout.
-Stderr from
-.Xr mandoc 1
-is discarded to prevent error messages from appearing in response bodies.
-Rendered output is cached to the filesystem under
-.Pa {static_dir}/man/{area}/{section}/{page}.{fmt}
-and served via
-.Fn static_handler
-on subsequent requests.
-Supported output formats:
-.Cm html , utf8 , markdown , ps , pdf .
-.Ss Packages
-Provides
-.Pa /api/packages/...
-and the
-.Pa /packages
-view.
-Wraps
-.Xr pkg_info 1
-to implement search, info, which-file, file-list, and installed-list queries.
+with configurable timeout (default 10s), supports HTML, text, markdown, PDF,
+and PostScript output.
+.Pp
+Caching: Sharded render cache (16 shards × 128 slots = 2048 cached pages) with
+600-second TTL, plus filesystem cache under
+.Pa {static_dir}/man/ .
+.Ss Packages module
+.Pq Pa src/modules/packages/
+Provides package management API via
+.Xr pkg_info 1 .
+.Pp
+Endpoints:
+.Pa /api/packages/search?q={query} ,
+.Pa /api/packages/info?name={pkg} ,
+.Pa /api/packages/which?path={file} ,
+.Pa /api/packages/files?name={pkg} ,
+.Pa /api/packages/list .
+.Pp
+Caching: 2MB ring buffer with 30-second TTL, stores all query types, hit/miss
+tracking, on-demand population (no heartbeat needed).
 .Sh STORAGE LAYER
 .Pa src/storage/
 contains stub implementations of a planned SQLite3 service layer.
-The interfaces are defined but not yet backed by SQLite3:
-.Bl -bullet -compact
-.It
-.Fn mw_db_open , mw_db_close
-\(em database lifecycle.
-.It
-.Fn mw_db_exec_schema
-\(em schema initialisation.
-.It
-.Fn mw_db_migrate , mw_tx_begin , mw_tx_commit , mw_tx_rollback
-\(em migration and transaction control.
-.It
+The interfaces are defined but not yet implemented:
+.Fn mw_db_open ,
+.Fn mw_db_close ,
+.Fn mw_db_exec_schema ,
+.Fn mw_db_migrate ,
+.Fn mw_tx_begin ,
+.Fn mw_tx_commit ,
+.Fn mw_tx_rollback ,
 .Fn mw_stmt_prepare ,
 .Fn mw_bind_text ,
 .Fn mw_bind_int64 ,
 .Fn mw_bind_null ,
 .Fn mw_stmt_step ,
-.Fn mw_stmt_finalize
-\(em prepared statement lifecycle.
-.El
+.Fn mw_stmt_finalize .
 .Pp
-All stubs return
-.Dv -1 .
-The interfaces are stable and intended to be implemented during the Phase 5
-storage refactor.
+All stub functions currently return
+.Dv -1
+(unimplemented).
+The headers are stable and intended for Phase 5 of the modularity roadmap.
 .Sh OPENBSD SECURITY HARDENING
 After worker threads are started,
 .Fn apply_openbsd_security
@@ -698,17 +597,21 @@ grants access only to:
 (read).
 .It
 .Cm mandoc_path ,
-.Pa /usr/bin/man , /usr/bin/apropos , /usr/bin/netstat , /bin/sh
+.Pa /usr/bin/man , /usr/bin/apropos , /usr/sbin/pkg_info
 (execute).
 .It
-.Pa /usr/sbin/pkg_info
-(execute),
-.Pa /var/db/pkg , /usr/local , /usr/bin , /usr/sbin , /bin , /sbin ,
-.Pa /usr/local/bin
+.Pa /bin/sh
+(execute for fallback popen).
+.It
+.Pa /var/db/pkg
 (read).
 .It
-.Pa /etc/passwd , /etc/group , /etc/resolv.conf
-(read),
+.Pa /etc/passwd , /etc/group
+(read for process username resolution).
+.It
+.Pa /etc/resolv.conf
+(read).
+.It
 .Pa /dev/null
 (read/write).
 .El
@@ -741,81 +644,116 @@ with
 of the current
 .Va errno .
 .El
-.Sh ENDPOINTS
-.Ss Views
-.Bl -tag -width "/api/packages/search"
-.It Pa /
-Dashboard.
-.It Pa /docs
-Documentation and man page browser UI.
-.It Pa /networking
-Networking UI.
-.It Pa /packages
-Package Manager UI.
-.It Pa /apiroot
-API Index UI.
+.Sh ENDPOINTS REFERENCE
+.Ss Views (HTML, template-rendered)
+.Bl -column "Method" "Path" "Title" "Cache" -offset indent
+.It Em Method Ta Em Path Ta Em Title Ta Em Cache
+.It GET Ta / Ta Dashboard Ta Hot view (10s)
+.It GET Ta /docs Ta Documentation Ta Hot view (10s)
+.It GET Ta /networking Ta Networking Ta Hot view (10s)
+.It GET Ta /packages Ta Package Manager Ta Hot view (10s)
+.It GET Ta /apiroot Ta API Index Ta Hot view (10s)
 .El
 .Ss JSON APIs
-This module accepts exact endpoint paths under
-.Pa /api/packages
-(e.g.,
-.Pa /search
-,
-.Pa /info
-,
-.Pa /which
-,
-.Pa /files
-,
-.Pa /list
-) and returns
-.Dv 404
-for unknown suffixes.
-.Bl -tag -width "/api/packages/search"
-.It Pa /api/metrics
-System metrics snapshot (CPU, RAM, load, disk, processes).
-.It Pa /api/networking
-Networking diagnostics (routes, DNS, interfaces, connections).
-.It Pa /api/man/*
-Manual page discovery and search.
-.It Pa /api/packages/search
-Search installed packages.
-.It Pa /api/packages/info
-Package details.
-.It Pa /api/packages/which
-Which package owns a file.
-.It Pa /api/packages/files
-Files installed by a package.
-.It Pa /api/packages/list
-List all installed packages (sorted lexicographically).
+.Bl -column "Method" "Path" "Description" "Cache" -offset indent
+.It Em Method Ta Em Path Ta Em Description Ta Em Cache
+.It GET Ta /api/metrics Ta System metrics snapshot Ta Ring buffer (1s)
+.It GET Ta /api/networking Ta Networking diagnostics Ta Ring buffer (1s)
+.It GET Ta /api/man/sections Ta Manual sections catalog Ta Static JSON
+.It GET Ta /api/man/{area}/{section} Ta Pages in section Ta On-demand
+.It GET Ta /api/man/search?q={query} Ta Search man pages Ta On-demand
+.It GET Ta /api/man/resolve?name={n}&section={s} Ta Resolve page Ta On-demand
+.It GET Ta /api/packages/search?q={query} Ta Search packages Ta Ring buffer (30s)
+.It GET Ta /api/packages/info?name={pkg} Ta Package details Ta Ring buffer (30s)
+.It GET Ta /api/packages/which?path={file} Ta File ownership Ta Ring buffer (30s)
+.It GET Ta /api/packages/files?name={pkg} Ta Package files Ta Ring buffer (30s)
+.It GET Ta /api/packages/list Ta All packages Ta Ring buffer (30s)
 .El
-.Ss Manual page rendering
-.Bl -tag -width "/man/{area}/{section}/{page}.utf8"
-.It Pa /man/{area}/{section}/{page}
-Default HTML rendering.
-.It Pa /man/{area}/{section}/{page}.html
-HTML.
-.It Pa /man/{area}/{section}/{page}.utf8
-Plain UTF-8 text.
-.It Pa /man/{area}/{section}/{page}.md
-Markdown.
-.It Pa /man/{area}/{section}/{page}.pdf
-PDF.
+.Ss Rendered manual pages
+.Bl -column "Method" "Path" "Description" "Cache" -offset indent
+.It Em Method Ta Em Path Ta Em Description Ta Em Cache
+.It GET Ta /man/{area}/{section}/{page} Ta HTML Ta Sharded (600s)
+.It GET Ta /man/{area}/{section}/{page}.html Ta HTML Ta Sharded (600s)
+.It GET Ta /man/{area}/{section}/{page}.txt Ta Plain text Ta Sharded (600s)
+.It GET Ta /man/{area}/{section}/{page}.md Ta Markdown Ta Sharded (600s)
+.It GET Ta /man/{area}/{section}/{page}.pdf Ta PDF Ta Sharded (600s)
+.It GET Ta /man/{area}/{section}/{page}.ps Ta PostScript Ta Sharded (600s)
 .El
 .Ss Static assets
-.Bl -tag -width "/api/packages/search"
-.It Pa /static/*
-CSS, JavaScript, images, and other assets.
-.It Pa /favicon.ico
-Favicon (served from
-.Pa static/assets/favicon.svg ) .
+.Bl -column "Method" "Path" "Description" -offset indent
+.It Em Method Ta Em Path Ta Em Description
+.It GET Ta /static/* Ta CSS, JavaScript, images
+.It GET Ta /favicon.ico Ta Favicon (served from static/assets/favicon.svg)
+.El
+.Sh PERFORMANCE TUNING GUIDE
+.Ss Runtime tunables (CLI/config)
+.Bl -bullet -compact
+.It
+.Cm threads
+: worker threads that execute handlers.
+Increase gradually; too high can increase lock contention.
+.It
+.Cm max_conns
+: connection budget.
+Must stay below kernel/file-descriptor limits.
+.It
+.Cm conn_timeout
+: idle keep-alive timeout; lower values reclaim sockets faster.
+.It
+.Cm max_req_size
+: hard cap for request header buffering.
+.It
+.Cm mandoc_timeout
+: upper bound for man rendering subprocesses.
+.It
+.Cm verbose
+: keep disabled during benchmarks.
+.El
+.Ss Compile-time tunables (code constants)
+.Bl -bullet -compact
+.It
+Dispatcher/queue sizing:
+.Dv MAX_EVENTS , LISTEN_BACKLOG , QUEUE_CAPACITY , MAX_KEEPALIVE_REQUESTS .
+.It
+HTTP write path:
+.Dv WRITE_RETRY_LIMIT , WRITE_WAIT_MS .
+.It
+Static asset cache:
+.Dv FILE_CACHE_SHARDS , FILE_CACHE_SLOTS , FILE_CACHE_MAX_BYTES ,
+.Dv FILE_CACHE_INSERTS_PER_SEC , FILE_CACHE_MAX_AGE_SEC .
+.It
+Module ring buffers:
+.Dv METRICS_RING_BYTES , NETWORK_RING_BYTES , PKG_RING_BYTES .
+.El
+.Ss Caching strategy summary
+.Bl -bullet -compact
+.It
+Template cache: preloaded at startup, refreshed every 60s.
+.It
+Hot view cache: 5 slots, 10s TTL.
+.It
+Static file cache: 16 shards × 32 slots, 256 KiB max, 120s TTL.
+.It
+Metrics ring: 1MB, 1s samples, 120-sample history.
+.It
+Networking ring: 1MB, 1s samples, pre-built JSON snapshot.
+.It
+Man page cache: 16×128 slots, 600s TTL, filesystem fallback.
+.It
+Package ring: 2MB, 30s TTL, on-demand population.
 .El
 .Sh SOURCE LAYOUT
 .Bl -tag -width "modules/networking/"
 .It Pa src/app_main.c
-kqueue loop, worker pool, accept, idle sweep, shutdown.
+Main entry point: kqueue loop, worker pool, accept, idle sweep, shutdown.
+.It Pa src/net/server.c
+kqueue dispatcher and accept loop implementation.
+.It Pa src/net/connection_pool.c
+fd-indexed connection pool with O(1) alloc/free and generation guards.
+.It Pa src/net/worker.c
+Worker request read, parse, and route dispatch.
 .It Pa src/net/work_queue.c
-Thread-safe FIFO transport work queue extracted from the server entrypoint.
+Thread-safe FIFO transport work queue.
 .It Pa src/platform/openbsd/security.c
 OpenBSD sandbox boundary setup using
 .Xr unveil 2
@@ -830,7 +768,7 @@ Thread-safe logger.
 .It Pa src/http/response.c
 Response pool, serialisation, sharded file cache, HTTP send helpers.
 .It Pa src/http/utils.c
-JSON escaping, subprocess execution (fork / poll / timeout).
+JSON escaping, subprocess execution (fork/poll/timeout).
 .It Pa src/router/module_attach.c
 .Fn miniweb_module_attach_enabled
 module registration.
@@ -845,19 +783,34 @@ wrappers.
 Route table, prefix routes,
 .Va view_routes[] ,
 .Fn init_routes .
-All built-in modules are attached here through the module attach API.
-.It Pa src/modules/man/
-Man page rendering, filesystem render cache, and JSON API.
-.It Pa src/modules/metrics/
+All built-in modules are attached here.
+.It Pa src/modules/man/man_module.c
+Man page rendering, filesystem render cache, sharded RAM cache, and JSON API.
+.It Pa src/modules/man/man_service.c
+Man page service layer (search, metadata).
+.It Pa src/modules/man/man_json.c
+JSON serialisation for man API.
+.It Pa src/modules/metrics/metrics_module.c
 System metrics collection, heartbeat task, ring buffer, and JSON API.
-.It Pa src/modules/networking/
+.It Pa src/modules/metrics/metrics_service.c
+Metrics collection helpers.
+.It Pa src/modules/metrics/metrics_json.c
+JSON serialisation for metrics.
+.It Pa src/modules/networking/networking_module.c
 Networking diagnostics, heartbeat task, ring buffer, and JSON API.
-.It Pa src/modules/packages/
-.Xr pkg_info 1
-wrapper and JSON API.
+.It Pa src/modules/networking/networking_service.c
+Network collection helpers.
+.It Pa src/modules/networking/networking_json.c
+JSON serialisation for networking.
+.It Pa src/modules/packages/packages_module.c
+Package management with 2MB ring buffer cache and JSON API.
+.It Pa src/modules/packages/packages_service.c
+Package query helpers.
+.It Pa src/modules/packages/packages_json.c
+JSON serialisation for packages.
 .It Pa src/render/template_render.c
-Template file cache (preloaded at startup, refreshed every 60 s) and
-placeholder substitution.
+Template file cache (preloaded at startup, refreshed every 60s) and placeholder
+substitution.
 .It Pa src/storage/sqlite_db.c
 SQLite3 database lifecycle stubs.
 .It Pa src/storage/sqlite_schema.c
@@ -865,26 +818,26 @@ Schema migration and transaction stubs.
 .It Pa src/storage/sqlite_stmt.c
 Prepared statement stubs.
 .El
-.Sh ENTERPRISE REFACTOR ROADMAP
+.Sh MODULARITY ROADMAP
 .Bl -tag -width "Phase 6"
 .It Phase 1
 Module attach API and router separation.
-Complete: all modules register through
+Complete: all modules use
 .Fn miniweb_module_attach_enabled .
 .It Phase 2
 Single global heartbeat scheduler.
 Complete: metrics and networking both run as named heartbeat tasks.
 .It Phase 3
 Domain decomposition of metrics, networking, man, packages.
-Scaffolded:
-.Pa *_service.c
+Complete: all modules are split into
+.Pa *_module.c ,
+.Pa *_service.c ,
 and
-.Pa *_json.c
-stubs are present; function bodies still to be migrated.
+.Pa *_json.c .
 .It Phase 4
 Documentation and architecture transition.
-Complete: README, man page, and all Doxygen blocks updated.
-Majority Italian-language source comments have been translated to English.
+Complete: README, man page, and all Doxygen blocks updated to reflect current
+state.
 .It Phase 5
 SQLite3 storage integration.
 Stub interfaces are defined; no live backend yet.
@@ -893,21 +846,9 @@ Performance and observability hardening.
 Planned.
 .El
 .Sh NEXT STEPS FOR MODULARITY
-The following items are the immediate backlog for reaching low
-LOC-per-file and low LOC-per-function targets across the codebase.
+The following tasks are the immediate backlog for achieving low LOC-per-file and
+low LOC-per-function targets.
 .Bl -enum -compact
-.It
-Migrate function bodies from
-.Pa *_module.c
-into the corresponding
-.Pa *_service.c
-(data collection) and
-.Pa *_json.c
-(JSON serialisation) units for all four feature modules.
-After migration,
-.Pa *_module.c
-should contain only route handler entry points and
-.Fn attach_routes .
 .It
 Split
 .Pa src/http/response.c
@@ -920,8 +861,8 @@ and
 Extract platform-specific collectors into dedicated translation units under
 .Pa src/platform/openbsd/
 for CPU, memory, disk, process, network interfaces, and routing table.
-Modules must consume only collector APIs; no direct sysctl or kvm calls
-should remain inside module files.
+Modules must consume only collector APIs; no direct sysctl calls should remain
+inside module files.
 .It
 Apply function-size limits (soft 40 LOC, review trigger 80 LOC) to
 .Fn miniweb_server_run ,
@@ -929,11 +870,8 @@ Apply function-size limits (soft 40 LOC, review trigger 80 LOC) to
 and
 .Fn build_system_metrics_json .
 .It
-Upgrade
-.Pa tests/integration_endpoints.sh
-from reachability smoke tests to contract-level assertions: explicit
-status checks for 200/404/405 and JSON key-presence checks for core
-endpoints.
+Harden the integration test suite: explicit HTTP status checks, JSON key
+presence checks, golden payload fixtures.
 .It
 Implement the SQLite3 backend (Phase 5): connect
 .Pa src/storage/
@@ -942,24 +880,30 @@ stubs to real
 prepared statements, and transactions; persist module flags and bounded
 metric snapshots.
 .El
-.Sh DESIGN REQUIREMENTS
+.Sh DEVELOPMENT STANDARDS
 .Bl -bullet -compact
 .It
-C99-only codebase.
+Language: C99 only.
 .It
-OpenBSD KNF style.
+Style: OpenBSD KNF.
 .It
-Small, reusable functions with strict module ownership.
+Documentation: Doxygen for all exported symbols.
 .It
-File-size guideline: soft limit 350 LOC, review trigger 500 LOC.
+Principle: small reusable functions, strict module ownership, minimal coupling.
 .It
-Function-size guideline: soft limit 40 LOC, review trigger 80 LOC.
+File size: soft limit 350 LOC, review trigger 500 LOC.
 .It
-Doxygen documentation for all exported symbols.
+Function size: soft limit 40 LOC, review trigger 80 LOC.
 .It
-All source comments in English.
+Return convention:
+.Cm 0
+success /
+.Cm -1
+failure unless documented otherwise.
 .It
-Compatibility-first refactor: feature parity required at every phase.
+TLS: not implemented \(em run behind
+.Xr relayd 8
+for TLS termination.
 .El
 .Sh SEE ALSO
 .Xr kqueue 2 ,
@@ -972,41 +916,9 @@ Compatibility-first refactor: feature parity required at every phase.
 .Xr pkg_info 1 ,
 .Xr relayd 8
 .Sh AUTHORS
-MiniWeb contributors.
-.Sh REFACTOR STATUS
-As of 2026-02-25, server runtime decomposition is complete for the
-networking layer and documentation is up to date:
-.Bl -bullet
-.It
-.Pa src/net/server.c
-\(em kqueue dispatcher and accept loop.
-.It
-.Pa src/net/connection_pool.c
-\(em fd-indexed connection pool with O(1) alloc/free and generation guards.
-.It
-.Pa src/net/worker.c
-\(em worker request read, parse, and route dispatch.
-.El
-Module decomposition scaffolds are in place for all four feature modules:
-.Bl -bullet
-.It
-.Pa src/modules/metrics/metrics_service.c
-and
-.Pa src/modules/metrics/metrics_json.c
-.It
-.Pa src/modules/networking/networking_service.c
-and
-.Pa src/modules/networking/networking_json.c
-.It
-.Pa src/modules/man/man_service.c
-and
-.Pa src/modules/man/man_json.c
-.It
-.Pa src/modules/packages/packages_service.c
-and
-.Pa src/modules/packages/packages_json.c
-.El
-All Doxygen
-.Sq TODO
-placeholder blocks have been replaced with accurate descriptions.
-Majority Italian-language source comments have been translated to English.
+.An -nosplit
+The MiniWeb contributors.
+See the source code repository for a complete list.
+.Sh BUGS
+Please report bugs to the issue tracker at
+.Lk https://github.com/flavioferretti/miniweb/issues .

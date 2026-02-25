@@ -1,3 +1,4 @@
+
 /* man_module.c - man page rendering module
  *
  * Fixes vs previous version:
@@ -72,6 +73,7 @@ typedef struct {
 
 static man_render_shard_t g_man_cache[MAN_RENDER_CACHE_SHARDS];
 static pthread_once_t     g_man_cache_once = PTHREAD_ONCE_INIT;
+
 
 /* =========================================================================
  * Forward declarations
@@ -725,11 +727,7 @@ man_render_handler(http_request_t *req)
             return http_send_error(req, 500, "Internal Server Error");
         }
         resp->content_type = mime_for_format(format);
-        char clen[32];
-        snprintf(clen, sizeof(clen), "%zu", cached_len);
-        http_response_add_header(resp, "Content-Length", clen);
-        http_response_add_header(resp, "Cache-Control",
-                                 "public, max-age=300");
+        http_response_add_header(resp, "Cache-Control", "public, max-age=300");
         add_content_disposition_for_format(resp, format, page);
         http_response_set_body(resp, cached_body, cached_len, 1);
         int ret = http_response_send(req, resp);
@@ -766,11 +764,7 @@ man_render_handler(http_request_t *req)
                         http_response_t *resp = http_response_create();
                         if (!resp) { free(buf); return -1; }
                         resp->content_type = mime_for_format(format);
-                        char clen[32];
-                        snprintf(clen, sizeof(clen), "%zu", (size_t)nr);
-                        http_response_add_header(resp, "Content-Length", clen);
-                        http_response_add_header(resp, "Cache-Control",
-                                                 "public, max-age=300");
+                        http_response_add_header(resp, "Cache-Control", "public, max-age=300");
                         add_content_disposition_for_format(resp, format, page);
                         http_response_set_body(resp, buf, (size_t)nr, 1);
                         int ret = http_response_send(req, resp);
@@ -810,9 +804,6 @@ man_render_handler(http_request_t *req)
     if (!resp) { free(output); return -1; }
 
     resp->content_type = mime_for_format(format);
-    char clen[32];
-    snprintf(clen, sizeof(clen), "%zu", out_len);
-    http_response_add_header(resp, "Content-Length", clen);
     http_response_add_header(resp, "Cache-Control", "public, max-age=300");
     add_content_disposition_for_format(resp, format, page);
     http_response_set_body(resp, output, out_len, 1);
@@ -1190,3 +1181,4 @@ man_module_attach_routes(struct router *r)
         return -1;
     return 0;
 }
+
