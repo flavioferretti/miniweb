@@ -1,86 +1,41 @@
 /* packages_module.c - pkg manager implementation */
 
 #include <ctype.h>
+#include <errno.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <pthread.h>
 #include <time.h>
 #include <unistd.h>
-#include <errno.h>
 
-#include <miniweb/router/router.h>
+#include <miniweb/core/log.h>
 #include <miniweb/http/handler.h>
 #include <miniweb/http/utils.h>
 #include <miniweb/modules/pkg_manager.h>
-#include <miniweb/core/log.h>
+#include <miniweb/router/router.h>
 
 #define PKG_JSON_MAX (1024 * 1024)
 #define PKG_CMD_MAX_OUTPUT (8 * 1024 * 1024)
-#define PKG_WHICH_TIMEOUT                                                      \
-	60 /* pkg_info -E scans all packages: can take ~30s                    \
-	    */
-#define PKG_SEARCH_CACHE_SIZE 64
-#define PKG_SEARCH_CACHE_TTL_SEC 30
+#define PKG_WHICH_TIMEOUT 60
 
-typedef struct {
-	char *query;
-	char *json;
-	time_t created_at;
-	time_t last_used_at;
-} pkg_search_cache_entry_t;
+/* Cache disabilitata per ora - commentata per evitare warning
+ # *define PKG_SEARCH_CACHE_SIZE 64
+ #define PKG_SEARCH_CACHE_TTL_SEC 30
 
-static pkg_search_cache_entry_t g_pkg_search_cache[PKG_SEARCH_CACHE_SIZE];
-static pthread_mutex_t g_pkg_search_cache_lock = PTHREAD_MUTEX_INITIALIZER;
+ typedef struct {
+ char *query;
+ char *json;
+ time_t created_at;
+ time_t last_used_at;
+ } pkg_search_cache_entry_t;
 
-//static int compare_pkg_names(const void *a, const void *b);
-//static int collect_pkg_name_from_line(char *line, char **out_name);
-
-static void
-pkg_search_cache_store_locked(const char *query, const char *json, time_t now)
-{
-	int slot = -1;
-	time_t oldest = now;
-
-	for (int i = 0; i < PKG_SEARCH_CACHE_SIZE; i++) {
-		if (g_pkg_search_cache[i].query &&
-		    strcmp(g_pkg_search_cache[i].query, query) == 0) {
-			slot = i;
-			break;
-		}
-		if (!g_pkg_search_cache[i].query) {
-			slot = i;
-			break;
-		}
-		if (g_pkg_search_cache[i].last_used_at <= oldest) {
-			oldest = g_pkg_search_cache[i].last_used_at;
-			slot = i;
-		}
-	}
-
-	if (slot < 0)
-		return;
-
-	free(g_pkg_search_cache[slot].query);
-	free(g_pkg_search_cache[slot].json);
-	g_pkg_search_cache[slot].query = strdup(query);
-	g_pkg_search_cache[slot].json = strdup(json);
-	if (!g_pkg_search_cache[slot].query || !g_pkg_search_cache[slot].json) {
-		free(g_pkg_search_cache[slot].query);
-		free(g_pkg_search_cache[slot].json);
-		memset(&g_pkg_search_cache[slot], 0,
-		       sizeof(g_pkg_search_cache[slot]));
-		return;
-	}
-	g_pkg_search_cache[slot].created_at = now;
-	g_pkg_search_cache[slot].last_used_at = now;
-}
+ static pkg_search_cache_entry_t g_pkg_search_cache[PKG_SEARCH_CACHE_SIZE];
+ static pthread_mutex_t g_pkg_search_cache_lock = PTHREAD_MUTEX_INITIALIZER;
+ */
 
 /**
  * @brief Is safe pkg name.
- * @param name Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented
- * otherwise.
  */
 static int
 is_safe_pkg_name(const char *name)
@@ -98,11 +53,6 @@ is_safe_pkg_name(const char *name)
 
 /**
  * @brief Url decode into.
- * @param src Parameter used by this function.
- * @param dst Parameter used by this function.
- * @param dst_size Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented
- * otherwise.
  */
 static int
 url_decode_into(const char *src, char *dst, size_t dst_size)
@@ -138,12 +88,6 @@ url_decode_into(const char *src, char *dst, size_t dst_size)
 
 /**
  * @brief Get query value.
- * @param url Request URL path.
- * @param key Parameter used by this function.
- * @param out Output pointer for parsed or generated value.
- * @param out_size Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented
- * otherwise.
  */
 static int
 get_query_value(const char *url, const char *key, char *out, size_t out_size)
@@ -195,6 +139,27 @@ get_query_value(const char *url, const char *key, char *out, size_t out_size)
 	return 0;
 }
 
+/**
+ * @brief Return non-zero when the request path matches an endpoint exactly.
+ */
+static int
+path_matches_endpoint(const char *path, const char *prefix)
+{
+	size_t len;
+
+	if (!path || !prefix)
+		return 0;
+
+	len = strlen(prefix);
+	if (strncmp(path, prefix, len) != 0)
+		return 0;
+
+	return path[len] == '\0' || path[len] == '?';
+}
+
+/**
+ * Pkg search json.
+ */
 char *
 pkg_search_json(const char *query)
 {
@@ -211,38 +176,62 @@ pkg_search_json(const char *query)
 		return strdup("{\"query\":\"\",\"packages\":[]}");
 	}
 
-	/* Prova prima con pkg_info -Q */
+	/* Prova con pkg_info -Q */
 	if (is_safe_pkg_name(query)) {
 		char *const argv[] = {"pkg_info", "-Q", (char *)query, NULL};
 		log_debug("[PKG] Executing: pkg_info -Q %s", query);
 		output = safe_popen_read_argv("/usr/sbin/pkg_info", argv,
-									  PKG_CMD_MAX_OUTPUT, 5, NULL);
+					      PKG_CMD_MAX_OUTPUT, 5, NULL);
 	}
 
-	/* Se pkg_info -Q fallisce, prova con which per vedere se pkg_info esiste */
-	if (!output) {
-		log_debug("[PKG] pkg_info -Q failed, checking if pkg_info exists");
-		if (access("/usr/sbin/pkg_info", X_OK) == 0) {
-			log_debug("[PKG] /usr/sbin/pkg_info is executable");
-		} else {
-			log_debug("[PKG] /usr/sbin/pkg_info is NOT executable: %s",
-					  strerror(errno));
-		}
+	/* Se non funziona, prova con pkg_info -q | grep */
+	if (!output || output[0] == '\0') {
+		log_debug("[PKG] pkg_info -Q failed, trying grep approach");
+		free(output);
 
-		/* Prova a eseguire un comando semplice per test */
-		char *const test_argv[] = {"ls", "-la", "/usr/sbin/pkg_info", NULL};
-		char *test_out = safe_popen_read_argv("/bin/ls", test_argv, 1024, 5, NULL);
-		if (test_out) {
-			log_debug("[PKG] ls test output: %s", test_out);
-			free(test_out);
-		} else {
-			log_debug("[PKG] ls test failed");
+		char *list_output = NULL;
+		char *const argv_list[] = {"pkg_info", "-q", NULL};
+		list_output =
+		    safe_popen_read_argv("/usr/sbin/pkg_info", argv_list,
+					 PKG_CMD_MAX_OUTPUT, 5, NULL);
+
+		if (list_output) {
+			char *line = strtok(list_output, "\n");
+			size_t total = 0;
+			output = malloc(PKG_CMD_MAX_OUTPUT);
+			if (output) {
+				output[0] = '\0';
+				while (line) {
+					if (strstr(line, query)) {
+						size_t len = strlen(line);
+						if (total + len + 2 <
+						    PKG_CMD_MAX_OUTPUT) {
+							if (total > 0) {
+								strlcat(
+								    output,
+								    "\n",
+								    PKG_CMD_MAX_OUTPUT);
+								total++;
+							}
+							strlcat(
+							    output, line,
+							    PKG_CMD_MAX_OUTPUT);
+							total += len;
+						}
+					}
+					line = strtok(NULL, "\n");
+				}
+				log_debug("[PKG] grep found %zu bytes", total);
+			}
+			free(list_output);
 		}
 	}
 
 	/* Se ancora fallisce, prova con popen diretto */
-	if (!output) {
+	if (!output || output[0] == '\0') {
 		log_debug("[PKG] Trying popen directly");
+		free(output);
+
 		char cmd[256];
 		snprintf(cmd, sizeof(cmd), "pkg_info -Q %s 2>&1", query);
 		FILE *fp = popen(cmd, "r");
@@ -251,32 +240,31 @@ pkg_search_json(const char *query)
 			size_t total = 0;
 			output = malloc(PKG_CMD_MAX_OUTPUT);
 			if (output) {
-				while (fgets(buf, sizeof(buf), fp) && total < PKG_CMD_MAX_OUTPUT - 1) {
+				output[0] = '\0';
+				while (fgets(buf, sizeof(buf), fp) &&
+				       total < PKG_CMD_MAX_OUTPUT - 1) {
 					size_t len = strlen(buf);
-					memcpy(output + total, buf, len);
-					total += len;
+					if (total + len <
+					    PKG_CMD_MAX_OUTPUT - 1) {
+						strlcat(output, buf,
+							PKG_CMD_MAX_OUTPUT);
+						total += len;
+					}
 				}
-				output[total] = '\0';
-				log_debug("[PKG] popen returned %zu bytes", total);
-				if (total > 0) {
-					log_debug("[PKG] popen output: %s", output);
-				}
+				log_debug("[PKG] popen returned %zu bytes",
+					  total);
 			}
 			pclose(fp);
-		} else {
-			log_debug("[PKG] popen failed: %s", strerror(errno));
 		}
 	}
 
-	if (!output) {
+	if (!output || output[0] == '\0') {
 		log_debug("[PKG] All methods failed, returning empty");
+		free(output);
 		return strdup("{\"query\":\"\",\"packages\":[]}");
 	}
 
-	log_debug("[PKG] Raw output length: %zu", strlen(output));
-	if (strlen(output) < 500) {
-		log_debug("[PKG] Raw output: '%s'", output);
-	}
+	log_debug("[PKG] Raw output: '%s'", output);
 
 	/* Costruisci JSON */
 	json = malloc(PKG_JSON_MAX);
@@ -287,8 +275,8 @@ pkg_search_json(const char *query)
 
 	char *query_escaped = json_escape_string(query);
 	offset += snprintf(json + offset, PKG_JSON_MAX - offset,
-					   "{\"query\":\"%s\",\"packages\":[",
-					query_escaped ? query_escaped : "");
+			   "{\"query\":\"%s\",\"packages\":[",
+			   query_escaped ? query_escaped : "");
 	free(query_escaped);
 
 	char *saveptr = NULL;
@@ -297,24 +285,21 @@ pkg_search_json(const char *query)
 	while (line && offset < PKG_JSON_MAX - 256) {
 		line[strcspn(line, "\r")] = '\0';
 
-		/* Rimuovi " (installed)" se presente */
-		char *tag = strstr(line, " (installed)");
-		if (tag) *tag = '\0';
-
-		/* Trim */
-		while (*line == ' ' || *line == '\t') line++;
+		/* Rimuovi spazi */
+		while (*line == ' ' || *line == '\t')
+			line++;
 		char *end = line + strlen(line) - 1;
-		while (end > line && (*end == ' ' || *end == '\t')) *end-- = '\0';
+		while (end > line && (*end == ' ' || *end == '\t'))
+			*end-- = '\0';
 
 		if (*line != '\0' && strlen(line) > 1) {
 			char *escaped_line = json_escape_string(line);
 			offset += snprintf(json + offset, PKG_JSON_MAX - offset,
-							   "%s\"%s\"", first ? "" : ",",
-					  escaped_line ? escaped_line : "");
+					   "%s\"%s\"", first ? "" : ",",
+					   escaped_line ? escaped_line : "");
 			free(escaped_line);
 			first = 0;
 			count++;
-			log_debug("[PKG] Added package: %s", line);
 		}
 		line = strtok_r(NULL, "\n", &saveptr);
 	}
@@ -322,17 +307,11 @@ pkg_search_json(const char *query)
 	offset += snprintf(json + offset, PKG_JSON_MAX - offset, "]}");
 	free(output);
 
-	log_debug("[PKG] Final JSON (%d packages): %s", count, json);
+	log_debug("[PKG] Final JSON with %d packages", count);
 	return json;
 }
 
 /* Validate filesystem path for pkg_info -W: must be absolute, no shell chars */
-/**
- * @brief Is safe path.
- * @param path Request or filesystem path to evaluate.
- * @return Returns 0 on success or a negative value on failure unless documented
- * otherwise.
- */
 static int
 is_safe_path(const char *path)
 {
@@ -349,14 +328,7 @@ is_safe_path(const char *path)
 	return 1;
 }
 
-/* Build {"raw":"<escaped output>"} — same idea as Node's
- * res.end(JSON.stringify({ info: stdout.trim() })) */
-/**
- * @brief Make raw json.
- * @param output Rendered output buffer pointer.
- * @return Returns 0 on success or a negative value on failure unless documented
- * otherwise.
- */
+/* Build {"raw":"<escaped output>"} */
 static char *
 make_raw_json(const char *output)
 {
@@ -389,10 +361,7 @@ make_raw_json(const char *output)
 }
 
 /**
- * @brief Pkg info json.
- * @param package_name Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented
- * otherwise.
+ * Pkg info json.
  */
 char *
 pkg_info_json(const char *package_name)
@@ -410,10 +379,7 @@ pkg_info_json(const char *package_name)
 }
 
 /**
- * @brief Pkg files json.
- * @param package_name Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented
- * otherwise.
+ * Pkg files json.
  */
 char *
 pkg_files_json(const char *package_name)
@@ -458,13 +424,7 @@ pkg_files_json(const char *package_name)
 	char *line = strtok_r(output, "\n", &saveptr);
 	while (line && offset < PKG_JSON_MAX - 256) {
 		line[strcspn(line, "\r")] = '\0';
-		/*
-		 * pkg_info -L output starts with header lines like:
-		 *   "Information for inst:<pkg>:"
-		 *   ""
-		 *   "Files:"
-		 * Only include lines that are absolute paths (start with '/').
-		 */
+		/* Only include lines that are absolute paths */
 		if (line[0] == '/') {
 			char *escaped_line = json_escape_string(line);
 			offset += snprintf(json + offset, PKG_JSON_MAX - offset,
@@ -483,17 +443,13 @@ pkg_files_json(const char *package_name)
 
 /**
  * Pkg list json.
- * Ritorna la lista di tutti i package installati
- */
-/**
- * Pkg list json.
  */
 char *
 pkg_list_json(void)
 {
 	char *const argv[] = {"pkg_info", "-q", NULL};
 	char *output = safe_popen_read_argv("/usr/sbin/pkg_info", argv,
-										PKG_CMD_MAX_OUTPUT, 5, NULL);
+					    PKG_CMD_MAX_OUTPUT, 5, NULL);
 
 	char *json = malloc(PKG_JSON_MAX);
 	if (!json) {
@@ -503,7 +459,7 @@ pkg_list_json(void)
 
 	size_t offset = 0;
 	offset +=
-	snprintf(json + offset, PKG_JSON_MAX - offset, "{\"packages\":[");
+	    snprintf(json + offset, PKG_JSON_MAX - offset, "{\"packages\":[");
 
 	int first = 1;
 	if (output) {
@@ -514,9 +470,9 @@ pkg_list_json(void)
 			if (*line != '\0') {
 				char *escaped_line = json_escape_string(line);
 				offset += snprintf(
-					json + offset, PKG_JSON_MAX - offset,
-					"%s\"%s\"", first ? "" : ",",
-					escaped_line ? escaped_line : "");
+				    json + offset, PKG_JSON_MAX - offset,
+				    "%s\"%s\"", first ? "" : ",",
+				    escaped_line ? escaped_line : "");
 				free(escaped_line);
 				first = 0;
 			}
@@ -530,10 +486,7 @@ pkg_list_json(void)
 }
 
 /**
- * @brief Pkg which json.
- * @param file_path Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented
- * otherwise.
+ * Pkg which json.
  */
 char *
 pkg_which_json(const char *file_path)
@@ -544,95 +497,22 @@ pkg_which_json(const char *file_path)
 		    "contain no shell metacharacters\"}");
 
 	char *const argv_w[] = {"pkg_info", "-W", (char *)file_path, NULL};
-	char *output = safe_popen_read_argv("/usr/sbin/pkg_info", argv_w,
-				     PKG_CMD_MAX_OUTPUT, PKG_WHICH_TIMEOUT, NULL);
+	char *output =
+	    safe_popen_read_argv("/usr/sbin/pkg_info", argv_w,
+				 PKG_CMD_MAX_OUTPUT, PKG_WHICH_TIMEOUT, NULL);
 	if (!output || output[0] == '\0') {
 		free(output);
-		char *const argv_e[] = {"pkg_info", "-E", (char *)file_path, NULL};
+		char *const argv_e[] = {"pkg_info", "-E", (char *)file_path,
+					NULL};
 		output = safe_popen_read_argv("/usr/sbin/pkg_info", argv_e,
-					       PKG_CMD_MAX_OUTPUT, PKG_WHICH_TIMEOUT, NULL);
+					      PKG_CMD_MAX_OUTPUT,
+					      PKG_WHICH_TIMEOUT, NULL);
 	}
 	char *json = make_raw_json(output);
 	free(output);
 	return json ? json : strdup("{\"found\":false,\"raw\":\"\"}");
 }
 
-/**
- * @brief Return non-zero when the request path matches an endpoint exactly.
- * @param path Request URL path segment after /api/packages.
- * @param prefix Endpoint path segment to match.
- * @return 1 when @p path matches @p prefix followed by end or query string.
- */
-static int
-path_matches_endpoint(const char *path, const char *prefix)
-{
-	size_t len;
-
-	if (!path || !prefix)
-		return 0;
-
-	len = strlen(prefix);
-	if (strncmp(path, prefix, len) != 0)
-		return 0;
-
-	return path[len] == '\0' || path[len] == '?';
-}
-
-/**
- * @brief qsort comparator for package names.
- * @param a Pointer to left element.
- * @param b Pointer to right element.
- * @return strcmp-style ordering result.
- */
-// static int
-// compare_pkg_names(const void *a, const void *b)
-// {
-// 	const char *const *left = a;
-// 	const char *const *right = b;
-//
-// 	return strcmp(*left, *right);
-// }
-
-// static int
-// collect_pkg_name_from_line(char *line, char **out_name)
-// {
-// 	char *candidate;
-//
-// 	if (!line || !out_name)
-// 		return 0;
-//
-// 	line[strcspn(line, "\r")] = '\0';
-// 	if (*line == '\0')
-// 		return 0;
-//
-// 	candidate = line;
-// 	if (strncmp(line, "Information for inst:", 21) == 0) {
-// 		candidate = line + 21;
-// 		char *colon = strchr(candidate, ':');
-// 		if (colon)
-// 			*colon = '\0';
-// 	}
-//
-// 	if (*candidate == '\0' || strchr(candidate, ':') ||
-// 	    strpbrk(candidate, " \t"))
-// 		return 0;
-//
-// 	if (!is_safe_pkg_name(candidate))
-// 		return 0;
-//
-// 	*out_name = strdup(candidate);
-// 	return *out_name != NULL;
-// }
-
-/**
- * Pkg api handler.
- * Endpoints supportati:
- *   /api/packages/search?q=QUERY
- *   /api/packages/info?name=PACKAGE
- *   /api/packages/which?path=PATH
- *   /api/packages/files?name=PACKAGE
- *   /api/packages/list
- */
 /**
  * Pkg api handler.
  */
@@ -652,27 +532,30 @@ pkg_api_handler(http_request_t *req)
 
 	path += strlen(base);
 
-	if (strncmp(path, "/search", 7) == 0) {
+	if (path_matches_endpoint(path, "/search")) {
 		if (!get_query_value(req->url, "q", value, sizeof(value)))
 			return http_send_error(req, 400, "Missing q parameter");
 		log_debug("[PKG] Search query: %s", value);
 		json = pkg_search_json(value);
-	} else if (strncmp(path, "/info", 5) == 0) {
+	} else if (path_matches_endpoint(path, "/info")) {
 		if (!get_query_value(req->url, "name", value, sizeof(value)))
-			return http_send_error(req, 400, "Missing name parameter");
+			return http_send_error(req, 400,
+					       "Missing name parameter");
 		log_debug("[PKG] Info for: %s", value);
 		json = pkg_info_json(value);
-	} else if (strncmp(path, "/which", 6) == 0) {
+	} else if (path_matches_endpoint(path, "/which")) {
 		if (!get_query_value(req->url, "path", value, sizeof(value)))
-			return http_send_error(req, 400, "Missing path parameter");
+			return http_send_error(req, 400,
+					       "Missing path parameter");
 		log_debug("[PKG] Which for path: %s", value);
 		json = pkg_which_json(value);
-	} else if (strncmp(path, "/files", 6) == 0) {
+	} else if (path_matches_endpoint(path, "/files")) {
 		if (!get_query_value(req->url, "name", value, sizeof(value)))
-			return http_send_error(req, 400, "Missing name parameter");
+			return http_send_error(req, 400,
+					       "Missing name parameter");
 		log_debug("[PKG] Files for: %s", value);
 		json = pkg_files_json(value);
-	} else if (strncmp(path, "/list", 5) == 0) {
+	} else if (path_matches_endpoint(path, "/list")) {
 		log_debug("[PKG] Listing all packages");
 		json = pkg_list_json();
 	} else {
@@ -681,7 +564,8 @@ pkg_api_handler(http_request_t *req)
 
 	if (!json) {
 		log_debug("[PKG] Failed to generate JSON");
-		return http_send_error(req, 500, "Unable to query package manager");
+		return http_send_error(req, 500,
+				       "Unable to query package manager");
 	}
 
 	log_debug("[PKG] Generated JSON (%zu bytes)", strlen(json));
@@ -702,20 +586,9 @@ pkg_api_handler(http_request_t *req)
 int
 packages_module_attach_routes(struct router *r)
 {
-	// Registra il prefisso per tutti gli endpoint packages
-	if (router_register_prefix(r, "GET", "/api/packages", 0, pkg_api_handler) != 0)
-		return -1;
-
-	// Registra anche i singoli endpoint per sicurezza
-	if (router_register(r, "GET", "/api/packages/search", pkg_api_handler) != 0)
-		return -1;
-	if (router_register(r, "GET", "/api/packages/info", pkg_api_handler) != 0)
-		return -1;
-	if (router_register(r, "GET", "/api/packages/which", pkg_api_handler) != 0)
-		return -1;
-	if (router_register(r, "GET", "/api/packages/files", pkg_api_handler) != 0)
-		return -1;
-	if (router_register(r, "GET", "/api/packages/list", pkg_api_handler) != 0)
+	/* Registra il prefisso per tutti gli endpoint packages */
+	if (router_register_prefix(r, "GET", "/api/packages", 0,
+				   pkg_api_handler) != 0)
 		return -1;
 
 	return 0;
