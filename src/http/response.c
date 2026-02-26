@@ -1,28 +1,28 @@
 /* response.c - HTTP handler utilities */
 
-#include <miniweb/core/config.h>
-#include <miniweb/http/handler.h>
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include <miniweb/core/config.h>
+#include <miniweb/http/handler.h>
+#include <poll.h>
+#include <pthread.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <strings.h>
-#include <poll.h>
 #include <sys/stat.h>
 #include <sys/uio.h>
-#include <unistd.h>
-#include <pthread.h>
 #include <time.h>
+#include <unistd.h>
 
 #include <miniweb/core/log.h>
 #include <miniweb/router/urls.h>
 
-#define WRITE_RETRY_LIMIT 20
-#define WRITE_WAIT_MS 10
+#define WRITE_RETRY_LIMIT 5
+#define WRITE_WAIT_MS 100
 #define FILE_CACHE_SLOTS 32
 #define FILE_CACHE_MAX_BYTES (256 * 1024)
 #define FILE_CACHE_INSERTS_PER_SEC 8
@@ -46,7 +46,8 @@ static response_pool_t response_pools[RESPONSE_POOL_SHARDS];
 /**
  * @brief Wait fd writable.
  * @param fd File descriptor to operate on.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 static int
 wait_fd_writable(int fd)
@@ -66,15 +67,16 @@ wait_fd_writable(int fd)
 			continue;
 		}
 
-		/* Timeout: fail fast so write paths can bubble the error instead of
-		 * blocking each asset request for many retry intervals. */
+		/* Timeout: return error to avoid busy-waiting */
 		if (rc == 0)
-			return 0;
+			return -1;   /* timeout — socket not draining, give up */
+
 		if (errno == EINTR)
 			continue;
+
 		return -1;
 	}
-}
+}// bugfix - wait_fd_writable Spin-on-Timeout
 
 /**
  * @brief Internal data structure.
@@ -119,7 +121,8 @@ http_handler_globals_init(void)
 
 	for (int i = 0; i < FILE_CACHE_SHARDS; i++) {
 		pthread_mutex_init(&file_cache_shards[i].lock, NULL);
-		file_cache_shards[i].cache_insert_tokens = FILE_CACHE_INSERTS_PER_SEC;
+		file_cache_shards[i].cache_insert_tokens =
+		    FILE_CACHE_INSERTS_PER_SEC;
 	}
 }
 
@@ -170,18 +173,18 @@ response_pool_init_locked(response_pool_t *pool)
  */
 static void
 file_cache_refill_budget_locked(file_cache_shard_t *shard, time_t now,
-								int shard_idx)
+				int shard_idx)
 {
-	if (shard->cache_insert_window == 0 || now != shard->cache_insert_window) {
+	if (shard->cache_insert_window == 0 ||
+	    now != shard->cache_insert_window) {
 		if (shard->cache_insert_window != 0) {
-			log_debug("[FILE_CACHE] shard=%d/sec=%ld hits=%u misses=%u inserts=%u throttles=%u budget=%d",
-					  shard_idx,
-			 (long)shard->cache_insert_window,
-					  shard->window_hits,
-			 shard->window_misses,
-			 shard->window_inserts,
-			 shard->window_throttles,
-			 FILE_CACHE_INSERTS_PER_SEC);
+			log_debug("[FILE_CACHE] shard=%d/sec=%ld hits=%u "
+				  "misses=%u inserts=%u throttles=%u budget=%d",
+				  shard_idx, (long)shard->cache_insert_window,
+				  shard->window_hits, shard->window_misses,
+				  shard->window_inserts,
+				  shard->window_throttles,
+				  FILE_CACHE_INSERTS_PER_SEC);
 		}
 		shard->cache_insert_window = now;
 		shard->cache_insert_tokens = FILE_CACHE_INSERTS_PER_SEC;
@@ -204,7 +207,8 @@ file_cache_evict_stale_locked(file_cache_shard_t *shard, time_t now)
 			continue;
 		if ((now - shard->entries[i].atime) > FILE_CACHE_MAX_AGE_SEC) {
 			free(shard->entries[i].data);
-			memset(&shard->entries[i], 0, sizeof(shard->entries[i]));
+			memset(&shard->entries[i], 0,
+			       sizeof(shard->entries[i]));
 		}
 	}
 
@@ -213,7 +217,7 @@ file_cache_evict_stale_locked(file_cache_shard_t *shard, time_t now)
 			continue;
 		if ((now - shard->candidates[i].atime) > FILE_CACHE_MAX_AGE_SEC)
 			memset(&shard->candidates[i], 0,
-				   sizeof(shard->candidates[i]));
+			       sizeof(shard->candidates[i]));
 	}
 }
 
@@ -221,11 +225,11 @@ file_cache_evict_stale_locked(file_cache_shard_t *shard, time_t now)
  * @brief File cache admit locked.
  * @param path Request or filesystem path to evaluate.
  * @param now Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 static int
-file_cache_admit_locked(file_cache_shard_t *shard, const char *path,
-						time_t now)
+file_cache_admit_locked(file_cache_shard_t *shard, const char *path, time_t now)
 {
 	int slot = -1;
 	time_t oldest = 0;
@@ -250,7 +254,7 @@ file_cache_admit_locked(file_cache_shard_t *shard, const char *path,
 		return 0;
 
 	strlcpy(shard->candidates[slot].path, path,
-			sizeof(shard->candidates[slot].path));
+		sizeof(shard->candidates[slot].path));
 	shard->candidates[slot].hits = 1;
 	shard->candidates[slot].atime = now;
 	return 0;
@@ -265,7 +269,7 @@ file_cache_admit_locked(file_cache_shard_t *shard, const char *path,
  */
 static void
 file_cache_store(const char *path, const struct stat *st, const char *data,
-				 size_t len)
+		 size_t len)
 {
 	if (!path || !st || !data || len == 0 || len > FILE_CACHE_MAX_BYTES)
 		return;
@@ -310,13 +314,14 @@ file_cache_store(const char *path, const struct stat *st, const char *data,
 		if (shard->entries[slot].data) {
 			memcpy(shard->entries[slot].data, data, len);
 			strlcpy(shard->entries[slot].path, path,
-					sizeof(shard->entries[slot].path));
+				sizeof(shard->entries[slot].path));
 			shard->entries[slot].len = len;
 			shard->entries[slot].mtime = st->st_mtime;
 			shard->entries[slot].atime = now;
 			shard->window_inserts++;
 		} else {
-			memset(&shard->entries[slot], 0, sizeof(shard->entries[slot]));
+			memset(&shard->entries[slot], 0,
+			       sizeof(shard->entries[slot]));
 		}
 	}
 
@@ -333,12 +338,12 @@ file_cache_store(const char *path, const struct stat *st, const char *data,
  */
 static int
 file_cache_lookup(const char *path, const struct stat *st, char **out,
-				  size_t *out_len)
+		  size_t *out_len)
 {
 	int found = 0;
 
 	if (!path || !st || !out || !out_len || st->st_size <= 0 ||
-		(size_t)st->st_size > FILE_CACHE_MAX_BYTES)
+	    (size_t)st->st_size > FILE_CACHE_MAX_BYTES)
 		return 0;
 	pthread_once(&cache_once, http_handler_globals_init);
 	int shard_idx = file_cache_shard_index(path);
@@ -353,18 +358,18 @@ file_cache_lookup(const char *path, const struct stat *st, char **out,
 		if (shard->entries[i].path[0] == '\0')
 			continue;
 		if (strcmp(shard->entries[i].path, path) == 0 &&
-			shard->entries[i].mtime == st->st_mtime) {
+		    shard->entries[i].mtime == st->st_mtime) {
 			*out = malloc(shard->entries[i].len);
-		if (*out) {
-			memcpy(*out, shard->entries[i].data,
-				   shard->entries[i].len);
-			*out_len = shard->entries[i].len;
-			shard->entries[i].atime = now;
-			shard->window_hits++;
-			found = 1;
-		}
-		break;
+			if (*out) {
+				memcpy(*out, shard->entries[i].data,
+				       shard->entries[i].len);
+				*out_len = shard->entries[i].len;
+				shard->entries[i].atime = now;
+				shard->window_hits++;
+				found = 1;
 			}
+			break;
+		}
 	}
 	if (!found)
 		shard->window_misses++;
@@ -376,7 +381,8 @@ file_cache_lookup(const char *path, const struct stat *st, char **out,
 /* Create response */
 /**
  * @brief Http response create.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 http_response_t *
 http_response_create(void)
@@ -432,7 +438,7 @@ http_response_set_status(http_response_t *resp, int code)
  */
 void
 http_response_set_body(http_response_t *resp, char *body, size_t len,
-					   int must_free)
+		       int must_free)
 {
 	resp->body = body;
 	resp->body_len = len; /* CRITICAL: use exact length, not strlen() */
@@ -448,11 +454,11 @@ http_response_set_body(http_response_t *resp, char *body, size_t len,
  */
 void
 http_response_add_header(http_response_t *resp, const char *name,
-						 const char *value)
+			 const char *value)
 {
 	int len = snprintf(resp->headers + resp->headers_len,
-					   sizeof(resp->headers) - resp->headers_len,
-					   "%s: %s\r\n", name, value);
+			   sizeof(resp->headers) - resp->headers_len,
+			   "%s: %s\r\n", name, value);
 	if (len > 0) {
 		resp->headers_len += len;
 	}
@@ -467,7 +473,8 @@ http_response_add_header(http_response_t *resp, const char *name,
  * @param fd File descriptor to operate on.
  * @param buf Input buffer containing textual data.
  * @param n Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 static int
 write_all(int fd, const void *buf, size_t n)
@@ -507,7 +514,8 @@ write_all(int fd, const void *buf, size_t n)
  * @param fd File descriptor to operate on.
  * @param iov Parameter used by this function.
  * @param iovcnt Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 static int
 writev_all(int fd, struct iovec *iov, int iovcnt)
@@ -552,49 +560,77 @@ writev_all(int fd, struct iovec *iov, int iovcnt)
 /**
  * @brief http_response_send.
  */
-int http_response_send(http_request_t *req, http_response_t *resp)
+int
+http_response_send(http_request_t *req, http_response_t *resp)
 {
 	char header[4096];
 	int header_len;
 
 	const char *status_text;
 	switch (resp->status_code) {
-		case 200: status_text = "OK"; break;
-		case 400: status_text = "Bad Request"; break;
-		case 403: status_text = "Forbidden"; break;
-		case 404: status_text = "Not Found"; break;
-		case 500: status_text = "Internal Server Error"; break;
-		case 503: status_text = "Service Unavailable"; break;
-		default:  status_text = "Unknown"; break;
-	}
+	case 200:
+		status_text = "OK";
+		break;
+	case 301:
+		status_text = "Moved Permanently";
+		break;
+	case 302:
+		status_text = "Found";
+		break;
+	case 304:
+		status_text = "Not Modified";
+		break;
+	case 400:
+		status_text = "Bad Request";
+		break;
+	case 403:
+		status_text = "Forbidden";
+		break;
+	case 404:
+		status_text = "Not Found";
+		break;
+	case 405:
+		status_text = "Method Not Allowed";
+		break;
+	case 500:
+		status_text = "Internal Server Error";
+		break;
+	case 503:
+		status_text = "Service Unavailable";
+		break;
+	default:
+		status_text = "Unknown";
+		break;
+	} // bugfix - Missing case 405 in Status Switch
 
 	/* Build HTTP header */
-	header_len = snprintf(header, sizeof(header),
-						  "HTTP/1.1 %d %s\r\n"
-						  "Content-Type: %s\r\n"
-						  "Content-Length: %zu\r\n"
-						  "Connection: %s\r\n"
-						  "Server: MiniWeb/kqueue\r\n",
-					   resp->status_code, status_text,
-					   resp->content_type,
-					   resp->body_len,
-					   req->keep_alive ? "keep-alive" : "close");
+	header_len =
+	    snprintf(header, sizeof(header),
+		     "HTTP/1.1 %d %s\r\n"
+		     "Content-Type: %s\r\n"
+		     "Content-Length: %zu\r\n"
+		     "Connection: %s\r\n"
+		     "Server: MiniWeb/kqueue\r\n",
+		     resp->status_code, status_text, resp->content_type,
+		     resp->body_len, req->keep_alive ? "keep-alive" : "close");
 
 	/* Append custom headers if they fit */
 	if (resp->headers_len > 0) {
 		int space = (int)sizeof(header) - header_len;
 		if ((int)resp->headers_len < space) {
-			memcpy(header + header_len, resp->headers, resp->headers_len);
+			memcpy(header + header_len, resp->headers,
+			       resp->headers_len);
 			header_len += (int)resp->headers_len;
 		}
 	}
 
 	/* Terminate header section */
-	header_len += snprintf(header + header_len,
-						   sizeof(header) - header_len, "\r\n");
+	header_len +=
+	    snprintf(header + header_len, sizeof(header) - header_len, "\r\n");
 
-	//fprintf(stderr, "[HTTP] Sending response: status=%d, type=%s, length=%zu\n",
-	//		resp->status_code, resp->content_type, resp->body_len);
+	// fprintf(stderr, "[HTTP] Sending response: status=%d, type=%s,
+	// length=%zu\n", 		resp->status_code, resp->content_type,
+	//resp->body_len);
 
 	struct iovec iov[2];
 	iov[0].iov_base = header;
@@ -634,33 +670,33 @@ http_response_free(http_response_t *resp)
 	}
 
 	if (resp->pool_shard_idx >= 0 &&
-		resp->pool_shard_idx < RESPONSE_POOL_SHARDS) {
+	    resp->pool_shard_idx < RESPONSE_POOL_SHARDS) {
 		response_pool_t *pool = &response_pools[resp->pool_shard_idx];
-	if (resp >= pool->items && resp < (pool->items + 1024)) {
-		ptrdiff_t idx = resp - pool->items;
-		pthread_mutex_lock(&pool->lock);
-		memset(resp, 0, sizeof(*resp));
-		if (pool->free_top < 1024)
-			pool->free_stack[pool->free_top++] = (int)idx;
-		pthread_mutex_unlock(&pool->lock);
-		return;
+		if (resp >= pool->items && resp < (pool->items + 1024)) {
+			ptrdiff_t idx = resp - pool->items;
+			pthread_mutex_lock(&pool->lock);
+			memset(resp, 0, sizeof(*resp));
+			if (pool->free_top < 1024)
+				pool->free_stack[pool->free_top++] = (int)idx;
+			pthread_mutex_unlock(&pool->lock);
+			return;
+		}
 	}
-		}
 
-		for (int shard_idx = 0; shard_idx < RESPONSE_POOL_SHARDS; shard_idx++) {
-			response_pool_t *pool = &response_pools[shard_idx];
-			if (resp >= pool->items && resp < (pool->items + 1024)) {
-				ptrdiff_t idx = resp - pool->items;
-				pthread_mutex_lock(&pool->lock);
-				memset(resp, 0, sizeof(*resp));
-				if (pool->free_top < 1024)
-					pool->free_stack[pool->free_top++] = (int)idx;
-				pthread_mutex_unlock(&pool->lock);
-				return;
-			}
+	for (int shard_idx = 0; shard_idx < RESPONSE_POOL_SHARDS; shard_idx++) {
+		response_pool_t *pool = &response_pools[shard_idx];
+		if (resp >= pool->items && resp < (pool->items + 1024)) {
+			ptrdiff_t idx = resp - pool->items;
+			pthread_mutex_lock(&pool->lock);
+			memset(resp, 0, sizeof(*resp));
+			if (pool->free_top < 1024)
+				pool->free_stack[pool->free_top++] = (int)idx;
+			pthread_mutex_unlock(&pool->lock);
+			return;
 		}
+	}
 
-		free(resp);
+	free(resp);
 }
 
 /* Get request header - writes into caller-supplied buffer, thread-safe */
@@ -668,7 +704,8 @@ http_response_free(http_response_t *resp)
  * @brief Http request get header.
  * @param req Request context for response generation.
  * @param name Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 const char *
 http_request_get_header(http_request_t *req, const char *name)
@@ -714,7 +751,8 @@ http_request_get_header(http_request_t *req, const char *name)
 /**
  * @brief Http request get client ip.
  * @param req Request context for response generation.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 const char *
 http_request_get_client_ip(http_request_t *req)
@@ -733,7 +771,7 @@ http_request_get_client_ip(http_request_t *req)
 	if (forwarded && forwarded[0]) {
 		const char *comma = strchr(forwarded, ',');
 		size_t len =
-		comma ? (size_t)(comma - forwarded) : strlen(forwarded);
+		    comma ? (size_t)(comma - forwarded) : strlen(forwarded);
 		if (len >= sizeof(req->ip_scratch))
 			len = sizeof(req->ip_scratch) - 1;
 		memcpy(req->ip_scratch, forwarded, len);
@@ -743,7 +781,7 @@ http_request_get_client_ip(http_request_t *req)
 
 	/* Fall back to socket peer address */
 	inet_ntop(AF_INET, &req->client_addr->sin_addr, req->ip_scratch,
-			  sizeof(req->ip_scratch));
+		  sizeof(req->ip_scratch));
 	return req->ip_scratch;
 }
 
@@ -751,7 +789,8 @@ http_request_get_client_ip(http_request_t *req)
 /**
  * @brief Http request is https.
  * @param req Request context for response generation.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 int
 http_request_is_https(http_request_t *req)
@@ -766,7 +805,8 @@ http_request_is_https(http_request_t *req)
  * @param req Request context for response generation.
  * @param status_code Parameter used by this function.
  * @param message Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented otherwise.
+ * @return Returns 0 on success or a negative value on failure unless documented
+ * otherwise.
  */
 int
 http_send_error(http_request_t *req, int status_code, const char *message)
@@ -775,18 +815,18 @@ http_send_error(http_request_t *req, int status_code, const char *message)
 	int body_len;
 
 	body_len = snprintf(
-		body, sizeof(body),
-						"<!DOCTYPE html><html><head>"
-						"<meta charset=\"UTF-8\">"
-						"<title>%d Error</title>"
-						"<link rel=\"stylesheet\" href=\"/static/css/custom.css\">"
-						"</head><body>"
-						"<div class=\"container\">"
-						"<h1>%d Error</h1>"
-						"<p>%s</p>"
-						"<hr><p><a href=\"/\">MiniWeb</a> on OpenBSD</p></div>"
-						"</body></html>",
-					 status_code, status_code, message ? message : "An error occurred");
+	    body, sizeof(body),
+	    "<!DOCTYPE html><html><head>"
+	    "<meta charset=\"UTF-8\">"
+	    "<title>%d Error</title>"
+	    "<link rel=\"stylesheet\" href=\"/static/css/custom.css\">"
+	    "</head><body>"
+	    "<div class=\"container\">"
+	    "<h1>%d Error</h1>"
+	    "<p>%s</p>"
+	    "<hr><p><a href=\"/\">MiniWeb</a> on OpenBSD</p></div>"
+	    "</body></html>",
+	    status_code, status_code, message ? message : "An error occurred");
 
 	http_response_t *resp = http_response_create();
 	if (!resp)
@@ -908,12 +948,14 @@ http_send_file(http_request_t *req, const char *path, const char *mime)
 	char file_buf[65536];
 	char *cache_copy = NULL;
 	size_t cache_used = 0;
-	if ((size_t)st.st_size > 0 && (size_t)st.st_size <= FILE_CACHE_MAX_BYTES)
+	if ((size_t)st.st_size > 0 &&
+	    (size_t)st.st_size <= FILE_CACHE_MAX_BYTES)
 		cache_copy = malloc((size_t)st.st_size);
 
 	ssize_t n;
 	while ((n = read(fd, file_buf, sizeof(file_buf))) > 0) {
-		if (cache_copy && cache_used + (size_t)n <= (size_t)st.st_size) {
+		if (cache_copy &&
+		    cache_used + (size_t)n <= (size_t)st.st_size) {
 			memcpy(cache_copy + cache_used, file_buf, (size_t)n);
 			cache_used += (size_t)n;
 		}
@@ -934,7 +976,6 @@ http_send_file(http_request_t *req, const char *path, const char *mime)
 	return 0;
 }
 
-
 /**
  * @brief Render an HTML template and send it as HTTP response.
  * @param req Request context.
@@ -944,21 +985,23 @@ http_send_file(http_request_t *req, const char *path, const char *mime)
  */
 int
 http_render_template(http_request_t *req, struct template_data *data,
-					 const char *fallback_template)
+		     const char *fallback_template)
 {
 	char *output = NULL;
 
 	/* Try rendering with structured template data first. */
 	if (template_render_with_data(data, &output) != 0) {
-		/* If that fails and page content exists, try basic rendering. */
+		/* If that fails and page content exists, try basic rendering.
+		 */
 		if (data->page_content &&
-			template_render(data->page_content, &output) != 0) {
-			/* If all rendering paths fail, use fallback or return 500. */
+		    template_render(data->page_content, &output) != 0) {
+			/* If all rendering paths fail, use fallback or return
+			 * 500. */
 			return http_send_error(
-				req, 500,
-				fallback_template ? fallback_template
-				: "Template rendering failed");
-			}
+			    req, 500,
+			    fallback_template ? fallback_template
+					      : "Template rendering failed");
+		}
 	}
 
 	http_response_t *resp = http_response_create();

@@ -215,11 +215,11 @@ conf_load(const char *path, miniweb_conf_t *conf)
     }
 
     /* Lookup order */
-    static const char *candidates[] = {
+    const char *candidates[] = {
         "./miniweb.conf",
         NULL, /* $HOME/.miniweb.conf — filled below */
         "/etc/miniweb.conf",
-    };
+    };//bugfix - conf_load Static Array Write
 
     char home_path[CONF_STR_MAX];
     const char *home = getenv("HOME");

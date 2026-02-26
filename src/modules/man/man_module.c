@@ -19,13 +19,21 @@
 #include <time.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <semaphore.h>
 
-#include <miniweb/core/config.h>
+#include <miniweb/core/conf.h>
+#include <miniweb/core/config.h>  /* Add this for config_static_dir */
 #include <miniweb/core/log.h>
 #include <miniweb/http/handler.h>
 #include <miniweb/http/utils.h>
 #include <miniweb/modules/man.h>
 #include <miniweb/router/routes.h>
+
+/* Add external declarations for global config variables */
+extern miniweb_conf_t config;  /* Declare config as external */
+extern char config_static_dir[];  /* Already declared in config.h but include ensures it */
+
+
 
 /* =========================================================================
  * Tunables
@@ -74,6 +82,27 @@ static pthread_once_t     g_man_cache_once = PTHREAD_ONCE_INIT;
 static int         is_valid_section(const char *section);
 static char       *select_resolved_man_path(char *raw_output);
 static int         compare_string_ptrs(const void *a, const void *b);
+
+
+
+
+
+/* =========================================================================
+ * bugfix - mandoc Concurrency Cap
+ * ========================================================================= */
+static sem_t g_mandoc_semaphore;
+static pthread_once_t g_mandoc_sem_once = PTHREAD_ONCE_INIT;
+
+static void
+mandoc_semaphore_init(void)
+{
+    /* Limit to min(threads * 2, 16) concurrent mandoc processes */
+    int max_concurrent = config.threads * 2;
+    if (max_concurrent > 16)
+        max_concurrent = 16;
+    sem_init(&g_mandoc_semaphore, 0, max_concurrent);
+}
+
 
 /* =========================================================================
  * In-process cache helpers
@@ -583,12 +612,14 @@ area_from_path(const char *filepath)
 /* =========================================================================
  * man_render_page
  * ========================================================================= */
-
 char *
 man_render_page(const char *area, const char *section, const char *page,
                 const char *format, size_t *out_len)
 {
     (void)area; /* MANPATH covers all trees */
+
+    /* Initialize semaphore if needed */
+    pthread_once(&g_mandoc_sem_once, mandoc_semaphore_init);
 
     /* 1. Resolve physical path — single subprocess. */
     char *filepath = NULL;
@@ -607,7 +638,14 @@ man_render_page(const char *area, const char *section, const char *page,
     else if (strcmp(format, "md")  == 0) t_arg = "markdown";
     else if (strcmp(format, "txt") == 0) t_arg = "ascii";
 
-    /* 3. Execute mandoc. */
+    /* 3. Acquire semaphore before forking */
+    if (sem_wait(&g_mandoc_semaphore) != 0) {
+        log_error("[MAN] Failed to acquire mandoc semaphore");
+        free(filepath);
+        return NULL;
+    }
+
+    /* 4. Execute mandoc. */
     char *argv_m[10];
     int argc = 0;
     argv_m[argc++] = "mandoc";
@@ -621,22 +659,81 @@ man_render_page(const char *area, const char *section, const char *page,
     char *output = safe_popen_read_argv("/usr/bin/mandoc", argv_m,
                                         MAX_OUTPUT_SIZE, 10, out_len);
 
+    /* Release semaphore */
+    sem_post(&g_mandoc_semaphore);
+
     /* Normalise ASCII output */
     if (output && *out_len > 0 && strcmp(format, "txt") == 0)
         strip_overstrike_ascii(output, out_len);
 
     /* Fallback: markdown → ascii when mandoc cannot produce markdown */
     if (!output && strcmp(format, "md") == 0) {
-        char *const argv_ascii[] = {"mandoc", "-T", "ascii", filepath, NULL};
-        output = safe_popen_read_argv("/usr/bin/mandoc", argv_ascii,
-                                      MAX_OUTPUT_SIZE, 10, out_len);
-        if (output && *out_len > 0)
-            strip_overstrike_ascii(output, out_len);
+        if (sem_wait(&g_mandoc_semaphore) == 0) {
+            char *const argv_ascii[] = {"mandoc", "-T", "ascii", filepath, NULL};
+            output = safe_popen_read_argv("/usr/bin/mandoc", argv_ascii,
+                                          MAX_OUTPUT_SIZE, 10, out_len);
+            sem_post(&g_mandoc_semaphore);
+            if (output && *out_len > 0)
+                strip_overstrike_ascii(output, out_len);
+        }
     }
 
     free(filepath);
     return output;
-}
+}//bugfix - mandoc Concurrency Cap
+// char *
+// man_render_page(const char *area, const char *section, const char *page,
+//                 const char *format, size_t *out_len)
+// {
+//     (void)area; /* MANPATH covers all trees */
+//
+//     /* 1. Resolve physical path — single subprocess. */
+//     char *filepath = NULL;
+//     if (is_valid_section(section))
+//         filepath = resolve_man_path(page, section);
+//
+//     if (!filepath || filepath[0] != '/') {
+//         free(filepath);
+//         return NULL;
+//     }
+//
+//     /* 2. Select mandoc output format. */
+//     const char *t_arg = "html";
+//     if      (strcmp(format, "pdf") == 0) t_arg = "pdf";
+//     else if (strcmp(format, "ps")  == 0) t_arg = "ps";
+//     else if (strcmp(format, "md")  == 0) t_arg = "markdown";
+//     else if (strcmp(format, "txt") == 0) t_arg = "ascii";
+//
+//     /* 3. Execute mandoc. */
+//     char *argv_m[10];
+//     int argc = 0;
+//     argv_m[argc++] = "mandoc";
+//     argv_m[argc++] = "-T";
+//     argv_m[argc++] = (char *)t_arg;
+//     if (strcmp(t_arg, "html") == 0)
+//         argv_m[argc++] = "-Ostyle=/static/css/custom.css";
+//     argv_m[argc++] = filepath;
+//     argv_m[argc++] = NULL;
+//
+//     char *output = safe_popen_read_argv("/usr/bin/mandoc", argv_m,
+//                                         MAX_OUTPUT_SIZE, 10, out_len);
+//
+//     /* Normalise ASCII output */
+//     if (output && *out_len > 0 && strcmp(format, "txt") == 0)
+//         strip_overstrike_ascii(output, out_len);
+//
+//     /* Fallback: markdown → ascii when mandoc cannot produce markdown */
+//     if (!output && strcmp(format, "md") == 0) {
+//         char *const argv_ascii[] = {"mandoc", "-T", "ascii", filepath, NULL};
+//         output = safe_popen_read_argv("/usr/bin/mandoc", argv_ascii,
+//                                       MAX_OUTPUT_SIZE, 10, out_len);
+//         if (output && *out_len > 0)
+//             strip_overstrike_ascii(output, out_len);
+//     }
+//
+//     free(filepath);
+//     return output;
+// }
 
 /* =========================================================================
  * man_render_handler - Two-level caching implementation
@@ -977,11 +1074,50 @@ man_api_search_raw(const char *query)
                      query, section);
             free(output);
             output = strdup(line);
+            if (!output)  /* Add NULL check for strdup failure */
+                output = strdup("");
         }
         free(filepath);
     }
     return output;
-}
+}//bugfix - man_api_search_raw NULL issue
+// char *
+// man_api_search_raw(const char *query)
+// {
+//     if (!query || strlen(query) < 2 || !is_valid_token(query))
+//         return strdup("");
+//
+//     char *const argv[] = {
+//         "apropos",
+//         "-M", "/usr/share/man:/usr/local/man:/usr/X11R6/man",
+//         (char *)query, NULL
+//     };
+//     char *output = safe_popen_read_argv("/usr/bin/apropos", argv,
+//                                         1024 * 1024, 5, NULL);
+//     if (!output)
+//         output = strdup("");
+//
+//     if (output[0] == '\0') {
+//         char *filepath = resolve_man_path(query, "1");
+//         if (!filepath)
+//             filepath = resolve_man_path(query, "8");
+//
+//         if (filepath && filepath[0] != '\0') {
+//             char section[16] = {0};
+//             const char *base = strrchr(filepath, '/');
+//             base = base ? base + 1 : filepath;
+//             if (!parse_section_from_filename(base, section, sizeof(section)))
+//                 strlcpy(section, "?", sizeof(section));
+//             char line[256];
+//             snprintf(line, sizeof(line), "%s (%s) - manual page",
+//                      query, section);
+//             free(output);
+//             output = strdup(line);
+//         }
+//         free(filepath);
+//     }
+//     return output;
+// }
 
 /* =========================================================================
  * man_api_handler
@@ -1115,7 +1251,11 @@ man_api_handler(http_request_t *req)
     if (!json)
         return http_send_error(req, 500, "Internal Server Error");
 
-    http_response_t *resp = http_response_create();
+    http_response_t *resp = http_response_create();//bugfix - NULL Deref Crash in
+    if (!resp) {
+        free(json);
+        return http_send_error(req, 500, "Internal Server Error");
+    }
     http_response_set_status(resp, 200);
     resp->content_type =
     (strstr(path, "/search") != NULL)

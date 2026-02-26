@@ -187,6 +187,13 @@ while [ "$i" -lt "$total_endpoints" ]; do
             >> "$CSV_FILE"
 
         printf 'OK (%.1f req/s)\n' "$req_sec"
+        # After collecting results, check for high error rates
+        if [ "$non_2xx" -gt 0 ]; then
+            error_rate=$(awk "BEGIN {printf \"%.2f\", $non_2xx * 100 / $total_requests}")
+            if (( $(echo "$error_rate > 1.0" | bc -l) )); then
+                echo "⚠️  WARNING: High error rate (${error_rate}%) for endpoint ${name}"
+            fi
+        fi
         sleep 2
     done
 
@@ -640,3 +647,14 @@ printf '\nBenchmark complete.\n'
 printf '▶  HTML report : http://localhost:%s/static/benchmark.html\n' "$SERVER_PORT"
 printf '▶  CSV results : %s\n' "$CSV_FILE"
 printf '▶  Assets dir  : %s\n' "$ASSETS_DIR"
+
+# Post-run health check
+echo ""
+echo "Performing post-benchmark health check..."
+sleep 2
+health_check=$(curl -s -o /dev/null -w "%{http_code}" "${BASE_URL}/api/metrics" 2>/dev/null)
+if [ "$health_check" = "200" ]; then
+    echo "✅ Server is healthy (HTTP 200)"
+else
+    echo "❌ Server health check FAILED (HTTP ${health_check})"
+fi

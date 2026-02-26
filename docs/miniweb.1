@@ -1,4 +1,4 @@
-.Dd February 25, 2026
+.Dd February 26, 2026
 .Dt MINIWEB 1
 .Os OpenBSD
 .Sh NAME
@@ -22,19 +22,25 @@ diagnostics, manual page browsing, and package management.
 The runtime uses a single
 .Xr kqueue 2
 dispatcher thread and a configurable worker-thread pool.
-Template-backed HTML views are served from an in-memory template cache.
-Static assets are served from a sharded file cache.
-A generic heartbeat scheduler fires periodic background tasks.
+Three independent caching layers improve performance:
+.Bl -dash -compact
+.It
+Template-backed HTML views are served from an in-memory template cache
+(refreshed every 60 seconds).
+.It
+Static assets are served from a sharded file cache with admission policy.
+.It
+Manual pages use a two-level cache (L1: RAM, L2: filesystem).
+.El
+.Pp
+A generic heartbeat scheduler fires periodic background tasks for metrics
+collection and cache maintenance.
 .Pp
 .Nm
 does not implement TLS directly.
 Run it behind
 .Xr relayd 8
 for TLS termination.
-.Pp
-The codebase is under an enterprise refactor program that adds modular
-boundaries, a module attach/detach API, a centralised heartbeat scheduler,
-and a reusable SQLite3 storage layer, while preserving all existing endpoints.
 .Sh OPTIONS
 .Bl -tag -width Ds
 .It Fl b Ar address
@@ -176,6 +182,34 @@ Log file path.
 Empty or absent means stderr.
 .El
 
+.Sh CACHING
+.Nm
+maintains three independent in-process caches.
+.Pp
+.Bl -tag -width "Man render cache"
+.It Template cache
+All files in
+.Cm templates_dir
+are preloaded at startup and refreshed every 60 seconds.
+A mutex-protected directory scan replaces the full cache on each refresh.
+.It Static file cache
+Sharded LRU with 16 shards, 32 slots per shard, a 256 KiB per-file
+limit, a 120-second TTL, and an admission policy requiring 2 hits before
+a file is promoted.
+Insert rate is capped at 8 entries per shard per second.
+.It Man render cache
+Two-level.
+.Em L1
+is an in-process sharded cache: 8 shards, 64 slots per shard, 600-second TTL.
+Entries are malloc'd copies of the rendered body.
+.Em L2
+is a filesystem cache under
+.Pa static/man/{area}/{section}/{page}.{format}
+with a 300-second TTL.
+On a full miss, mandoc is invoked as a subprocess.
+Cache invalidation requires a server restart or TTL expiry.
+.El
+
 .Sh PERFORMANCE
 For best throughput and tail latency, tune worker and cache settings together.
 .Pp
@@ -281,13 +315,6 @@ The sweep closes connections whose
 timestamp is older than
 .Cm conn_timeout .
 .Pp
-When the OS file descriptor table is full
-.Pq Dv EMFILE / ENFILE ,
-the dispatcher closes a reserved
-.Pa /dev/null
-spare descriptor, accepts and immediately drops one pending client to prevent
-the listen socket from busy-looping, then reopens the spare.
-.Pp
 The
 .Dv udata
 pointer in each
@@ -356,7 +383,8 @@ call when a body is present, or
 for header-only responses.
 Write retries handle
 .Dv EAGAIN / EWOULDBLOCK
-on non-blocking sockets.
+on non-blocking sockets with a limited retry count (5 attempts, 100 ms
+polling) to prevent CPU spinning on full send buffers.
 .Ss Subprocess execution
 .Fn safe_popen_read_argv
 forks, redirects stdout to a pipe, redirects stderr to
@@ -369,6 +397,9 @@ On timeout the child is sent
 .Dv SIGKILL
 before
 .Xr waitpid 2 .
+A semaphore limits concurrent mandoc subprocesses to
+.Em min(threads * 2, 16)
+to prevent file descriptor exhaustion under heavy load.
 .Sh ROUTING
 Routes are stored in a flat array (up to
 .Dv MAX_ROUTES
@@ -539,7 +570,9 @@ Cache hits are validated against
 .El
 .Sh HEARTBEAT SCHEDULER
 .Pa src/core/heartbeat.c
-provides a generic periodic task scheduler.
+provides a generic periodic task scheduler using
+.Dv CLOCK_MONOTONIC
+to avoid clock skew issues from NTP adjustments.
 Up to 32 named tasks can be registered with
 .Fn heartbeat_register .
 Each task specifies a callback, an opaque context pointer, a period in
@@ -630,16 +663,22 @@ Renders man pages by forking
 via
 .Fn safe_popen_read_argv
 with the configured timeout.
-Stderr from
-.Xr mandoc 1
-is discarded to prevent error messages from appearing in response bodies.
-Rendered output is cached to the filesystem under
+A semaphore limits concurrent mandoc subprocesses to prevent file descriptor
+exhaustion.
+Rendered output is cached in a two-level system:
+.Em L1 cache
+(8 shards, 64 slots, 600-second TTL) in RAM, and
+.Em L2 cache
+on the filesystem under
 .Pa {static_dir}/man/{area}/{section}/{page}.{fmt}
-and served via
-.Fn static_handler
-on subsequent requests.
+with a 300-second TTL.
 Supported output formats:
-.Cm html , utf8 , markdown , ps , pdf .
+.Cm html , pdf , ps , md , txt .
+(Note:
+.Cm utf8
+is not supported; use
+.Cm txt
+for plain text output.)
 .Ss Packages
 Provides
 .Pa /api/packages/...
@@ -649,6 +688,7 @@ view.
 Wraps
 .Xr pkg_info 1
 to implement search, info, which-file, file-list, and installed-list queries.
+Results are cached in a ring buffer with a 30-second TTL.
 .Sh STORAGE LAYER
 .Pa src/storage/
 contains stub implementations of a planned SQLite3 service layer.
@@ -656,7 +696,7 @@ The interfaces are defined but not yet backed by SQLite3:
 .Bl -bullet -compact
 .It
 .Fn mw_db_open , mw_db_close
-\(em database lifecycle.
+\(em database lifecycle (now stores the provided path).
 .It
 .Fn mw_db_exec_schema
 \(em schema initialisation.
@@ -673,8 +713,11 @@ The interfaces are defined but not yet backed by SQLite3:
 \(em prepared statement lifecycle.
 .El
 .Pp
-All stubs return
-.Dv -1 .
+All stubs currently return
+.Dv -1
+except for
+.Fn mw_db_open
+which now properly stores the database path.
 The interfaces are stable and intended to be implemented during the Phase 5
 storage refactor.
 .Sh OPENBSD SECURITY HARDENING
@@ -756,51 +799,45 @@ Package Manager UI.
 API Index UI.
 .El
 .Ss JSON APIs
-This module accepts exact endpoint paths under
-.Pa /api/packages
-(e.g.,
-.Pa /search
-,
-.Pa /info
-,
-.Pa /which
-,
-.Pa /files
-,
-.Pa /list
-) and returns
-.Dv 404
-for unknown suffixes.
+The following API endpoints are available:
 .Bl -tag -width "/api/packages/search"
 .It Pa /api/metrics
 System metrics snapshot (CPU, RAM, load, disk, processes).
 .It Pa /api/networking
-Networking diagnostics (routes, DNS, interfaces, connections).
-.It Pa /api/man/*
-Manual page discovery and search.
-.It Pa /api/packages/search
+Networking diagnostics (routes, DNS, interfaces).
+.It Pa /api/man/sections
+List all available manual sections by area.
+.It Pa /api/man/pages?section=X&area=Y
+List pages in a specific section and area.
+.It Pa /api/man/resolve?name=X&section=Y
+Resolve a manual page to its filesystem path.
+.It Pa /api/man/search?q=QUERY
+Search manual pages.
+.It Pa /api/packages/search?q=QUERY
 Search installed packages.
-.It Pa /api/packages/info
+.It Pa /api/packages/info?name=PKG
 Package details.
-.It Pa /api/packages/which
+.It Pa /api/packages/which?path=FILE
 Which package owns a file.
-.It Pa /api/packages/files
+.It Pa /api/packages/files?name=PKG
 Files installed by a package.
 .It Pa /api/packages/list
 List all installed packages (sorted lexicographically).
 .El
 .Ss Manual page rendering
-.Bl -tag -width "/man/{area}/{section}/{page}.utf8"
+.Bl -tag -width "/man/{area}/{section}/{page}.txt"
 .It Pa /man/{area}/{section}/{page}
 Default HTML rendering.
 .It Pa /man/{area}/{section}/{page}.html
 HTML.
-.It Pa /man/{area}/{section}/{page}.utf8
-Plain UTF-8 text.
+.It Pa /man/{area}/{section}/{page}.txt
+Plain text.
 .It Pa /man/{area}/{section}/{page}.md
 Markdown.
 .It Pa /man/{area}/{section}/{page}.pdf
 PDF.
+.It Pa /man/{area}/{section}/{page}.ps
+PostScript.
 .El
 .Ss Static assets
 .Bl -tag -width "/api/packages/search"
@@ -813,6 +850,11 @@ Favicon (served from
 .Sh SOURCE LAYOUT
 .Bl -tag -width "modules/networking/"
 .It Pa src/app_main.c
+Server startup, signal handling, configuration loading, and module
+and route registration.
+The kqueue dispatcher and accept loop live in
+.Pa src/net/server.c .
+.It Pa src/net/server.c
 kqueue loop, worker pool, accept, idle sweep, shutdown.
 .It Pa src/net/work_queue.c
 Thread-safe FIFO transport work queue extracted from the server entrypoint.
@@ -824,13 +866,14 @@ and
 .It Pa src/core/conf.c
 Configuration file parser and CLI override logic.
 .It Pa src/core/heartbeat.c
-Periodic task scheduler (up to 32 named tasks, overrun tracking).
+Periodic task scheduler (up to 32 named tasks, overrun tracking) using
+CLOCK_MONOTONIC to avoid NTP skew.
 .It Pa src/core/log.c
 Thread-safe logger.
 .It Pa src/http/response.c
 Response pool, serialisation, sharded file cache, HTTP send helpers.
 .It Pa src/http/utils.c
-JSON escaping, subprocess execution (fork / poll / timeout).
+JSON escaping (fixed buffer overrun), subprocess execution (fork / poll / timeout).
 .It Pa src/router/module_attach.c
 .Fn miniweb_module_attach_enabled
 module registration.
@@ -847,24 +890,34 @@ Route table, prefix routes,
 .Fn init_routes .
 All built-in modules are attached here through the module attach API.
 .It Pa src/modules/man/
-Man page rendering, filesystem render cache, and JSON API.
+Man page rendering, two-level render cache (L1: RAM, L2: filesystem), JSON API.
+Semaphore limits concurrent mandoc subprocesses.
 .It Pa src/modules/metrics/
 System metrics collection, heartbeat task, ring buffer, and JSON API.
 .It Pa src/modules/networking/
 Networking diagnostics, heartbeat task, ring buffer, and JSON API.
 .It Pa src/modules/packages/
 .Xr pkg_info 1
-wrapper and JSON API.
+wrapper and JSON API with ring buffer caching.
 .It Pa src/render/template_render.c
 Template file cache (preloaded at startup, refreshed every 60 s) and
 placeholder substitution.
 .It Pa src/storage/sqlite_db.c
-SQLite3 database lifecycle stubs.
+SQLite3 database lifecycle stubs (now stores the provided path).
 .It Pa src/storage/sqlite_schema.c
 Schema migration and transaction stubs.
 .It Pa src/storage/sqlite_stmt.c
 Prepared statement stubs.
 .El
+.Sh SIGNAL HANDLER SAFETY
+The server's
+.Va running
+flag is declared as
+.Vt volatile sig_atomic_t
+to ensure safe access from signal handler context.
+This prevents undefined behaviour when
+.Fn handle_signal
+writes to the flag during asynchronous signal delivery.
 .Sh ENTERPRISE REFACTOR ROADMAP
 .Bl -tag -width "Phase 6"
 .It Phase 1
@@ -887,7 +940,7 @@ Complete: README, man page, and all Doxygen blocks updated.
 Majority Italian-language source comments have been translated to English.
 .It Phase 5
 SQLite3 storage integration.
-Stub interfaces are defined; no live backend yet.
+Stub interfaces are defined; only basic path storage implemented.
 .It Phase 6
 Performance and observability hardening.
 Planned.
@@ -969,12 +1022,13 @@ Compatibility-first refactor: feature parity required at every phase.
 .Xr getifaddrs 3 ,
 .Xr getmntinfo 3 ,
 .Xr mandoc 1 ,
+.Xr apropos 1 ,
 .Xr pkg_info 1 ,
 .Xr relayd 8
 .Sh AUTHORS
-MiniWeb contributors.
+https://github.com/flavioferretti/miniweb
 .Sh REFACTOR STATUS
-As of 2026-02-25, server runtime decomposition is complete for the
+As of 2026-02-26, server runtime decomposition is complete for the
 networking layer and documentation is up to date:
 .Bl -bullet
 .It
@@ -1010,3 +1064,18 @@ All Doxygen
 .Sq TODO
 placeholder blocks have been replaced with accurate descriptions.
 Majority Italian-language source comments have been translated to English.
+Recent bug fixes include:
+.Bl -bullet -compact
+.It
+JSON string escaping buffer overrun corrected.
+.It
+HTTP 405 status text now returns "Method Not Allowed".
+.It
+Signal handler safety improved with volatile sig_atomic_t.
+.It
+Mandoc subprocess concurrency limited via semaphore.
+.It
+SQLite database path now properly stored.
+.It
+Heartbeat scheduler uses CLOCK_MONOTONIC to avoid NTP skew.
+.El

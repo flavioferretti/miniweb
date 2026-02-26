@@ -48,27 +48,41 @@ json_escape_string(const char *src)
     if (!src)
         return strdup("");
 
-    size_t len  = strlen(src);
-    char  *dest = malloc(len * 2 + 1);
+    size_t len = strlen(src);
+    /* Worst case: every byte expands to \uXXXX (6 chars) + potential
+     * backslash escapes. Use 6x + 1 to be safe. */
+    size_t max_out = len * 6 + 1;
+    char *dest = malloc(max_out);
     if (!dest)
         return strdup("");
 
     size_t d = 0;
-    for (size_t s = 0; src[s] != '\0' && d < len * 2; s++) {
+    for (size_t s = 0; src[s] != '\0'; s++) {
+        /* Ensure we have room for longest possible sequence + NUL */
+        if (d + 7 >= max_out)
+            break;
+
         switch (src[s]) {
-        case '"':  dest[d++] = '\\'; dest[d++] = '"';  break;
-        case '\\': dest[d++] = '\\'; dest[d++] = '\\'; break;
-        case '\b': dest[d++] = '\\'; dest[d++] = 'b';  break;
-        case '\f': dest[d++] = '\\'; dest[d++] = 'f';  break;
-        case '\n': dest[d++] = '\\'; dest[d++] = 'n';  break;
-        case '\r': dest[d++] = '\\'; dest[d++] = 'r';  break;
-        case '\t': dest[d++] = '\\'; dest[d++] = 't';  break;
-        default:   dest[d++] = src[s];                  break;
+            case '"':  dest[d++] = '\\'; dest[d++] = '"';  break;
+            case '\\': dest[d++] = '\\'; dest[d++] = '\\'; break;
+            case '\b': dest[d++] = '\\'; dest[d++] = 'b';  break;
+            case '\f': dest[d++] = '\\'; dest[d++] = 'f';  break;
+            case '\n': dest[d++] = '\\'; dest[d++] = 'n';  break;
+            case '\r': dest[d++] = '\\'; dest[d++] = 'r';  break;
+            case '\t': dest[d++] = '\\'; dest[d++] = 't';  break;
+            default:
+                if ((unsigned char)src[s] < 0x20) {
+                    d += snprintf(dest + d, max_out - d, "\\u%04x",
+                                  (unsigned char)src[s]);
+                } else {
+                    dest[d++] = src[s];
+                }
+                break;
         }
     }
     dest[d] = '\0';
     return dest;
-}
+}//bugfix - Buffer Overrun in json_escape_string
 
 /**
  * @brief Replace characters that are unsafe for filesystem paths with '_'.

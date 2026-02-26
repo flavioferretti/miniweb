@@ -13,7 +13,7 @@
 
 /** Runtime server object containing dispatcher, queue, and pool resources. */
 typedef struct miniweb_server_runtime {
-	volatile sig_atomic_t running;
+	volatile sig_atomic_t running;  /* Changed from plain int */
 	int kq_fd;
 	int listen_fd;
 	int spare_fd;

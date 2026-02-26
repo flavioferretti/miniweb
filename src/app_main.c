@@ -12,7 +12,7 @@
 #include <miniweb/render/template_engine.h>
 #include <miniweb/router/routes.h>
 
-static miniweb_conf_t config;
+miniweb_conf_t config;
 static miniweb_server_runtime_t g_server;
 
 int config_verbose = 0;

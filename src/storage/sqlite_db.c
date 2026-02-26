@@ -1,6 +1,7 @@
 
 /* sqlite_db.c - DB facility */
 #include <stdlib.h>
+#include <string.h>
 
 #include <miniweb/storage/sqlite_db.h>
 
@@ -33,7 +34,11 @@ mw_db_open(const char *path, int flags, struct mw_db **out_db)
 	if (!db)
 		return -1;
 	db->flags = flags;
-	db->path = NULL;
+	db->path = strdup(path);  /* Actually store the path bugfix - sqlite_db.c path issue*/
+	if (!db->path) {
+		free(db);
+		return -1;
+	}
 	*out_db = db;
 	return 0;
 }

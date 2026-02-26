@@ -27,8 +27,8 @@ static int g_hb_stop_requested;
 static int g_hb_drain_on_stop;
 static pthread_t g_hb_thread;
 static pthread_mutex_t g_hb_lock = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t g_hb_cond = PTHREAD_COND_INITIALIZER;
-
+//static pthread_cond_t g_hb_cond = PTHREAD_COND_INITIALIZER;
+static pthread_cond_t g_hb_cond; //bugfix - Heartbeat CLOCK_REALTIME Skew
 /**
  * @brief Run the periodic scheduler loop.
  * @param arg Unused thread argument.
@@ -46,6 +46,14 @@ heartbeat_init(void)
 	pthread_mutex_lock(&g_hb_lock);
 	if (!g_hb_initialized) {
 		memset(g_hb_slots, 0, sizeof(g_hb_slots));
+
+		/* Initialize condition variable with CLOCK_MONOTONIC */
+		pthread_condattr_t attr;
+		pthread_condattr_init(&attr);
+		pthread_condattr_setclock(&attr, CLOCK_MONOTONIC);
+		pthread_cond_init(&g_hb_cond, &attr);
+		pthread_condattr_destroy(&attr);
+
 		g_hb_initialized = 1;
 	}
 	pthread_mutex_unlock(&g_hb_lock);
@@ -300,15 +308,24 @@ heartbeat_thread(void *arg)
 		drain = g_hb_drain_on_stop;
 		if (todo_count == 0 && !should_stop) {
 			struct timespec ts;
-			time_t base = now;
+			struct timespec now_mono;
 
-			if (wake_at != 0 && wake_at > now)
-				base = wake_at;
-			else if (wake_at == 0)
-				base = now + HB_IDLE_WAIT_SEC;
+			/* Use CLOCK_MONOTONIC for timeout */
+			clock_gettime(CLOCK_MONOTONIC, &now_mono);
 
-			ts.tv_sec = base;
-			ts.tv_nsec = 0;
+			if (wake_at != 0 && wake_at > now) {
+				/* Convert wake_at (based on realtime) to monotonic delta */
+				time_t delta = wake_at - now;
+				ts.tv_sec = now_mono.tv_sec + delta;
+				ts.tv_nsec = now_mono.tv_nsec;
+			} else if (wake_at == 0) {
+				ts.tv_sec = now_mono.tv_sec + HB_IDLE_WAIT_SEC;
+				ts.tv_nsec = now_mono.tv_nsec;
+			} else {
+				ts.tv_sec = now_mono.tv_sec;
+				ts.tv_nsec = now_mono.tv_nsec;
+			}
+
 			(void)pthread_cond_timedwait(&g_hb_cond, &g_hb_lock, &ts);
 			pthread_mutex_unlock(&g_hb_lock);
 			continue;
