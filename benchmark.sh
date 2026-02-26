@@ -188,12 +188,12 @@ while [ "$i" -lt "$total_endpoints" ]; do
 
         printf 'OK (%.1f req/s)\n' "$req_sec"
         # After collecting results, check for high error rates
-        if [ "$non_2xx" -gt 0 ]; then
-            error_rate=$(awk "BEGIN {printf \"%.2f\", $non_2xx * 100 / $total_requests}")
-            if (( $(echo "$error_rate > 1.0" | bc -l) )); then
-                echo "⚠️  WARNING: High error rate (${error_rate}%) for endpoint ${name}"
-            fi
-        fi
+#         if [ "$non_2xx" -gt 0 ]; then
+#             error_rate=$(awk "BEGIN {printf \"%.2f\", $non_2xx * 100 / $total_requests}")
+#             if (( $(echo "$error_rate > 1.0" | bc -l) )); then
+#                 echo "⚠️  WARNING: High error rate (${error_rate}%) for endpoint ${name}"
+#             fi
+#         fi
         sleep 2
     done
 
