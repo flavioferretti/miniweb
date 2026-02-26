@@ -1,17 +1,9 @@
-
 /* man_module.c - man page rendering module
  *
- * Fixes vs previous version:
- *   1. strtok()  -> strtok_r() in man_render_handler (thread-safe URL parse)
- *   2. vfork() semantics: devnull fd pre-opened at init, passed via
- *      a module-level fd; safe_popen_read_argv now uses fork() so that
- *      file-descriptor mutations in the child do not race with the parent
- *      threads sharing the address space.
- *   3. In-process sharded render cache (MAN_RENDER_CACHE_*): rendered HTML
- *      bodies are stored in RAM after the first mandoc run; subsequent
- *      requests are served entirely from memory without any open/read syscall.
- *   4. Single man -w subprocess per cache miss (removed redundant second
- *      resolve attempt).
+ * Two-level caching strategy:
+ *   L1: In-memory sharded render cache (RAM)
+ *   L2: Filesystem cache under static/man/
+ *   Fallback: mandoc subprocess for cache misses on both levels
  */
 
 #include <ctype.h>
@@ -41,7 +33,7 @@
 
 #define MAX_JSON_SIZE       (256 * 1024)
 #define MAX_OUTPUT_SIZE     (10 * 1024 * 1024)  /* 10 MiB hard ceiling */
-#define MAN_HOT_CACHE_TTL_SEC   300             /* filesystem cache TTL */
+#define MAN_FS_CACHE_TTL_SEC    300             /* filesystem cache TTL */
 
 /* In-process render cache.
  * 8 shards × 64 slots = 512 cached pages.  Each slot holds a heap copy of
@@ -116,8 +108,13 @@ man_render_cache_shard(const char *key)
 }
 
 /**
- * Look up a rendered page body in the in-process cache.
- * Returns a malloc'd copy the caller must free(), or NULL on miss.
+ * @brief Look up a rendered page body in the in-process cache.
+ * @param area Manual area (system, packages, x11)
+ * @param section Manual section (1, 2, 3, etc.)
+ * @param page Manual page name
+ * @param format Output format (html, pdf, txt, etc.)
+ * @param out_len Receives the length of the returned body
+ * @return Malloc'd copy of the body on hit, NULL on miss. Caller must free.
  */
 static char *
 man_render_cache_get(const char *area, const char *section,
@@ -165,8 +162,13 @@ man_render_cache_get(const char *area, const char *section,
 }
 
 /**
- * Insert a rendered page body into the in-process cache.
- * Takes ownership of nothing — caller still owns @p body.
+ * @brief Insert a rendered page body into the in-process cache.
+ * @param area Manual area
+ * @param section Manual section
+ * @param page Manual page name
+ * @param format Output format
+ * @param body Rendered content (caller still owns it)
+ * @param len Length of body
  */
 static void
 man_render_cache_put(const char *area, const char *section,
@@ -242,7 +244,7 @@ man_render_cache_put(const char *area, const char *section,
 }
 
 /* =========================================================================
- * String / path helpers (unchanged from original)
+ * String / path helpers
  * ========================================================================= */
 
 static int
@@ -284,11 +286,11 @@ url_decode_into(const char *src, char *dst, size_t dst_size)
         if (src[si] == '%' && isxdigit((unsigned char)src[si + 1]) &&
             isxdigit((unsigned char)src[si + 2])) {
             char hex[3] = {src[si + 1], src[si + 2], '\0'};
-            dst[di++] = (char)strtol(hex, NULL, 16);
-            si += 2;
-            continue;
-        }
-        dst[di++] = src[si];
+        dst[di++] = (char)strtol(hex, NULL, 16);
+        si += 2;
+        continue;
+            }
+            dst[di++] = src[si];
     }
     dst[di] = '\0';
     return 0;
@@ -335,7 +337,7 @@ get_query_value(const char *url, const char *key, char *out, size_t out_size)
 
 static int
 parse_section_from_filename(const char *filename, char *section_out,
-                             size_t section_out_len)
+                            size_t section_out_len)
 {
     static const char *compressed_suffixes[] = {".gz", ".bz2", ".xz", ".zst"};
     char tmp[256];
@@ -346,14 +348,14 @@ parse_section_from_filename(const char *filename, char *section_out,
 
     for (size_t i = 0;
          i < sizeof(compressed_suffixes) / sizeof(compressed_suffixes[0]);
-         i++) {
+    i++) {
         size_t tlen = strlen(tmp);
         size_t slen = strlen(compressed_suffixes[i]);
         if (tlen > slen &&
             strcmp(tmp + tlen - slen, compressed_suffixes[i]) == 0) {
             tmp[tlen - slen] = '\0';
-            break;
-        }
+        break;
+            }
     }
 
     char *dot = strrchr(tmp, '.');
@@ -407,7 +409,6 @@ is_valid_section(const char *section)
 
 /* =========================================================================
  * Man path resolution
- * FIX #4: single subprocess per lookup, no redundant second man -w call.
  * ========================================================================= */
 
 static char *
@@ -434,16 +435,16 @@ select_resolved_man_path(char *raw_output)
             selected = tok;
             break;
         }
-    }
+         }
 
-    if (!selected || selected[0] == '\0') {
-        free(raw_output);
-        return NULL;
-    }
+         if (!selected || selected[0] == '\0') {
+             free(raw_output);
+             return NULL;
+         }
 
-    char *resolved = strdup(selected);
-    free(raw_output);
-    return resolved;
+         char *resolved = strdup(selected);
+         free(raw_output);
+         return resolved;
 }
 
 static char *
@@ -465,30 +466,8 @@ resolve_man_path(const char *name, const char *section)
 }
 
 /* =========================================================================
- * Filesystem cache helpers (unchanged from original)
+ * Filesystem cache helpers
  * ========================================================================= */
-
-static int
-is_hot_man_cache_hit(const char *cache_abs, const char *format)
-{
-    if (!cache_abs || !format)
-        return 0;
-    if (strcmp(format, "html") != 0 && strcmp(format, "md") != 0)
-        return 0;
-    struct stat st;
-    if (stat(cache_abs, &st) != 0)
-        return 0;
-    time_t now = time(NULL);
-    return (now - st.st_mtime) <= MAN_HOT_CACHE_TTL_SEC;
-}
-
-static int
-is_static_cache_format(const char *format)
-{
-    return strcmp(format, "html") == 0 || strcmp(format, "txt") == 0 ||
-           strcmp(format, "md") == 0   || strcmp(format, "ps") == 0 ||
-           strcmp(format, "pdf") == 0;
-}
 
 static int
 build_cache_paths(const char *area, const char *section, const char *page,
@@ -496,16 +475,22 @@ build_cache_paths(const char *area, const char *section, const char *page,
                   char *rel, size_t rel_len,
                   char *abs_path, size_t abs_len)
 {
-    if (!area || !section || !page || !format || !rel || !abs_path)
+    if (!area || !section || !page || !format)
         return -1;
-    int n = snprintf(rel, rel_len, "/static/man/%s/%s/%s.%s",
-                     area, section, page, format);
-    if (n < 0 || (size_t)n >= rel_len)
-        return -1;
-    n = snprintf(abs_path, abs_len, "%s/man/%s/%s/%s.%s",
-                 config_static_dir, area, section, page, format);
-    if (n < 0 || (size_t)n >= abs_len)
-        return -1;
+
+    if (rel && rel_len > 0) {
+        int n = snprintf(rel, rel_len, "/static/man/%s/%s/%s.%s",
+                         area, section, page, format);
+        if (n < 0 || (size_t)n >= rel_len)
+            return -1;
+    }
+
+    if (abs_path && abs_len > 0) {
+        int n = snprintf(abs_path, abs_len, "%s/man/%s/%s/%s.%s",
+                         config_static_dir, area, section, page, format);
+        if (n < 0 || (size_t)n >= abs_len)
+            return -1;
+    }
     return 0;
 }
 
@@ -571,7 +556,7 @@ mime_for_format(const char *format)
 
 static void
 add_content_disposition_for_format(http_response_t *resp, const char *format,
-                                    const char *page)
+                                   const char *page)
 {
     char content_disp[256];
     if (strcmp(format, "pdf") == 0) {
@@ -597,7 +582,6 @@ area_from_path(const char *filepath)
 
 /* =========================================================================
  * man_render_page
- * FIX #4: removed the redundant second man -w subprocess.
  * ========================================================================= */
 
 char *
@@ -655,9 +639,7 @@ man_render_page(const char *area, const char *section, const char *page,
 }
 
 /* =========================================================================
- * man_render_handler
- * FIX #1: strtok() → strtok_r() — eliminates the global-state data race.
- * FIX #3: check in-process render cache FIRST; populate it after mandoc.
+ * man_render_handler - Two-level caching implementation
  * ========================================================================= */
 
 int
@@ -668,41 +650,35 @@ man_render_handler(http_request_t *req)
     char page[64]    = "";
     char format[16]  = "html";
 
-    /* 1. Parse URL: /man/{area}/{section}/{page}[.format] */
+    /* --- 1. Parse URL: /man/{area}/{section}/{page}[.format] --- */
     if (strncmp(req->url, "/man/", 5) != 0)
         return http_send_error(req, 400, "Invalid URL");
 
     const char *p = req->url + 5;
     char path_copy[256];
-    strncpy(path_copy, p, sizeof(path_copy) - 1);
-    path_copy[sizeof(path_copy) - 1] = '\0';
+    strlcpy(path_copy, p, sizeof(path_copy));
 
-    /* Strip query string from path_copy */
+    /* Strip query string */
     char *qs = strchr(path_copy, '?');
-    if (qs)
-        *qs = '\0';
+    if (qs) *qs = '\0';
 
-    /* FIX #1: use strtok_r with a local saveptr — thread-safe */
+    /* Thread-safe parsing with strtok_r */
     char *saveptr = NULL;
     char *token   = strtok_r(path_copy, "/", &saveptr);
-    if (token)
-        strncpy(area, token, sizeof(area) - 1);
-
+    if (token) strlcpy(area, token, sizeof(area));
     token = strtok_r(NULL, "/", &saveptr);
-    if (token)
-        strncpy(section, token, sizeof(section) - 1);
-
+    if (token) strlcpy(section, token, sizeof(section));
     token = strtok_r(NULL, "/", &saveptr);
     if (token) {
         char *dot = strrchr(token, '.');
         if (dot) {
             *dot = '\0';
-            strncpy(format, dot + 1, sizeof(format) - 1);
+            strlcpy(format, dot + 1, sizeof(format));
         }
-        strncpy(page, token, sizeof(page) - 1);
+        strlcpy(page, token, sizeof(page));
     }
 
-    /* 2. Minimal validation */
+    /* --- 2. Minimal validation --- */
     if (page[0] == '\0' || section[0] == '\0')
         return http_send_error(req, 400, "Missing section or page name");
 
@@ -711,82 +687,62 @@ man_render_handler(http_request_t *req)
         strcmp(format, "txt")  != 0)
         return http_send_error(req, 400, "Unsupported format");
 
-    /* 3. In-process render cache lookup (RAM, zero syscalls on hit).
-     *    FIX #3: serves the vast majority of repeated requests from here.
-     */
+    /* --- 3. Initialize cache on first use --- */
     pthread_once(&g_man_cache_once, man_render_cache_init);
-    size_t cached_len = 0;
-    char  *cached_body = man_render_cache_get(area, section, page, format,
-                                               &cached_len);
-    if (cached_body) {
-        log_debug("[MAN] RAM cache HIT %s/%s/%s.%s", area, section, page,
-                  format);
-        http_response_t *resp = http_response_create();
-        if (!resp) {
-            free(cached_body);
-            return http_send_error(req, 500, "Internal Server Error");
-        }
-        resp->content_type = mime_for_format(format);
-        http_response_add_header(resp, "Cache-Control", "public, max-age=300");
-        add_content_disposition_for_format(resp, format, page);
-        http_response_set_body(resp, cached_body, cached_len, 1);
-        int ret = http_response_send(req, resp);
-        http_response_free(resp);
-        return ret;
+
+    char *response_body = NULL;
+    size_t response_len = 0;
+
+    /* --- 4. Attempt to serve from L1 cache (RAM) --- */
+    response_body = man_render_cache_get(area, section, page, format, &response_len);
+    if (response_body) {
+        log_debug("[MAN] L1 cache HIT %s/%s/%s.%s", area, section, page, format);
+        goto send_response;
     }
+    log_debug("[MAN] L1 cache MISS %s/%s/%s.%s", area, section, page, format);
 
-    /* 4. Filesystem cache check (serves from disk, avoids mandoc re-run) */
-    char cache_rel[512], cache_abs[512];
+    /* --- 5. Attempt to serve from L2 cache (Filesystem) --- */
+    char cache_abs[512];
     int have_paths = (build_cache_paths(area, section, page, format,
-                                        cache_rel, sizeof(cache_rel),
-                                        cache_abs, sizeof(cache_abs)) == 0);
+                                        NULL, 0, cache_abs, sizeof(cache_abs)) == 0);
 
-    if (have_paths && is_static_cache_format(format) &&
-        access(cache_abs, R_OK) == 0 &&
-        is_hot_man_cache_hit(cache_abs, format)) {
-        /* Read from disk into memory and populate the RAM cache while we're
-         * at it, so the next hit is served from RAM */
+    if (have_paths && access(cache_abs, R_OK) == 0) {
+        log_debug("[MAN] L2 cache HIT %s", cache_abs);
         int fd = open(cache_abs, O_RDONLY);
         if (fd >= 0) {
             struct stat st;
             if (fstat(fd, &st) == 0 && st.st_size > 0) {
-                char *buf = malloc((size_t)st.st_size + 1);
-                if (buf) {
-                    ssize_t nr = read(fd, buf, (size_t)st.st_size);
+                response_body = malloc((size_t)st.st_size + 1);
+                if (response_body) {
+                    ssize_t nr = read(fd, response_body, (size_t)st.st_size);
                     if (nr == (ssize_t)st.st_size) {
-                        buf[nr] = '\0';
-                        /* Warm the RAM cache */
-                        man_render_cache_put(area, section, page, format,
-                                             buf, (size_t)nr);
-                        log_debug("[MAN] FS cache HIT %s (warmed RAM cache)",
-                                  cache_abs);
+                        response_body[nr] = '\0';
+                        response_len = (size_t)nr;
                         close(fd);
-                        http_response_t *resp = http_response_create();
-                        if (!resp) { free(buf); return -1; }
-                        resp->content_type = mime_for_format(format);
-                        http_response_add_header(resp, "Cache-Control", "public, max-age=300");
-                        add_content_disposition_for_format(resp, format, page);
-                        http_response_set_body(resp, buf, (size_t)nr, 1);
-                        int ret = http_response_send(req, resp);
-                        http_response_free(resp);
-                        return ret;
+                        /* Promote to L1 cache */
+                        man_render_cache_put(area, section, page, format,
+                                             response_body, response_len);
+                        goto send_response;
                     }
-                    free(buf);
+                    free(response_body);
+                    response_body = NULL;
                 }
             }
             close(fd);
         }
-        /* Fall through to mandoc on read error */
+        /* If read fails, fall through to mandoc */
+    }
+    log_debug("[MAN] L2 cache MISS %s/%s/%s.%s", area, section, page, format);
+
+    /* --- 6. Cache miss on both levels: render via mandoc --- */
+    log_debug("[MAN] Rendering via mandoc %s/%s/%s.%s", area, section, page, format);
+    response_body = man_render_page(area, section, page, format, &response_len);
+    if (!response_body) {
+        return http_send_error(req, 404, "Manual page not found");
     }
 
-    /* 5. Render via mandoc */
-    size_t out_len = 0;
-    char  *output  = man_render_page(area, section, page, format, &out_len);
-    if (!output)
-        return http_send_error(req, 404, "Manual page not found");
-
-    /* 6. Populate both caches so future requests skip mandoc entirely */
-    man_render_cache_put(area, section, page, format, output, out_len);
+    /* --- 7. Store the newly rendered page in both caches --- */
+    man_render_cache_put(area, section, page, format, response_body, response_len);
 
     if (have_paths) {
         char cache_dir[512];
@@ -795,26 +751,31 @@ man_render_handler(http_request_t *req)
         if (last_slash) {
             *last_slash = '\0';
             if (mkdir_p(cache_dir, config_static_dir) == 0)
-                (void)write_file_binary(cache_abs, output, out_len);
+                (void)write_file_binary(cache_abs, response_body, response_len);
         }
     }
 
-    /* 7. Send response */
-    http_response_t *resp = http_response_create();
-    if (!resp) { free(output); return -1; }
+    /* --- 8. Send the final response --- */
+    send_response: {
+        http_response_t *resp = http_response_create();
+        if (!resp) {
+            free(response_body);
+            return -1;
+        }
 
-    resp->content_type = mime_for_format(format);
-    http_response_add_header(resp, "Cache-Control", "public, max-age=300");
-    add_content_disposition_for_format(resp, format, page);
-    http_response_set_body(resp, output, out_len, 1);
+        resp->content_type = mime_for_format(format);
+        http_response_add_header(resp, "Cache-Control", "public, max-age=300");
+        add_content_disposition_for_format(resp, format, page);
+        http_response_set_body(resp, response_body, response_len, 1); /* 1 = free_body */
 
-    int ret = http_response_send(req, resp);
-    http_response_free(resp);
-    return ret;
+        int ret = http_response_send(req, resp);
+        http_response_free(resp);
+        return ret;
+    }
 }
 
 /* =========================================================================
- * API JSON helpers (unchanged logic, kept compact)
+ * API JSON helpers
  * ========================================================================= */
 
 char *
@@ -822,45 +783,45 @@ man_get_sections_json(void)
 {
     return strdup(
         "{\"system\":{"
-          "\"name\":\"OpenBSD Base System\","
-          "\"path\":\"/usr/share/man\","
-          "\"sections\":["
-            "{\"id\":\"1\",\"name\":\"General Commands\"},"
-            "{\"id\":\"2\",\"name\":\"System Calls\"},"
-            "{\"id\":\"3\",\"name\":\"Library Functions\"},"
-            "{\"id\":\"3p\",\"name\":\"Perl Library\"},"
-            "{\"id\":\"4\",\"name\":\"Device Drivers\"},"
-            "{\"id\":\"5\",\"name\":\"File Formats\"},"
-            "{\"id\":\"6\",\"name\":\"Games\"},"
-            "{\"id\":\"7\",\"name\":\"Miscellaneous\"},"
-            "{\"id\":\"8\",\"name\":\"System Administration\"},"
-            "{\"id\":\"9\",\"name\":\"Kernel Internals\"}"
-          "]},"
+        "\"name\":\"OpenBSD Base System\","
+        "\"path\":\"/usr/share/man\","
+        "\"sections\":["
+        "{\"id\":\"1\",\"name\":\"General Commands\"},"
+        "{\"id\":\"2\",\"name\":\"System Calls\"},"
+        "{\"id\":\"3\",\"name\":\"Library Functions\"},"
+        "{\"id\":\"3p\",\"name\":\"Perl Library\"},"
+        "{\"id\":\"4\",\"name\":\"Device Drivers\"},"
+        "{\"id\":\"5\",\"name\":\"File Formats\"},"
+        "{\"id\":\"6\",\"name\":\"Games\"},"
+        "{\"id\":\"7\",\"name\":\"Miscellaneous\"},"
+        "{\"id\":\"8\",\"name\":\"System Administration\"},"
+        "{\"id\":\"9\",\"name\":\"Kernel Internals\"}"
+        "]},"
         "\"x11\":{"
-          "\"name\":\"X11 Window System\","
-          "\"path\":\"/usr/X11R6/man\","
-          "\"sections\":["
-            "{\"id\":\"1\",\"name\":\"X11 Commands\"},"
-            "{\"id\":\"3\",\"name\":\"X11 Library\"},"
-            "{\"id\":\"4\",\"name\":\"X11 Drivers\"},"
-            "{\"id\":\"5\",\"name\":\"X11 Formats\"},"
-            "{\"id\":\"7\",\"name\":\"X11 Misc\"}"
-          "]},"
+        "\"name\":\"X11 Window System\","
+        "\"path\":\"/usr/X11R6/man\","
+        "\"sections\":["
+        "{\"id\":\"1\",\"name\":\"X11 Commands\"},"
+        "{\"id\":\"3\",\"name\":\"X11 Library\"},"
+        "{\"id\":\"4\",\"name\":\"X11 Drivers\"},"
+        "{\"id\":\"5\",\"name\":\"X11 Formats\"},"
+        "{\"id\":\"7\",\"name\":\"X11 Misc\"}"
+        "]},"
         "\"packages\":{"
-          "\"name\":\"Local Packages\","
-          "\"path\":\"/usr/local/man\","
-          "\"sections\":["
-            "{\"id\":\"1\",\"name\":\"Pkg General\"},"
-            "{\"id\":\"2\",\"name\":\"Pkg Calls\"},"
-            "{\"id\":\"3\",\"name\":\"Pkg Lib\"},"
-            "{\"id\":\"3p\",\"name\":\"Pkg Perl\"},"
-            "{\"id\":\"4\",\"name\":\"Pkg Drivers\"},"
-            "{\"id\":\"5\",\"name\":\"Pkg Formats\"},"
-            "{\"id\":\"6\",\"name\":\"Pkg Games\"},"
-            "{\"id\":\"7\",\"name\":\"Pkg Misc\"},"
-            "{\"id\":\"8\",\"name\":\"Pkg Admin\"},"
-            "{\"id\":\"9\",\"name\":\"Pkg Kernel\"}"
-          "]}}");
+        "\"name\":\"Local Packages\","
+        "\"path\":\"/usr/local/man\","
+        "\"sections\":["
+        "{\"id\":\"1\",\"name\":\"Pkg General\"},"
+        "{\"id\":\"2\",\"name\":\"Pkg Calls\"},"
+        "{\"id\":\"3\",\"name\":\"Pkg Lib\"},"
+        "{\"id\":\"3p\",\"name\":\"Pkg Perl\"},"
+        "{\"id\":\"4\",\"name\":\"Pkg Drivers\"},"
+        "{\"id\":\"5\",\"name\":\"Pkg Formats\"},"
+        "{\"id\":\"6\",\"name\":\"Pkg Games\"},"
+        "{\"id\":\"7\",\"name\":\"Pkg Misc\"},"
+        "{\"id\":\"8\",\"name\":\"Pkg Admin\"},"
+        "{\"id\":\"9\",\"name\":\"Pkg Kernel\"}"
+        "]}}");
 }
 
 char *
@@ -888,7 +849,7 @@ man_get_section_pages_json(const char *area, const char *section)
         return NULL;
     }
 
-#define JSON_CLOSE_RESERVE 4
+    #define JSON_CLOSE_RESERVE 4
     int n = snprintf(json, MAX_JSON_SIZE, "{\"pages\":[");
     size_t used = (n > 0) ? (size_t)n : 0;
 
@@ -902,14 +863,14 @@ man_get_section_pages_json(const char *area, const char *section)
             continue;
         char resolved_section[16];
         if (!parse_section_from_filename(de->d_name, resolved_section,
-                                         sizeof(resolved_section)))
+            sizeof(resolved_section)))
             continue;
         if (strcmp(resolved_section, section) != 0)
             continue;
         char name[128];
         char *dot = strchr(de->d_name, '.');
         size_t name_len =
-            dot ? (size_t)(dot - de->d_name) : strlen(de->d_name);
+        dot ? (size_t)(dot - de->d_name) : strlen(de->d_name);
         if (name_len >= sizeof(name))
             name_len = sizeof(name) - 1;
         memcpy(name, de->d_name, name_len);
@@ -942,14 +903,14 @@ man_get_section_pages_json(const char *area, const char *section)
         }
     }
     (void)snprintf(json + used, MAX_JSON_SIZE - used, "]}");
-#undef JSON_CLOSE_RESERVE
+    #undef JSON_CLOSE_RESERVE
 
     return json;
 }
 
 char *
 man_get_page_metadata_json(const char *area, const char *section,
-                            const char *name)
+                           const char *name)
 {
     char *filepath = resolve_man_path(name, section);
     if (!filepath)
@@ -1023,7 +984,7 @@ man_api_search_raw(const char *query)
 }
 
 /* =========================================================================
- * man_api_handler — unchanged logic, Italian comments translated
+ * man_api_handler
  * ========================================================================= */
 
 int
@@ -1039,7 +1000,7 @@ man_api_handler(http_request_t *req)
 
     const char *query_string = strchr(path, '?');
     size_t path_len =
-        query_string ? (size_t)(query_string - path) : strlen(path);
+    query_string ? (size_t)(query_string - path) : strlen(path);
 
     if (path_matches_endpoint(path, "/sections")) {
         json = man_get_sections_json();
@@ -1063,65 +1024,67 @@ man_api_handler(http_request_t *req)
         if (name_buf[0] == '\0' || !is_valid_token(name_buf) ||
             (section_buf[0] != '\0' && !is_valid_section(section_buf))) {
             json = strdup("{\"error\":\"name parameter required\"}");
-        } else {
-            char *filepath = NULL;
-            if (section_buf[0] != '\0') {
-                filepath = resolve_man_path(name_buf, section_buf);
             } else {
-                static const char *probe_sections[] = {
-                    "1", "8", "2", "3", "5", "7", "6", "4", "9", "3p"
-                };
-                for (size_t i = 0;
-                     i < sizeof(probe_sections) / sizeof(probe_sections[0]);
-                     i++) {
-                    filepath = resolve_man_path(name_buf, probe_sections[i]);
-                    if (filepath) {
-                        strlcpy(section_buf, probe_sections[i],
-                                sizeof(section_buf));
-                        break;
+                char *filepath = NULL;
+                if (section_buf[0] != '\0') {
+                    filepath = resolve_man_path(name_buf, section_buf);
+                } else {
+                    static const char *probe_sections[] = {
+                        "1", "8", "2", "3", "5", "7", "6", "4", "9", "3p"
+                    };
+                    for (size_t i = 0;
+                         i < sizeof(probe_sections) / sizeof(probe_sections[0]);
+                    i++) {
+                        filepath = resolve_man_path(name_buf, probe_sections[i]);
+                        if (filepath) {
+                            strlcpy(section_buf, probe_sections[i],
+                                    sizeof(section_buf));
+                            break;
+                        }
                     }
                 }
-            }
 
-            if (!filepath || filepath[0] == '\0') {
-                free(filepath);
-                json = strdup("{\"error\":\"not found\"}");
-            } else {
-                const char *area = area_from_path(filepath);
-                char resolved_section[16] = {0};
-                const char *base = strrchr(filepath, '/');
-                base = base ? base + 1 : filepath;
-                if (!parse_section_from_filename(base, resolved_section,
-                                                  sizeof(resolved_section)))
-                    strlcpy(resolved_section, section_buf,
-                            sizeof(resolved_section));
+                if (!filepath || filepath[0] == '\0') {
+                    free(filepath);
+                    json = strdup("{\"error\":\"not found\"}");
+                } else {
+                    const char *area = area_from_path(filepath);
+                    char resolved_section[16] = {0};
+                    const char *base = strrchr(filepath, '/');
+                    base = base ? base + 1 : filepath;
+                    if (!parse_section_from_filename(base, resolved_section,
+                        sizeof(resolved_section))){
+                        strlcpy(resolved_section, section_buf,
+                                sizeof(resolved_section));
+                    }
 
-                char *escaped_path = json_escape_string(filepath);
-                if (!escaped_path)
-                    escaped_path = strdup("");
+                    char *escaped_path = json_escape_string(filepath);
+                    if (!escaped_path){
+                        escaped_path = strdup("");
+                    }
 
-                const char *sec_out =
+                    const char *sec_out =
                     resolved_section[0] ? resolved_section : section_buf;
-                int needed = snprintf(NULL, 0,
-                                      "{\"name\":\"%s\","
-                                      "\"section\":\"%s\","
-                                      "\"area\":\"%s\","
-                                      "\"path\":\"%s\"}",
-                                      name_buf, sec_out, area, escaped_path);
-                if (needed > 0) {
-                    json = malloc((size_t)needed + 1);
-                    if (json)
-                        snprintf(json, (size_t)needed + 1,
-                                 "{\"name\":\"%s\","
-                                 "\"section\":\"%s\","
-                                 "\"area\":\"%s\","
-                                 "\"path\":\"%s\"}",
-                                 name_buf, sec_out, area, escaped_path);
+                    int needed = snprintf(NULL, 0,
+                                          "{\"name\":\"%s\","
+                                          "\"section\":\"%s\","
+                                          "\"area\":\"%s\","
+                                          "\"path\":\"%s\"}",
+                                          name_buf, sec_out, area, escaped_path);
+                    if (needed > 0) {
+                        json = malloc((size_t)needed + 1);
+                        if (json)
+                            snprintf(json, (size_t)needed + 1,
+                                     "{\"name\":\"%s\","
+                                     "\"section\":\"%s\","
+                                     "\"area\":\"%s\","
+                                     "\"path\":\"%s\"}",
+                                     name_buf, sec_out, area, escaped_path);
+                    }
+                    free(escaped_path);
+                    free(filepath);
                 }
-                free(escaped_path);
-                free(filepath);
             }
-        }
 
     } else if (strncmp(path, "/search", 7) == 0) {
         const char *query = NULL;
@@ -1133,7 +1096,7 @@ man_api_handler(http_request_t *req)
                 query = query_buf;
         }
         json = (query && *query != '\0') ? man_api_search_raw(query)
-                                         : strdup("");
+        : strdup("");
 
     } else {
         char area[32]    = {0};
@@ -1155,9 +1118,9 @@ man_api_handler(http_request_t *req)
     http_response_t *resp = http_response_create();
     http_response_set_status(resp, 200);
     resp->content_type =
-        (strstr(path, "/search") != NULL)
-        ? "text/plain; charset=utf-8"
-        : "application/json";
+    (strstr(path, "/search") != NULL)
+    ? "text/plain; charset=utf-8"
+    : "application/json";
     http_response_add_header(resp, "Access-Control-Allow-Origin", "*");
     http_response_set_body(resp, json, strlen(json), 1);
 
@@ -1181,4 +1144,3 @@ man_module_attach_routes(struct router *r)
         return -1;
     return 0;
 }
-
