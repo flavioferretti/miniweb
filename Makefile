@@ -100,9 +100,15 @@ install: ${BUILDDIR}/${PROG}
 	install -d ${BINDIR}
 	install -m 755 ${BUILDDIR}/${PROG} ${BINDIR}/${PROG}
 
-man:
+man: docs/miniweb.1
 	doas cp docs/miniweb.1 /usr/local/man/man1
 	doas makewhatis /usr/local/man
+	mandoc -Tmarkdown docs/miniweb.1 | \
+	awk '/^# DESCRIPTION/ { \
+		print "# DESCRIPTION\n---\n![screenshot](https://raw.githubusercontent.com/flavioferretti/miniweb/refs/heads/main/docs/screenshot.png)\n---\n![call graph](https://raw.githubusercontent.com/flavioferretti/miniweb/refs/heads/main/docs/miniweb_diagram.svg)\n---"; \
+		next \
+	} { print }' > README.md
+	rm -rf static/man/*
 
 clean:
 	rm -rf ${BUILDDIR}

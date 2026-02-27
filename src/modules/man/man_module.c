@@ -159,6 +159,8 @@ man_render_cache_get(const char *area, const char *section,
     pthread_mutex_lock(&shard->lock);
 
     time_t now = time(NULL);
+    int target = -1;
+    time_t oldest = now + 1;
     for (int i = 0; i < MAN_RENDER_CACHE_SLOTS; i++) {
         man_render_slot_t *s = &shard->slots[i];
         if (s->body == NULL)
@@ -183,7 +185,14 @@ man_render_cache_get(const char *area, const char *section,
             pthread_mutex_unlock(&shard->lock);
             return copy;
         }
-        break;
+        if (s->body == NULL) {
+            target = i;
+            break;                // takes empty slot — fine
+        }
+        if (s->inserted < oldest) {
+            oldest = s->inserted;
+            target = i;
+        }
     }
     shard->misses++;
     pthread_mutex_unlock(&shard->lock);

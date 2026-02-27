@@ -903,14 +903,9 @@ http_send_html(http_request_t *req, const char *html)
 int
 http_send_file(http_request_t *req, const char *path, const char *mime)
 {
-	// printf("DEBUG: http_send_file opening: %s\n", path);
-
 	int fd = open(path, O_RDONLY);
-	if (fd < 0) {
-		// printf("DEBUG: Failed to open file: %s (errno=%d)\n", path,
-		// errno);
+	if (fd < 0)
 		return http_send_error(req, 404, "File not found");
-	}
 
 	struct stat st;
 	if (fstat(fd, &st) != 0) {
@@ -919,14 +914,12 @@ http_send_file(http_request_t *req, const char *path, const char *mime)
 	}
 
 	http_response_t *resp = http_response_create();
-	if (!resp) {
-		close(fd);
-		return -1;
-	}
+	if (!resp) { close(fd); return -1; }
 	resp->content_type = mime;
 	if (mime && strncmp(mime, "text/plain", 10) == 0)
 		http_response_add_header(resp, "Content-Disposition", "inline");
 
+	/* Cache hit — body already in memory, send atomically */
 	char *cached = NULL;
 	size_t cached_len = 0;
 	if (file_cache_lookup(path, &st, &cached, &cached_len)) {
@@ -937,6 +930,39 @@ http_send_file(http_request_t *req, const char *path, const char *mime)
 		return rc;
 	}
 
+	/* Cache miss, file fits in memory: read fully, then send atomically */
+	if (st.st_size > 0 && (size_t)st.st_size <= FILE_CACHE_MAX_BYTES * 4) {
+		char *body = malloc((size_t)st.st_size);
+		if (!body) { http_response_free(resp); close(fd); return -1; }
+
+		size_t total = 0;
+		while (total < (size_t)st.st_size) {
+			ssize_t n = read(fd, body + total, (size_t)st.st_size - total);
+			if (n < 0) { if (errno == EINTR) continue; break; }
+			if (n == 0) break;
+			total += (size_t)n;
+		}
+		close(fd);
+
+		if (total == 0) {
+			free(body);
+			http_response_free(resp);
+			return http_send_error(req, 500, "Read error");
+		}
+
+		http_response_set_body(resp, body, total, 1);
+		int rc = http_response_send(req, resp);
+		if (rc == 0)
+			file_cache_store(path, &st, body, total);
+		http_response_free(resp);   /* frees body */
+		return rc;
+	}
+
+	/* Oversized file: stream in chunks.
+	 * Headers and body are sent separately — Content-Length is committed
+	 * before the body loop, so a mid-stream write failure is unrecoverable.
+	 * Force Connection: close so the browser detects EOF rather than waiting. */
+	req->keep_alive = 0;
 	http_response_set_body(resp, NULL, (size_t)st.st_size, 0);
 	if (http_response_send(req, resp) < 0) {
 		http_response_free(resp);
@@ -945,36 +971,18 @@ http_send_file(http_request_t *req, const char *path, const char *mime)
 	}
 	http_response_free(resp);
 
-	char file_buf[65536];
-	char *cache_copy = NULL;
-	size_t cache_used = 0;
-	if ((size_t)st.st_size > 0 &&
-	    (size_t)st.st_size <= FILE_CACHE_MAX_BYTES)
-		cache_copy = malloc((size_t)st.st_size);
-
+	char buf[65536];
 	ssize_t n;
-	while ((n = read(fd, file_buf, sizeof(file_buf))) > 0) {
-		if (cache_copy &&
-		    cache_used + (size_t)n <= (size_t)st.st_size) {
-			memcpy(cache_copy + cache_used, file_buf, (size_t)n);
-			cache_used += (size_t)n;
-		}
-		if (write_all(req->fd, file_buf, (size_t)n) < 0) {
-			free(cache_copy);
+	while ((n = read(fd, buf, sizeof(buf))) > 0) {
+		if (write_all(req->fd, buf, (size_t)n) < 0) {
 			close(fd);
 			return -1;
 		}
 	}
-
-	if (cache_copy && cache_used == (size_t)st.st_size)
-		file_cache_store(path, &st, cache_copy, cache_used);
-	free(cache_copy);
-
 	close(fd);
-	// printf("DEBUG: Successfully sent file: %s (%lld bytes)\n",
-	//	   path, (long long)st.st_size);
 	return 0;
-}
+}//bugix — buffer the full file before sending:
+
 
 /**
  * @brief Render an HTML template and send it as HTTP response.

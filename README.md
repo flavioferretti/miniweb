@@ -1,4 +1,3 @@
-
 MINIWEB(1) - General Commands Manual
 
 # NAME
@@ -17,17 +16,16 @@ MINIWEB(1) - General Commands Manual
 \[**-t**&nbsp;*threads*]
 
 # DESCRIPTION
-
-**miniweb**
-is a lightweight HTTP server written in C99 for OpenBSD.
-It exposes a system dashboard and JSON APIs for metrics, networking
-diagnostics, manual page browsing, and package management.
-
 ---
 ![screenshot](https://raw.githubusercontent.com/flavioferretti/miniweb/refs/heads/main/docs/screenshot.png)
 ---
 ![call graph](https://raw.githubusercontent.com/flavioferretti/miniweb/refs/heads/main/docs/miniweb_diagram.svg)
 ---
+
+**miniweb**
+is a lightweight HTTP server written in C99 for OpenBSD.
+It exposes a system dashboard and JSON APIs for metrics, networking
+diagnostics, manual page browsing, and package management.
 
 The runtime uses a single
 kqueue(2)
@@ -1194,7 +1192,8 @@ relayd(8)
 
 # AUTHORS
 
-https://github.com/flavioferretti/miniweb
+*	Flavio Ferretti &lt;[flavio@flvbox.org](mailto:flavio@flvbox.org)&gt;
+*	[https://github.com/flavioferretti/miniweb](https://github.com/flavioferretti/miniweb)
 
 # REFACTOR STATUS
 
