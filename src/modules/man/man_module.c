@@ -159,15 +159,13 @@ man_render_cache_get(const char *area, const char *section,
     pthread_mutex_lock(&shard->lock);
 
     time_t now = time(NULL);
-    int target = -1;
-    time_t oldest = now + 1;
     for (int i = 0; i < MAN_RENDER_CACHE_SLOTS; i++) {
         man_render_slot_t *s = &shard->slots[i];
         if (s->body == NULL)
             continue;
         if (strcmp(s->key, key) != 0)
             continue;
-        /* TTL check */
+        /* TTL check — evict stale entry */
         if ((now - s->inserted) > MAN_RENDER_CACHE_TTL) {
             free(s->body);
             s->body = NULL;
@@ -175,7 +173,7 @@ man_render_cache_get(const char *area, const char *section,
             shard->evictions++;
             break;
         }
-        /* Hit: return a copy so the caller owns the buffer */
+        /* Hit: restituisce una copia — il chiamante possiede il buffer */
         char *copy = malloc(s->len + 1);
         if (copy) {
             memcpy(copy, s->body, s->len);
@@ -185,14 +183,7 @@ man_render_cache_get(const char *area, const char *section,
             pthread_mutex_unlock(&shard->lock);
             return copy;
         }
-        if (s->body == NULL) {
-            target = i;
-            break;                // takes empty slot — fine
-        }
-        if (s->inserted < oldest) {
-            oldest = s->inserted;
-            target = i;
-        }
+        break; /* malloc fallita — tratta come miss */
     }
     shard->misses++;
     pthread_mutex_unlock(&shard->lock);

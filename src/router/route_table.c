@@ -59,52 +59,61 @@ view_template_handler(http_request_t *req)
 	time_t now = time(NULL);
 	hot_view_cache_entry_t *cache_entry = NULL;
 
+	/* --- Cache hit path --- */
 	if (req->url && strchr(req->url, '?') == NULL) {
 		pthread_mutex_lock(&g_hot_view_cache_lock);
 		cache_entry = find_hot_view_cache_entry(req->url);
 		if (cache_entry && cache_entry->body &&
 			(now - cache_entry->created_at) <= HOT_VIEW_CACHE_TTL_SEC) {
 			char *cached = strdup(cache_entry->body);
-			pthread_mutex_unlock(&g_hot_view_cache_lock);
-			if (!cached){
-				return http_send_error(req, 500, "Out of memory");
-			}
-			int ret = http_send_html(req, cached);
-			free(cached);
-			return ret;
-		}
 		pthread_mutex_unlock(&g_hot_view_cache_lock);
+		if (!cached) {
+			return http_send_error(req, 500, "Out of memory");
+		}
+		int ret = http_send_html(req, cached);
+		free(cached);
+		return ret;
+			}
+			pthread_mutex_unlock(&g_hot_view_cache_lock);
 	}
 
+	/* --- Cache miss: render --- */
 	const struct view_route *view = find_view_route(req->method, req->url);
-
-	if (view == NULL)
+	if (view == NULL) {
 		return http_send_error(req, 404, "Not Found");
+	}
 
 	struct template_data data = {
-		.title = view->title,
-		.page_content = view->page,
+		.title           = view->title,
+		.page_content    = view->page,
 		.extra_head_file = view->extra_head,
-		.extra_js_file = view->extra_js,
+		.extra_js_file   = view->extra_js,
 	};
 
 	char *output = NULL;
 	if (template_render_with_data(&data, &output) != 0) {
-		if (data.page_content && template_render(data.page_content, &output) != 0)
+		if (data.page_content &&
+			template_render(data.page_content, &output) != 0) {
 			return http_send_error(req, 500, "Template rendering failed");
+			}
 	}
-
-	if (!output)
+	if (!output) {
 		return http_send_error(req, 500, "Template rendering failed");
-
-	if (cache_entry) {
-		pthread_mutex_lock(&g_hot_view_cache_lock);
-		free(cache_entry->body);
-		cache_entry->body = strdup(output);
-		cache_entry->created_at = now;
-		pthread_mutex_unlock(&g_hot_view_cache_lock);
 	}
 
+	/* Cache owns its own strdup copy — independent from the response buffer. */
+	if (cache_entry) {
+		char *cache_copy = strdup(output);
+		if (cache_copy) {
+			pthread_mutex_lock(&g_hot_view_cache_lock);
+			free(cache_entry->body);
+			cache_entry->body = cache_copy;
+			cache_entry->created_at = now;
+			pthread_mutex_unlock(&g_hot_view_cache_lock);
+		}
+	}
+
+	/* Response takes ownership of output and frees it (free_body = 1). */
 	http_response_t *resp = http_response_create();
 	if (!resp) {
 		free(output);
@@ -115,7 +124,6 @@ view_template_handler(http_request_t *req)
 	http_response_free(resp);
 	return ret;
 }
-
 
 /**
  * @brief Favicon handler.

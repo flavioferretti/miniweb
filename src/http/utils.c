@@ -59,7 +59,7 @@ json_escape_string(const char *src)
     size_t d = 0;
     for (size_t s = 0; src[s] != '\0'; s++) {
         /* Ensure we have room for longest possible sequence + NUL */
-        if (d + 7 >= max_out)
+        if (d + 7 >= max_out - 1)
             break;
 
         switch (src[s]) {
