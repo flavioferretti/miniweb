@@ -43,4 +43,7 @@ int man_api_handler(http_request_t *req);
 
 int man_module_attach_routes(struct router *r);
 
+/** Release man module process-global caches/semaphores. */
+void man_module_cleanup(void);
+
 #endif /* MINIWEB_MODULES_MAN_H */

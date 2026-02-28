@@ -133,15 +133,15 @@ miniweb_worker_thread(void *arg)
 				http_request_t req = {.fd = fd,.method = method,.url = path,
 					.version = version,.keep_alive = keep_alive,.buffer = conn->buffer,
 					.buffer_len = conn->bytes_read,.client_addr = &conn->addr};
-					if (handler) handler(&req);
-					else http_send_error(&req, route_path_known(path) ? 405 : 404,
-						route_path_known(path) ? "Method Not Allowed" : "Not Found");
 				int handler_result = 0;
 				if (handler){
 					handler_result = handler(&req);
 				}else{
-					http_send_error(&req, route_path_known(path) ? 405 : 404,
-									route_path_known(path) ? "Method Not Allowed" : "Not Found");
+					int known_path = route_path_known(path);
+					handler_result = http_send_error(
+						&req,
+						known_path ? 405 : 404,
+						known_path ? "Method Not Allowed" : "Not Found");
 				}
 				if (req.keep_alive && handler_result == 0 && try_rearm_keepalive(rt, conn)){
 					close_conn = 0;

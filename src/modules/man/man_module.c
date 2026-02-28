@@ -73,6 +73,7 @@ typedef struct {
 
 static man_render_shard_t g_man_cache[MAN_RENDER_CACHE_SHARDS];
 static pthread_once_t     g_man_cache_once = PTHREAD_ONCE_INIT;
+static int                g_man_cache_initialized = 0;
 
 
 /* =========================================================================
@@ -92,6 +93,7 @@ static int         compare_string_ptrs(const void *a, const void *b);
  * ========================================================================= */
 static sem_t g_mandoc_semaphore;
 static pthread_once_t g_mandoc_sem_once = PTHREAD_ONCE_INIT;
+static int g_mandoc_sem_initialized = 0;
 
 static void
 mandoc_semaphore_init(void)
@@ -100,7 +102,8 @@ mandoc_semaphore_init(void)
     int max_concurrent = config.threads * 2;
     if (max_concurrent > 16)
         max_concurrent = 16;
-    sem_init(&g_mandoc_semaphore, 0, max_concurrent);
+    if (sem_init(&g_mandoc_semaphore, 0, max_concurrent) == 0)
+        g_mandoc_sem_initialized = 1;
 }
 
 
@@ -113,6 +116,7 @@ man_render_cache_init(void)
 {
     for (int i = 0; i < MAN_RENDER_CACHE_SHARDS; i++)
         pthread_mutex_init(&g_man_cache[i].lock, NULL);
+    g_man_cache_initialized = 1;
 }
 
 /* Build a compact lookup key: "area/section/page.format" */
@@ -1267,6 +1271,27 @@ man_api_handler(http_request_t *req)
     int ret = http_response_send(req, resp);
     http_response_free(resp);
     return ret;
+}
+
+
+void
+man_module_cleanup(void)
+{
+    if (g_man_cache_initialized) {
+        for (int si = 0; si < MAN_RENDER_CACHE_SHARDS; si++) {
+            man_render_shard_t *shard = &g_man_cache[si];
+            pthread_mutex_lock(&shard->lock);
+            for (int i = 0; i < MAN_RENDER_CACHE_SLOTS; i++) {
+                free(shard->slots[i].body);
+                shard->slots[i].body = NULL;
+                shard->slots[i].len = 0;
+                shard->slots[i].key[0] = '\0';
+            }
+            pthread_mutex_unlock(&shard->lock);
+        }
+    }
+    if (g_mandoc_sem_initialized)
+        (void)sem_destroy(&g_mandoc_semaphore);
 }
 
 /* =========================================================================

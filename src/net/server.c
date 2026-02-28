@@ -43,7 +43,7 @@ handle_accept(miniweb_server_runtime_t *rt)
 		}
 		set_nonblock(cfd);
 		miniweb_connection_t *conn = miniweb_connection_alloc(&rt->pool, cfd,
-															  &caddr, rt->config->max_conns);
+									  &caddr, rt->config->max_conns);
 		if (!conn) {
 			http_request_t req = {.fd = cfd,.method = "GET",.url = "/",
 				.version = "HTTP/1.1",.keep_alive = 0};
@@ -65,12 +65,21 @@ static void
 sweep_idle(miniweb_server_runtime_t *rt)
 {
 	time_t now = time(NULL);
+	int to_close[MINIWEB_MAX_CONNECTIONS];
+	int close_count = 0;
+
+	pthread_mutex_lock(&rt->pool.lock);
 	for (int fd = 0; fd < MINIWEB_MAX_CONNECTIONS; fd++) {
 		miniweb_connection_t *c = rt->pool.connections[fd];
-		if (c && (now - c->last_activity) > rt->config->conn_timeout) {
-			close(fd);
-			miniweb_connection_free(&rt->pool, fd);
-		}
+		if (c && (now - c->last_activity) > rt->config->conn_timeout)
+			to_close[close_count++] = fd;
+	}
+	pthread_mutex_unlock(&rt->pool.lock);
+
+	for (int i = 0; i < close_count; i++) {
+		int fd = to_close[i];
+		close(fd);
+		miniweb_connection_free(&rt->pool, fd);
 	}
 }
 
@@ -80,16 +89,22 @@ miniweb_server_run(miniweb_server_runtime_t *rt)
 {
 	struct sockaddr_in sa;
 	pthread_t threads[MINIWEB_THREAD_POOL_SIZE];
+	int started_threads = 0;
+	int rc = -1;
 	miniweb_worker_runtime_t worker_rt = {.running = &rt->running,
 		.kq_fd = &rt->kq_fd,.config = rt->config,.queue = &rt->queue,
 		.pool = &rt->pool};
 
-		rt->running = 1;
-		miniweb_work_queue_init(&rt->queue);
-		miniweb_connection_pool_init(&rt->pool);
-		rt->listen_fd = socket(AF_INET, SOCK_STREAM, 0);
-		if (rt->listen_fd < 0)
-			return -1;
+	rt->running = 1;
+	rt->listen_fd = -1;
+	rt->kq_fd = -1;
+	miniweb_work_queue_init(&rt->queue);
+	miniweb_connection_pool_init(&rt->pool);
+
+	rt->listen_fd = socket(AF_INET, SOCK_STREAM, 0);
+	if (rt->listen_fd < 0)
+		goto out;
+
 	int on = 1;
 	setsockopt(rt->listen_fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
 	set_nonblock(rt->listen_fd);
@@ -97,19 +112,30 @@ miniweb_server_run(miniweb_server_runtime_t *rt)
 	sa.sin_family = AF_INET;
 	sa.sin_port = htons(rt->config->port);
 	if (inet_pton(AF_INET, rt->config->bind_addr, &sa.sin_addr) != 1)
-		return -1;
+		goto out;
 	if (bind(rt->listen_fd, (struct sockaddr *)&sa, sizeof(sa)) < 0 ||
 		listen(rt->listen_fd, MINIWEB_LISTEN_BACKLOG) < 0)
-		return -1;
+		goto out;
+
 	rt->kq_fd = kqueue();
 	if (rt->kq_fd < 0)
-		return -1;
+		goto out;
+
 	struct kevent chg;
 	EV_SET(&chg, rt->listen_fd, EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, NULL);
 	if (kevent(rt->kq_fd, &chg, 1, NULL, 0, NULL) < 0)
-		return -1;
-	for (int i = 0; i < rt->config->threads; i++)
-		pthread_create(&threads[i], NULL, miniweb_worker_thread, &worker_rt);
+		goto out;
+
+	for (int i = 0; i < rt->config->threads; i++) {
+		if (pthread_create(&threads[i], NULL, miniweb_worker_thread, &worker_rt)
+			!= 0) {
+			log_error("pthread_create failed for worker %d", i);
+			rt->running = 0;
+			miniweb_work_queue_broadcast_shutdown(&rt->queue);
+			goto out;
+		}
+		started_threads++;
+	}
 
 	struct kevent events[MINIWEB_MAX_EVENTS];
 	time_t last_sweep = time(NULL);
@@ -147,10 +173,23 @@ miniweb_server_run(miniweb_server_runtime_t *rt)
 			}
 		}
 	}
+
+	rc = 0;
+
+out:
+	rt->running = 0;
 	miniweb_work_queue_broadcast_shutdown(&rt->queue);
-	for (int i = 0; i < rt->config->threads; i++)
+	for (int i = 0; i < started_threads; i++)
 		pthread_join(threads[i], NULL);
-	return 0;
+	if (rt->kq_fd >= 0) {
+		close(rt->kq_fd);
+		rt->kq_fd = -1;
+	}
+	if (rt->listen_fd >= 0) {
+		close(rt->listen_fd);
+		rt->listen_fd = -1;
+	}
+	return rc;
 }
 
 /** Request asynchronous server shutdown from signal handler context. */
