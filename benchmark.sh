@@ -652,7 +652,7 @@ printf '▶  Assets dir  : %s\n' "$ASSETS_DIR"
 echo ""
 echo "Performing post-benchmark health check..."
 sleep 2
-health_check=$(curl -s -o /dev/null -w "%{http_code}" "${BASE_URL}/api/metrics" 2>/dev/null)
+health_check=$(curl -s --max-time 5 -o /dev/null -w "%{http_code}" "${BASE_URL}/api/metrics" 2>/dev/null || printf "000")
 if [ "$health_check" = "200" ]; then
     echo "✅ Server is healthy (HTTP 200)"
 else
