@@ -101,7 +101,19 @@ miniweb_worker_thread(void *arg)
 		(miniweb_connection_t *)miniweb_work_queue_pop(rt->queue, rt->running);
 		if (!conn)
 			break;
-		int fd = conn->fd, close_conn = 1, done = 0;
+
+		/*
+		 * Queue entries are raw pointers. The dispatcher may close/free and
+		 * recycle a connection before a worker dequeues it (idle sweep, EOF,
+		 * queue backpressure). Validate that this pointer still owns fd/gen
+		 * before touching mutable fields like bytes_read/buffer.
+		 */
+		int fd = conn->fd;
+		if (fd < 0 || fd >= MINIWEB_MAX_CONNECTIONS ||
+			miniweb_connection_is_stale(rt->pool, fd, conn))
+			continue;
+
+		int close_conn = 1, done = 0;
 		while (!done) {
 			ssize_t n = recv(fd, conn->buffer + conn->bytes_read,
 							 (size_t)rt->config->max_req_size - conn->bytes_read - 1, 0);
