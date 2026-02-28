@@ -1,4 +1,4 @@
-.Dd February 26, 2026
+.Dd February 28, 2026
 .Dt MINIWEB 1
 .Os OpenBSD
 .Sh NAME
@@ -208,6 +208,31 @@ is a filesystem cache under
 with a 300-second TTL.
 On a full miss, mandoc is invoked as a subprocess.
 Cache invalidation requires a server restart or TTL expiry.
+.El
+
+
+.Sh RELIABILITY NOTES
+Recent hardening updates include:
+.Bl -dash -compact
+.It
+Worker request dispatch now executes each matched handler exactly once per
+request.
+.It
+Idle-connection sweeping uses synchronized pool inspection to avoid dispatcher
+vs worker races under high load.
+.It
+HTTP response header assembly clamps/truncates safely and rejects overlong
+header blocks instead of performing unsafe pointer arithmetic.
+.It
+Server startup now uses unified cleanup paths so listen/kqueue descriptors are
+closed on all initialization failures.
+.It
+Forwarded client-IP and HTTPS proxy headers are only trusted when the socket
+peer IP matches
+.Cm trusted_proxy .
+.It
+Shutdown performs explicit cleanup of process-global HTTP/man caches and man
+module semaphore resources.
 .El
 
 .Sh PERFORMANCE

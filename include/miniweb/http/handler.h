@@ -65,6 +65,9 @@ int  http_response_send(http_request_t *req, http_response_t *resp);
 /** Free response object and owned body buffer when configured. */
 void http_response_free(http_response_t *resp);
 
+/** Release global HTTP handler caches/pools allocated at runtime. */
+void http_handler_globals_cleanup(void);
+
 /** Lookup one request header value by case-insensitive name. */
 const char *http_request_get_header(http_request_t *req, const char *name);
 

@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <miniweb/core/config.h>
+#include <miniweb/core/conf.h>
 #include <miniweb/http/handler.h>
 #include <poll.h>
 #include <pthread.h>
@@ -29,6 +30,8 @@
 #define FILE_CACHE_MAX_AGE_SEC 240
 #define RESPONSE_POOL_SHARDS 16
 #define FILE_CACHE_SHARDS 16
+
+extern miniweb_conf_t config;
 
 /**
  * @brief Internal data structure.
@@ -112,6 +115,7 @@ typedef struct {
 
 static file_cache_shard_t file_cache_shards[FILE_CACHE_SHARDS];
 static pthread_once_t cache_once = PTHREAD_ONCE_INIT;
+static int g_http_globals_initialized = 0;
 
 static void
 http_handler_globals_init(void)
@@ -124,6 +128,7 @@ http_handler_globals_init(void)
 		file_cache_shards[i].cache_insert_tokens =
 		    FILE_CACHE_INSERTS_PER_SEC;
 	}
+	g_http_globals_initialized = 1;
 }
 
 static inline unsigned long
@@ -378,6 +383,26 @@ file_cache_lookup(const char *path, const struct stat *st, char **out,
 	return found;
 }
 
+
+void
+http_handler_globals_cleanup(void)
+{
+	if (!g_http_globals_initialized)
+		return;
+
+	for (int shard_idx = 0; shard_idx < FILE_CACHE_SHARDS; shard_idx++) {
+		file_cache_shard_t *shard = &file_cache_shards[shard_idx];
+		pthread_mutex_lock(&shard->lock);
+		for (int i = 0; i < FILE_CACHE_SLOTS; i++) {
+			free(shard->entries[i].data);
+			shard->entries[i].data = NULL;
+			memset(shard->entries[i].path, 0, sizeof(shard->entries[i].path));
+			shard->entries[i].len = 0;
+		}
+		pthread_mutex_unlock(&shard->lock);
+	}
+}
+
 /* Create response */
 /**
  * @brief Http response create.
@@ -456,12 +481,15 @@ void
 http_response_add_header(http_response_t *resp, const char *name,
 			 const char *value)
 {
-	int len = snprintf(resp->headers + resp->headers_len,
-			   sizeof(resp->headers) - resp->headers_len,
+	if (resp->headers_len >= sizeof(resp->headers))
+		return;
+	size_t space = sizeof(resp->headers) - resp->headers_len;
+	int len = snprintf(resp->headers + resp->headers_len, space,
 			   "%s: %s\r\n", name, value);
-	if (len > 0) {
-		resp->headers_len += len;
-	}
+	if (len > 0 && (size_t)len < space)
+		resp->headers_len += (size_t)len;
+	else if (space > 0)
+		resp->headers_len = sizeof(resp->headers) - 1;
 }
 
 /* Write exactly n bytes, retrying on partial writes.
@@ -613,20 +641,24 @@ http_response_send(http_request_t *req, http_response_t *resp)
 		     "Server: MiniWeb/kqueue\r\n",
 		     resp->status_code, status_text, resp->content_type,
 		     resp->body_len, req->keep_alive ? "keep-alive" : "close");
+	if (header_len < 0 || (size_t)header_len >= sizeof(header))
+		return -1;
 
 	/* Append custom headers if they fit */
 	if (resp->headers_len > 0) {
-		int space = (int)sizeof(header) - header_len;
-		if ((int)resp->headers_len < space) {
-			memcpy(header + header_len, resp->headers,
-			       resp->headers_len);
+		size_t used = (size_t)header_len;
+		size_t space = sizeof(header) - used;
+		if (resp->headers_len < space) {
+			memcpy(header + used, resp->headers, resp->headers_len);
 			header_len += (int)resp->headers_len;
 		}
 	}
 
 	/* Terminate header section */
-	header_len +=
-	    snprintf(header + header_len, sizeof(header) - header_len, "\r\n");
+	if ((size_t)header_len + 2 >= sizeof(header))
+		return -1;
+	header[header_len++] = '\r';
+	header[header_len++] = '\n';
 
 	// fprintf(stderr, "[HTTP] Sending response: status=%d, type=%s,
 	// length=%zu\n", 		resp->status_code, resp->content_type,
@@ -757,31 +789,35 @@ http_request_get_header(http_request_t *req, const char *name)
 const char *
 http_request_get_client_ip(http_request_t *req)
 {
-	/* X-Real-IP */
-	const char *real_ip = http_request_get_header(req, "X-Real-IP");
-	if (real_ip && real_ip[0]) {
-		/* already stored in req->hdr_scratch; copy to ip_scratch
-		 * so it survives a subsequent get_header call */
-		strlcpy(req->ip_scratch, real_ip, sizeof(req->ip_scratch));
-		return req->ip_scratch;
+	char peer_ip[INET_ADDRSTRLEN] = {0};
+	if (req->client_addr)
+		inet_ntop(AF_INET, &req->client_addr->sin_addr, peer_ip, sizeof(peer_ip));
+
+	int trusted = (config.trusted_proxy[0] != '\0' &&
+		strcmp(peer_ip, config.trusted_proxy) == 0);
+	if (trusted) {
+		/* X-Real-IP */
+		const char *real_ip = http_request_get_header(req, "X-Real-IP");
+		if (real_ip && real_ip[0]) {
+			strlcpy(req->ip_scratch, real_ip, sizeof(req->ip_scratch));
+			return req->ip_scratch;
+		}
+
+		/* X-Forwarded-For: take the first entry */
+		const char *forwarded = http_request_get_header(req, "X-Forwarded-For");
+		if (forwarded && forwarded[0]) {
+			const char *comma = strchr(forwarded, ',');
+			size_t len =
+			    comma ? (size_t)(comma - forwarded) : strlen(forwarded);
+			if (len >= sizeof(req->ip_scratch))
+				len = sizeof(req->ip_scratch) - 1;
+			memcpy(req->ip_scratch, forwarded, len);
+			req->ip_scratch[len] = '\0';
+			return req->ip_scratch;
+		}
 	}
 
-	/* X-Forwarded-For: take the first entry */
-	const char *forwarded = http_request_get_header(req, "X-Forwarded-For");
-	if (forwarded && forwarded[0]) {
-		const char *comma = strchr(forwarded, ',');
-		size_t len =
-		    comma ? (size_t)(comma - forwarded) : strlen(forwarded);
-		if (len >= sizeof(req->ip_scratch))
-			len = sizeof(req->ip_scratch) - 1;
-		memcpy(req->ip_scratch, forwarded, len);
-		req->ip_scratch[len] = '\0';
-		return req->ip_scratch;
-	}
-
-	/* Fall back to socket peer address */
-	inet_ntop(AF_INET, &req->client_addr->sin_addr, req->ip_scratch,
-		  sizeof(req->ip_scratch));
+	strlcpy(req->ip_scratch, peer_ip, sizeof(req->ip_scratch));
 	return req->ip_scratch;
 }
 
@@ -795,6 +831,13 @@ http_request_get_client_ip(http_request_t *req)
 int
 http_request_is_https(http_request_t *req)
 {
+	char peer_ip[INET_ADDRSTRLEN] = {0};
+	if (req->client_addr)
+		inet_ntop(AF_INET, &req->client_addr->sin_addr, peer_ip, sizeof(peer_ip));
+	if (!(config.trusted_proxy[0] != '\0' &&
+	      strcmp(peer_ip, config.trusted_proxy) == 0))
+		return 0;
+
 	const char *proto = http_request_get_header(req, "X-Forwarded-Proto");
 	return (proto && strcmp(proto, "https") == 0);
 }

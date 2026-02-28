@@ -7,6 +7,7 @@
 #include <miniweb/core/conf.h>
 #include <miniweb/core/config.h>
 #include <miniweb/core/log.h>
+#include <miniweb/modules/man.h>
 #include <miniweb/net/server.h>
 #include <miniweb/platform/openbsd/security.h>
 #include <miniweb/render/template_engine.h>
@@ -109,12 +110,19 @@ main(int argc, char *argv[])
 	log_info("Routes registered — listening");
 
 	g_server.config = &config;
-	signal(SIGINT, handle_signal);
-	signal(SIGTERM, handle_signal);
+	struct sigaction sa;
+	memset(&sa, 0, sizeof(sa));
+	sa.sa_handler = handle_signal;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = 0;
+	(void)sigaction(SIGINT, &sa, NULL);
+	(void)sigaction(SIGTERM, &sa, NULL);
 	miniweb_apply_openbsd_security(&config);
 	(void)miniweb_server_run(&g_server);
 
 	log_info("MiniWeb shutting down");
+	man_module_cleanup();
+	http_handler_globals_cleanup();
 	template_cache_cleanup();
 	log_close();
 	return 0;
