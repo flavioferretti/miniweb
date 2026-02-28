@@ -23,7 +23,12 @@ SRCS=      ${SRCDIR}/app_main.c \
            ${SRCDIR}/modules/networking/networking_module.c \
            ${SRCDIR}/modules/networking/networking_service.c \
            ${SRCDIR}/modules/networking/networking_json.c \
-           ${SRCDIR}/http/response.c \
+           ${SRCDIR}/http/response_api.c \
+           ${SRCDIR}/http/response_helpers.c \
+           ${SRCDIR}/http/response_file.c \
+           ${SRCDIR}/http/response_io.c \
+           ${SRCDIR}/http/response_pool.c \
+           ${SRCDIR}/http/response_file_cache.c \
            ${SRCDIR}/modules/packages/packages_module.c \
            ${SRCDIR}/modules/packages/packages_service.c \
            ${SRCDIR}/modules/packages/packages_json.c \
@@ -55,7 +60,12 @@ OBJS=      ${BUILDDIR}/app_main.o \
            ${BUILDDIR}/networking_module.o \
            ${BUILDDIR}/networking_service.o \
            ${BUILDDIR}/networking_json.o \
-           ${BUILDDIR}/http_response.o \
+           ${BUILDDIR}/http_response_api.o \
+           ${BUILDDIR}/http_response_helpers.o \
+           ${BUILDDIR}/http_response_file.o \
+           ${BUILDDIR}/http_response_io.o \
+           ${BUILDDIR}/http_response_pool.o \
+           ${BUILDDIR}/http_response_file_cache.o \
            ${BUILDDIR}/packages_module.o \
            ${BUILDDIR}/packages_service.o \
            ${BUILDDIR}/packages_json.o \
@@ -122,9 +132,29 @@ ${BUILDDIR}/packages_module.o: ${SRCDIR}/modules/packages/packages_module.c
 	@mkdir -p ${BUILDDIR}
 	${CC} ${CFLAGS} -c ${SRCDIR}/modules/packages/packages_module.c -o $@
 
-${BUILDDIR}/http_response.o: ${SRCDIR}/http/response.c ${SRCDIR}/core/log.c
+${BUILDDIR}/http_response_api.o: ${SRCDIR}/http/response_api.c
 	@mkdir -p ${BUILDDIR}
-	${CC} ${CFLAGS} -c ${SRCDIR}/http/response.c -o $@
+	${CC} ${CFLAGS} -c ${SRCDIR}/http/response_api.c -o $@
+
+${BUILDDIR}/http_response_helpers.o: ${SRCDIR}/http/response_helpers.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/http/response_helpers.c -o $@
+
+${BUILDDIR}/http_response_file.o: ${SRCDIR}/http/response_file.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/http/response_file.c -o $@
+
+${BUILDDIR}/http_response_io.o: ${SRCDIR}/http/response_io.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/http/response_io.c -o $@
+
+${BUILDDIR}/http_response_pool.o: ${SRCDIR}/http/response_pool.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/http/response_pool.c -o $@
+
+${BUILDDIR}/http_response_file_cache.o: ${SRCDIR}/http/response_file_cache.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/http/response_file_cache.c -o $@
 
 ${BUILDDIR}/http_utils.o: ${SRCDIR}/http/utils.c
 	@mkdir -p ${BUILDDIR}
