@@ -42,10 +42,10 @@ The older “next steps” list is partially obsolete. Current split status:
 
 ## Current high-LOC hotspots (status after this update)
 
-- `src/modules/man/man_module.c` (1311 LOC)
 - `src/modules/networking/networking_module.c` (876 LOC)
 - `src/modules/packages/packages_module.c` (837 LOC)
 - `src/modules/metrics/metrics_module.c` (762 LOC)
+- `src/modules/man/man_render.c` (render/API orchestration after split)
 - `src/render/template_render.c` (516 LOC)
 
 These remain the primary extraction targets in next iterations.
@@ -89,18 +89,17 @@ Current LOC focus after this step is still man/networking/packages plus remainin
 
 ### Phase 2 — Man module
 
-One-round extraction target (single PR / single implementation pass):
+✅ Completed in this update.
 
-1. Split `man_module.c` into:
-   - `man_query.c` (query parsing/validation)
-   - `man_index.c` (index/search data prep)
-   - `man_render.c` (response payload shaping)
-2. Preserve `man_service.c` as service-facing facade.
-3. Keep `man_json.c` as serializer-only unit (or fold into `man_render.c` if it remains tiny).
-4. Phase completion criteria:
-   - `man_module.c` is reduced to route wiring + high-level request orchestration.
-   - query/index/render units expose narrow internal interfaces via `man_internal.h`.
-   - existing man endpoints remain behavior-compatible (status codes, payload shape, pagination semantics).
+Delivered layout:
+
+1. `man_query.c` (query parsing/validation).
+2. `man_index.c` (index/search data prep, path resolution, catalog/page list/search helpers).
+3. `man_render.c` (rendering pipeline, response payload shaping, cache lifecycle, API/render handlers).
+4. `man_module.c` preserved as service-facing facade for route wiring/cleanup delegation.
+5. `man_service.c` preserved as external service facade and `man_json.c` remains serializer-only.
+
+Phase completion criteria are now satisfied; behavior is kept compatible at endpoint contract level.
 
 ### Phase 3 — Networking module
 
@@ -135,7 +134,7 @@ One-round extraction target (same implementation batch as Man + Networking):
 
 The next extraction round should land **Phases 2-4 together** in one cohesive pass:
 
-1. Man split (`man_query.c`, `man_index.c`, `man_render.c`) with facade preserved.
+1. ✅ Man split (`man_query.c`, `man_index.c`, `man_render.c`) completed with facade preserved.
 2. Networking split (`networking_scan.c`, `networking_transform.c`, `networking_render.c`/`networking_json.c`) with OpenBSD specifics isolated to scan.
 3. Packages split (`packages_backend.c`, `packages_cache.c`, `packages_render.c`/`packages_json.c`) with deterministic HTTP handler.
 
