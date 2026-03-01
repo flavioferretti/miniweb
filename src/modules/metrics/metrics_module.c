@@ -28,6 +28,7 @@
 #include <miniweb/http/handler.h>
 #include <miniweb/http/utils.h>
 #include <miniweb/modules/metrics.h>
+#include <miniweb/modules/metrics_internal.h>
 
 #define JSON_BUFFER_SIZE 65536
 #define MB (1024 * 1024)
@@ -53,21 +54,6 @@ static void append_process_json_sections(char *top_cpu_json,
  * @brief Internal data structure.
  */
 typedef struct {
-	int64_t ts;
-	float cpu;
-	uint64_t cpu_total_ticks;
-	uint64_t cpu_idle_ticks;
-	uint32_t mem_used;
-	uint32_t mem_total;
-	uint32_t swap_used;
-	uint32_t net_rx;
-	uint32_t net_tx;
-} MetricSample;
-
-/**
- * @brief Internal data structure.
- */
-typedef struct {
 	MetricSample *buf;
 	size_t head;
 	size_t count;
@@ -86,8 +72,6 @@ static void metrics_ring_bootstrap(void);
 static void metrics_heartbeat_cb(void *ctx);
 static void metrics_take_sample(MetricSample *sample);
 static int metrics_read_cpu_ticks(uint64_t *total_ticks, uint64_t *idle_ticks);
-static void append_metrics_history_json(char *buffer, size_t size,
-					MetricSample *history, size_t count);
 static char *build_system_metrics_json(MetricSample *history,
 				       size_t history_count);
 static void metrics_snapshot_update(void);
@@ -318,38 +302,6 @@ metrics_ring_bootstrap(void)
  * @param history Sample history array.
  * @param count Number of history entries.
  */
-static void
-append_metrics_history_json(char *buffer, size_t size, MetricSample *history,
-			    size_t count)
-{
-	char *ptr = buffer;
-	int written = snprintf(ptr, size, "\"history\": [");
-	if (written < 0 || (size_t)written >= size) {
-		if (size > 0)
-			buffer[0] = '\0';
-		return;
-	}
-	ptr += written;
-	size -= (size_t)written;
-
-	for (size_t i = 0; i < count && size > 0; i++) {
-		written = snprintf(
-		    ptr, size,
-		    "%s{\"ts\": %lld, \"cpu\": %.2f, \"mem_used_mb\": %u, "
-		    "\"mem_total_mb\": %u, \"swap_used_mb\": %u, "
-		    "\"net_rx\": %u, \"net_tx\": %u}",
-		    (i > 0) ? ", " : "", (long long)history[i].ts,
-		    history[i].cpu, history[i].mem_used, history[i].mem_total,
-		    history[i].swap_used, history[i].net_rx, history[i].net_tx);
-		if (written < 0 || (size_t)written >= size)
-			break;
-		ptr += written;
-		size -= (size_t)written;
-	}
-
-	if (size > 0)
-		snprintf(ptr, size, "]");
-}
 
 /* qsort comparator: sort by descending RSS. */
 /**
@@ -1084,201 +1036,6 @@ metrics_get_process_stats(int *total, int *running, int *sleeping, int *zombie)
 }
 
 /**
- * @brief Append cpu stats json.
- * @param buffer Parameter used by this function.
- * @param size Parameter used by this function.
- */
-static void
-append_cpu_stats_json(char *buffer, size_t size)
-{
-	CpuStats stats;
-	if (metrics_get_cpu_stats(&stats) == 0) {
-		int used =
-		    stats.user + stats.nice + stats.system + stats.interrupt;
-		snprintf(buffer, size,
-			 "\"cpu\": {"
-			 "\"used_pct\": %d,"
-			 "\"user_pct\": %d,"
-			 "\"nice_pct\": %d,"
-			 "\"system_pct\": %d,"
-			 "\"interrupt_pct\": %d,"
-			 "\"idle_pct\": %d"
-			 "}",
-			 used, stats.user, stats.nice, stats.system,
-			 stats.interrupt, stats.idle);
-	} else {
-		snprintf(buffer, size, "\"cpu\": null");
-	}
-}
-
-/**
- * @brief Append memory stats json.
- * @param buffer Parameter used by this function.
- * @param size Parameter used by this function.
- */
-static void
-append_memory_stats_json(char *buffer, size_t size)
-{
-	MemoryStats stats;
-	if (metrics_get_memory_stats(&stats) == 0) {
-		snprintf(buffer, size,
-			 "\"memory\": {\"total_mb\": %ld, \"free_mb\": %ld, "
-			 "\"active_mb\": %ld, \"inactive_mb\": %ld, "
-			 "\"wired_mb\": %ld, "
-			 "\"cache_mb\": %ld}, "
-			 "\"swap\": {\"total_mb\": %ld, \"used_mb\": %ld}",
-			 stats.total_mb, stats.free_mb, stats.active_mb,
-			 stats.inactive_mb, stats.wired_mb, stats.cache_mb,
-			 stats.swap_total_mb, stats.swap_used_mb);
-	} else {
-		snprintf(
-		    buffer, size,
-		    "\"memory\": {\"total_mb\": 0, \"free_mb\": 0, "
-		    "\"active_mb\": 0, \"inactive_mb\": 0, \"wired_mb\": 0, "
-		    "\"cache_mb\": 0}, "
-		    "\"swap\": {\"total_mb\": 0, \"used_mb\": 0}");
-	}
-}
-
-/**
- * @brief Append load average json.
- * @param buffer Parameter used by this function.
- * @param size Parameter used by this function.
- */
-static void
-append_load_average_json(char *buffer, size_t size)
-{
-	LoadAverage load;
-	if (metrics_get_load_average(&load) == 0) {
-		snprintf(buffer, size,
-			 "\"load\": {\"1min\": %.2f, \"5min\": %.2f, "
-			 "\"15min\": %.2f}",
-			 load.load_1min, load.load_5min, load.load_15min);
-	} else {
-		snprintf(
-		    buffer, size,
-		    "\"load\": {\"1min\": 0.0, \"5min\": 0.0, \"15min\": 0.0}");
-	}
-}
-
-/**
- * @brief Append os info json.
- * @param buffer Parameter used by this function.
- * @param size Parameter used by this function.
- */
-static void
-append_os_info_json(char *buffer, size_t size)
-{
-	char os_type[64], os_release[64], machine[64];
-	if (metrics_get_os_info(os_type, os_release, machine,
-				sizeof(os_type)) == 0) {
-		snprintf(buffer, size,
-			 "\"os\": {\"type\": \"%s\", \"release\": \"%s\", "
-			 "\"machine\": \"%s\"}",
-			 os_type, os_release, machine);
-	} else {
-		snprintf(buffer, size,
-			 "\"os\": {\"type\": \"Unknown\", \"release\": "
-			 "\"Unknown\", \"machine\": \"Unknown\"}");
-	}
-}
-
-/**
- * @brief Append uptime json.
- * @param buffer Parameter used by this function.
- * @param size Parameter used by this function.
- */
-static void
-append_uptime_json(char *buffer, size_t size)
-{
-	char uptime_str[128];
-	if (metrics_get_uptime(uptime_str, sizeof(uptime_str)) == 0)
-		snprintf(buffer, size, "\"uptime\": \"%s\"", uptime_str);
-	else
-		snprintf(buffer, size, "\"uptime\": \"unknown\"");
-}
-
-/**
- * @brief Append disk info json.
- * @param buffer Parameter used by this function.
- * @param size Parameter used by this function.
- */
-static void
-append_disk_info_json(char *buffer, size_t size)
-{
-	DiskInfo disks[16];
-	int count = metrics_get_disk_usage(disks, 16);
-
-	char *ptr = buffer;
-	int written = 0;
-
-	written = snprintf(ptr, size, "\"disks\": [");
-	ptr += written;
-	size -= written;
-
-	for (int i = 0; i < count && size > 0; i++) {
-		if (i > 0) {
-			written = snprintf(ptr, size, ", ");
-			ptr += written;
-			size -= written;
-		}
-
-		written = snprintf(
-		    ptr, size,
-		    "{\"device\": \"%s\", \"mount\": \"%s\", \"total_mb\": "
-		    "%ld, \"used_mb\": %ld, \"percent\": %d}",
-		    disks[i].device, disks[i].mount_point, disks[i].total_mb,
-		    disks[i].used_mb, disks[i].percent_used);
-		ptr += written;
-		size -= written;
-	}
-
-	snprintf(ptr, size, "]");
-}
-
-/**
- * @brief Append top ports json.
- * @param buffer Parameter used by this function.
- * @param size Parameter used by this function.
- */
-static void
-append_top_ports_json(char *buffer, size_t size)
-{
-	PortInfo ports[20];
-	int count = metrics_get_top_ports(ports, 20);
-
-	char *ptr = buffer;
-	int written = 0;
-
-	written = snprintf(ptr, size, "\"top_ports\": [");
-	ptr += written;
-	size -= written;
-
-	for (int i = 0; i < count && size > 0; i++) {
-		if (i > 0) {
-			written = snprintf(ptr, size, ", ");
-			ptr += written;
-			size -= written;
-		}
-
-		written = snprintf(ptr, size,
-				   "{\"port\": %d, \"protocol\": \"%s\", "
-				   "\"connections\": %d, \"state\": \"%s\"}",
-				   ports[i].port, ports[i].protocol,
-				   ports[i].connection_count, ports[i].state);
-		ptr += written;
-		size -= written;
-	}
-
-	snprintf(ptr, size, "]");
-}
-
-/**
- * @brief Append network interfaces json.
- * @param buffer Parameter used by this function.
- * @param size Parameter used by this function.
- */
-/**
  * @brief Get system metrics json.
  * @return Returns 0 on success or a negative value on failure unless documented
  * otherwise.
@@ -1320,17 +1077,17 @@ build_system_metrics_json(MetricSample *history, size_t history_count)
 	if (metrics_get_hostname(hostname, sizeof(hostname)) == -1)
 		strlcpy(hostname, "localhost", sizeof(hostname));
 
-	append_cpu_stats_json(cpu_json, sizeof(cpu_json));
-	append_memory_stats_json(memory_json, sizeof(memory_json));
-	append_load_average_json(load_json, sizeof(load_json));
-	append_os_info_json(os_json, sizeof(os_json));
-	append_uptime_json(uptime_json, sizeof(uptime_json));
-	append_disk_info_json(disks_json, sizeof(disks_json));
-	append_top_ports_json(ports_json, sizeof(ports_json));
+	metrics_json_append_cpu_stats(cpu_json, sizeof(cpu_json));
+	metrics_json_append_memory_stats(memory_json, sizeof(memory_json));
+	metrics_json_append_load_average(load_json, sizeof(load_json));
+	metrics_json_append_os_info(os_json, sizeof(os_json));
+	metrics_json_append_uptime(uptime_json, sizeof(uptime_json));
+	metrics_json_append_disk_info(disks_json, sizeof(disks_json));
+	metrics_json_append_top_ports(ports_json, sizeof(ports_json));
 	append_process_json_sections(top_cpu_json, sizeof(top_cpu_json),
 				     top_mem_json, sizeof(top_mem_json),
 				     proc_stats_json, sizeof(proc_stats_json));
-	append_metrics_history_json(history_json, sizeof(history_json), history,
+	metrics_json_append_history(history_json, sizeof(history_json), history,
 				    history_count);
 
 	snprintf(json, JSON_BUFFER_SIZE,
