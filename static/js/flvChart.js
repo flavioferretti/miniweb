@@ -286,7 +286,19 @@
         return { min: min, max: max };
     }
 
-    function drawSmoothPath(ctx, points, tension) {
+    /**
+     * Draw a smooth Catmull-Rom spline through `points`.
+     * @param {CanvasRenderingContext2D} ctx
+     * @param {{x:number,y:number}[]}   points   - pixel coordinates
+     * @param {number}                  tension  - 0..0.5, default 0.22
+     * @param {number}                  [yMin]   - top pixel boundary (canvas T)
+     * @param {number}                  [yMax]   - bottom pixel boundary (canvas B)
+     *
+     * Control-point Y values are clamped to [yMin, yMax] so the bezier
+     * handle never escapes the plot area — prevents curves dipping below
+     * the X axis (or above the top) when data points hug the boundaries.
+     */
+    function drawSmoothPath(ctx, points, tension, yMin, yMax) {
         if (!points || !points.length) return;
         if (points.length === 1) {
             ctx.moveTo(points[0].x, points[0].y);
@@ -294,6 +306,10 @@
         }
 
         var t = Math.max(0, Math.min(0.5, tension || 0.22));
+        // Pixel bounds for clamping (yMin is the TOP of the plot area in px,
+        // yMax is the BOTTOM — larger pixel value because canvas Y grows downward).
+        var hasBounds = (yMin !== undefined && yMax !== undefined);
+
         ctx.moveTo(points[0].x, points[0].y);
 
         for (var i = 0; i < points.length - 1; i++) {
@@ -306,6 +322,13 @@
             var cp1y = p1.y + (p2.y - p0.y) * t;
             var cp2x = p2.x - (p3.x - p1.x) * t;
             var cp2y = p2.y - (p3.y - p1.y) * t;
+
+            // Clamp control-point Y to the visible plot area so Bezier
+            // handles never push the curve outside the chart boundaries.
+            if (hasBounds) {
+                cp1y = Math.max(yMin, Math.min(yMax, cp1y));
+                cp2y = Math.max(yMin, Math.min(yMax, cp2y));
+            }
 
             ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
         }
@@ -387,7 +410,7 @@
         ctx.fillStyle = grad;
 
         ctx.beginPath();
-        if (cfg.smoothLines && points.length > 2) drawSmoothPath(ctx, points, 0.2);
+        if (cfg.smoothLines && points.length > 2) drawSmoothPath(ctx, points, 0.2, T, B);
         else {
             ctx.moveTo(points[0].x, points[0].y);
             for (var i = 1; i < points.length; i++)
@@ -406,7 +429,7 @@
         ctx.lineJoin    = 'round';
         ctx.lineCap     = 'round';
         ctx.beginPath();
-        if (cfg.smoothLines && points.length > 2) drawSmoothPath(ctx, points, 0.2);
+        if (cfg.smoothLines && points.length > 2) drawSmoothPath(ctx, points, 0.2, T, B);
         else {
             ctx.moveTo(points[0].x, points[0].y);
             for (var j = 1; j < points.length; j++)
