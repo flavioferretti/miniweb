@@ -6,6 +6,29 @@
 
 set -eu
 
+CHECK_ONLY=0
+SMOKE_ONLY=0
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --check)
+            CHECK_ONLY=1
+            ;;
+        --smoke)
+            SMOKE_ONLY=1
+            ;;
+        *)
+            printf 'Usage: %s [--check] [--smoke]\n' "$0" >&2
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+if [ "$CHECK_ONLY" -eq 1 ] && [ "$SMOKE_ONLY" -eq 1 ]; then
+    printf 'ERROR: --check and --smoke cannot be used together\n' >&2
+    exit 1
+fi
+
 SERVER_PORT="${SERVER_PORT:-3000}"
 BASE_URL="http://localhost:${SERVER_PORT}"
 TEST_DURATION="${TEST_DURATION:-20}"
@@ -16,6 +39,16 @@ ASSETS_DIR="${OUTPUT_ROOT}/benchmark_assets"
 TIMESTAMP="$(date '+%Y-%m-%d %H:%M:%S')"
 CSV_FILE="${ASSETS_DIR}/results.csv"
 HTML_FILE="${OUTPUT_ROOT}/benchmark.html"
+RETRY_MAX_ATTEMPTS="${RETRY_MAX_ATTEMPTS:-4}"
+RETRY_INITIAL_BACKOFF="${RETRY_INITIAL_BACKOFF:-1}"
+RETRY_MAX_BACKOFF="${RETRY_MAX_BACKOFF:-8}"
+SMOKE_CONNECTIONS="${SMOKE_CONNECTIONS:-12}"
+SMOKE_DURATION="${SMOKE_DURATION:-5}"
+
+if [ "$SMOKE_ONLY" -eq 1 ]; then
+    TEST_DURATION="$SMOKE_DURATION"
+    CONNECTIONS="$SMOKE_CONNECTIONS"
+fi
 
 # ---------------------------------------------------------------------------
 # Endpoint definitions  (IDs, URLs, human names — must stay in sync)
@@ -89,6 +122,41 @@ get_http_code() {
     curl -s -G --max-time 3 -o /dev/null -w '%{http_code}' "${BASE_URL}${url}" 2>/dev/null || printf '000'
 }
 
+is_success_http_code() {
+    case "$1" in
+        200|201|202|204|301|302|304) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+check_endpoint_with_retry() {
+    typeset url="$1" attempt=1 code backoff
+    backoff="$RETRY_INITIAL_BACKOFF"
+
+    while [ "$attempt" -le "$RETRY_MAX_ATTEMPTS" ]; do
+        code="$(check_endpoint "$url")"
+        if is_success_http_code "$code"; then
+            printf '%s' "$code"
+            return 0
+        fi
+
+        if [ "$attempt" -lt "$RETRY_MAX_ATTEMPTS" ]; then
+            printf 'retry %s/%s (HTTP %s, waiting %ss) ... ' \
+                "$attempt" "$RETRY_MAX_ATTEMPTS" "$code" "$backoff" >&2
+            sleep "$backoff"
+            backoff=$((backoff * 2))
+            if [ "$backoff" -gt "$RETRY_MAX_BACKOFF" ]; then
+                backoff="$RETRY_MAX_BACKOFF"
+            fi
+        fi
+
+        attempt=$((attempt + 1))
+    done
+
+    printf '%s' "$code"
+    return 1
+}
+
 # ---------------------------------------------------------------------------
 # Startup banner + dependency checks
 # ---------------------------------------------------------------------------
@@ -98,6 +166,13 @@ printf 'Server URL  : %s\n' "$BASE_URL"
 printf 'Threads     : %s\n' "$THREADS"
 printf 'Duration    : %ss\n' "$TEST_DURATION"
 printf 'Connections : %s\n\n' "$CONNECTIONS"
+if [ "$CHECK_ONLY" -eq 1 ]; then
+    printf 'Mode        : preflight (--check)\n\n'
+elif [ "$SMOKE_ONLY" -eq 1 ]; then
+    printf 'Mode        : smoke (--smoke)\n'
+    printf 'Smoke conn  : %s\n' "$SMOKE_CONNECTIONS"
+    printf 'Smoke dur   : %ss\n\n' "$SMOKE_DURATION"
+fi
 
 for cmd in wrk gnuplot curl awk sed; do
     if ! command -v "$cmd" >/dev/null 2>&1; then
@@ -109,6 +184,39 @@ done
 if ! curl -s --max-time 3 "${BASE_URL}/static/test.html" >/dev/null 2>&1; then
     printf 'ERROR: server is unreachable at %s\n' "$BASE_URL" >&2
     exit 1
+fi
+
+if [ "$CHECK_ONLY" -eq 1 ]; then
+    total_endpoints=${#ENDPOINT_IDS[*]}
+    i=0
+    failed=0
+
+    printf 'Preflight endpoint reachability check\n'
+    printf '---------------------------------------------\n'
+    while [ "$i" -lt "$total_endpoints" ]; do
+        name="${ENDPOINT_NAMES[$i]}"
+        url="${ENDPOINT_URLS[$i]}"
+
+        printf '• %s (%s): ' "$name" "$url"
+        endpoint_code="$(check_endpoint_with_retry "$url")"
+
+        if is_success_http_code "$endpoint_code"; then
+            printf 'OK (HTTP %s)\n' "$endpoint_code"
+        else
+            printf 'FAILED (HTTP %s)\n' "$endpoint_code"
+            failed=$((failed + 1))
+        fi
+
+        i=$((i + 1))
+    done
+
+    if [ "$failed" -gt 0 ]; then
+        printf '\nPreflight failed: %s endpoint(s) are unreachable.\n' "$failed" >&2
+        exit 1
+    fi
+
+    printf '\nPreflight passed: all endpoints reachable.\n'
+    exit 0
 fi
 
 mkdir -p "$ASSETS_DIR"
@@ -127,19 +235,32 @@ while [ "$i" -lt "$total_endpoints" ]; do
     name="${ENDPOINT_NAMES[$i]}"
     url="${ENDPOINT_URLS[$i]}"
     safe_name="$(printf '%s' "$id" | tr '[:upper:]' '[:lower:]')"
-    sleep 5 ## cpu cooling pause
+
+    if [ "$SMOKE_ONLY" -eq 1 ]; then
+        case "$id" in
+            STATIC_HTML|STATIC_CSS|API_ROOT) ;;
+            *)
+                i=$((i + 1))
+                continue
+                ;;
+        esac
+    fi
+
+    if [ "$SMOKE_ONLY" -eq 1 ]; then
+        sleep 1
+    else
+        sleep 5 ## cpu cooling pause
+    fi
 
     printf '\n▶ Testing: %s\n' "$name"
     printf '  URL: %s\n' "${BASE_URL}${url}"
     printf '  Health check ... '
 
-    http_check="$(check_endpoint "$url")"
+    http_check="$(check_endpoint_with_retry "$url")"
 
-    case "$http_check" in
-        200|201|202|204|301|302|304)
+    if is_success_http_code "$http_check"; then
             printf 'OK (HTTP %s)\n' "$http_check"
-            ;;
-        *)
+    else
             printf 'FAILED (HTTP %s) — skipping endpoint\n' "$http_check"
             for conn in $CONNECTIONS; do
                 printf '%s,%s,0,0,0,0,0,0,0,"%s","%s",%s,HEALTH_FAILED\n' \
@@ -147,8 +268,7 @@ while [ "$i" -lt "$total_endpoints" ]; do
             done
             i=$((i + 1))
             continue
-            ;;
-    esac
+    fi
 
     for conn in $CONNECTIONS; do
         printf '  Connections: %3d ... ' "$conn"
@@ -187,11 +307,20 @@ while [ "$i" -lt "$total_endpoints" ]; do
             >> "$CSV_FILE"
 
         printf 'OK (%.1f req/s)\n' "$req_sec"
-        sleep 2
+        if [ "$SMOKE_ONLY" -eq 1 ]; then
+            sleep 1
+        else
+            sleep 2
+        fi
     done
 
     i=$((i + 1))
 done
+
+if [ "$SMOKE_ONLY" -eq 1 ]; then
+    printf '\nSmoke benchmark complete (3 endpoints, %ss each).\n' "$TEST_DURATION"
+    exit 0
+fi
 
 # ---------------------------------------------------------------------------
 # Gnuplot — overall graphs (aggregate all endpoints)
