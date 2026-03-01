@@ -253,6 +253,24 @@ Man render cache
 > On a full miss, mandoc is invoked as a subprocess.
 > Cache invalidation requires a server restart or TTL expiry.
 
+# RELIABILITY NOTES
+
+Recent hardening updates include:
+
+-	Worker request dispatch now executes each matched handler exactly once per
+	request.
+-	Idle-connection sweeping uses synchronized pool inspection to avoid dispatcher
+	vs worker races under high load.
+-	HTTP response header assembly clamps/truncates safely and rejects overlong
+	header blocks instead of performing unsafe pointer arithmetic.
+-	Server startup now uses unified cleanup paths so listen/kqueue descriptors are
+	closed on all initialization failures.
+-	Forwarded client-IP and HTTPS proxy headers are only trusted when the socket
+	peer IP matches
+	**trusted\_proxy**.
+-	Shutdown performs explicit cleanup of process-global HTTP/man caches and man
+	module semaphore resources.
+
 # PERFORMANCE
 
 For best throughput and tail latency, tune worker and cache settings together.
@@ -1240,4 +1258,4 @@ Recent bug fixes include:
 *	SQLite database path now properly stored.
 *	Heartbeat scheduler uses CLOCK\_MONOTONIC to avoid NTP skew.
 
-OpenBSD - February 26, 2026 - MINIWEB(1)
+OpenBSD - February 28, 2026 - MINIWEB(1)

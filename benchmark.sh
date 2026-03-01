@@ -10,7 +10,7 @@ SERVER_PORT="${SERVER_PORT:-3000}"
 BASE_URL="http://localhost:${SERVER_PORT}"
 TEST_DURATION="${TEST_DURATION:-20}"
 THREADS="${THREADS:-4}"
-CONNECTIONS="${CONNECTIONS:-4 8 16 32 64 128 256}"
+CONNECTIONS="${CONNECTIONS:-6 12 25 50 100 200}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-static}"
 ASSETS_DIR="${OUTPUT_ROOT}/benchmark_assets"
 TIMESTAMP="$(date '+%Y-%m-%d %H:%M:%S')"
@@ -187,13 +187,6 @@ while [ "$i" -lt "$total_endpoints" ]; do
             >> "$CSV_FILE"
 
         printf 'OK (%.1f req/s)\n' "$req_sec"
-        # After collecting results, check for high error rates
-#         if [ "$non_2xx" -gt 0 ]; then
-#             error_rate=$(awk "BEGIN {printf \"%.2f\", $non_2xx * 100 / $total_requests}")
-#             if (( $(echo "$error_rate > 1.0" | bc -l) )); then
-#                 echo "⚠️  WARNING: High error rate (${error_rate}%) for endpoint ${name}"
-#             fi
-#         fi
         sleep 2
     done
 
