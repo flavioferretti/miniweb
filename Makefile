@@ -19,7 +19,11 @@ SRCS=      ${SRCDIR}/app_main.c \
            ${SRCDIR}/modules/man/man_service.c \
            ${SRCDIR}/modules/man/man_json.c \
            ${SRCDIR}/http/utils.c \
+           ${SRCDIR}/http/utils_subprocess.c \
            ${SRCDIR}/router/url_registry.c \
+           ${SRCDIR}/router/url_registry_init.c \
+           ${SRCDIR}/router/url_registry_lookup.c \
+           ${SRCDIR}/router/url_registry_reverse.c \
            ${SRCDIR}/modules/networking/networking_module.c \
            ${SRCDIR}/modules/networking/networking_service.c \
            ${SRCDIR}/modules/networking/networking_json.c \
@@ -33,12 +37,16 @@ SRCS=      ${SRCDIR}/app_main.c \
            ${SRCDIR}/modules/packages/packages_service.c \
            ${SRCDIR}/modules/packages/packages_json.c \
            ${SRCDIR}/core/heartbeat.c \
+           ${SRCDIR}/core/heartbeat_schedule.c \
+           ${SRCDIR}/core/heartbeat_dispatch.c \
            ${SRCDIR}/router/router.c \
            ${SRCDIR}/router/module_attach.c \
            ${SRCDIR}/storage/sqlite_db.c \
            ${SRCDIR}/storage/sqlite_stmt.c \
            ${SRCDIR}/storage/sqlite_schema.c \
            ${SRCDIR}/core/conf.c \
+           ${SRCDIR}/core/conf_defaults.c \
+           ${SRCDIR}/core/conf_validation.c \
            ${SRCDIR}/core/log.c \
            ${SRCDIR}/net/work_queue.c \
            ${SRCDIR}/platform/openbsd/security.c
@@ -56,7 +64,11 @@ OBJS=      ${BUILDDIR}/app_main.o \
            ${BUILDDIR}/man_service.o \
            ${BUILDDIR}/man_json.o \
            ${BUILDDIR}/http_utils.o \
+           ${BUILDDIR}/http_utils_subprocess.o \
            ${BUILDDIR}/url_registry.o \
+           ${BUILDDIR}/url_registry_init.o \
+           ${BUILDDIR}/url_registry_lookup.o \
+           ${BUILDDIR}/url_registry_reverse.o \
            ${BUILDDIR}/networking_module.o \
            ${BUILDDIR}/networking_service.o \
            ${BUILDDIR}/networking_json.o \
@@ -70,12 +82,16 @@ OBJS=      ${BUILDDIR}/app_main.o \
            ${BUILDDIR}/packages_service.o \
            ${BUILDDIR}/packages_json.o \
            ${BUILDDIR}/heartbeat.o \
+           ${BUILDDIR}/heartbeat_schedule.o \
+           ${BUILDDIR}/heartbeat_dispatch.o \
            ${BUILDDIR}/router.o \
            ${BUILDDIR}/module_attach.o \
            ${BUILDDIR}/sqlite_db.o \
            ${BUILDDIR}/sqlite_stmt.o \
            ${BUILDDIR}/sqlite_schema.o \
            ${BUILDDIR}/conf.o \
+           ${BUILDDIR}/conf_defaults.o \
+           ${BUILDDIR}/conf_validation.o \
            ${BUILDDIR}/log.o \
            ${BUILDDIR}/work_queue.o \
            ${BUILDDIR}/security.o
@@ -160,6 +176,10 @@ ${BUILDDIR}/http_utils.o: ${SRCDIR}/http/utils.c
 	@mkdir -p ${BUILDDIR}
 	${CC} ${CFLAGS} -c ${SRCDIR}/http/utils.c -o $@
 
+${BUILDDIR}/http_utils_subprocess.o: ${SRCDIR}/http/utils_subprocess.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/http/utils_subprocess.c -o $@
+
 ${BUILDDIR}/app_main.o: ${SRCDIR}/app_main.c
 	@mkdir -p ${BUILDDIR}
 	${CC} ${CFLAGS} -c ${SRCDIR}/app_main.c -o $@
@@ -200,9 +220,29 @@ ${BUILDDIR}/url_registry.o: ${SRCDIR}/router/url_registry.c
 	@mkdir -p ${BUILDDIR}
 	${CC} ${CFLAGS} -c ${SRCDIR}/router/url_registry.c -o $@
 
+${BUILDDIR}/url_registry_init.o: ${SRCDIR}/router/url_registry_init.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/router/url_registry_init.c -o $@
+
+${BUILDDIR}/url_registry_lookup.o: ${SRCDIR}/router/url_registry_lookup.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/router/url_registry_lookup.c -o $@
+
+${BUILDDIR}/url_registry_reverse.o: ${SRCDIR}/router/url_registry_reverse.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/router/url_registry_reverse.c -o $@
+
 ${BUILDDIR}/heartbeat.o: ${SRCDIR}/core/heartbeat.c
 	@mkdir -p ${BUILDDIR}
 	${CC} ${CFLAGS} -c ${SRCDIR}/core/heartbeat.c -o $@
+
+${BUILDDIR}/heartbeat_schedule.o: ${SRCDIR}/core/heartbeat_schedule.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/core/heartbeat_schedule.c -o $@
+
+${BUILDDIR}/heartbeat_dispatch.o: ${SRCDIR}/core/heartbeat_dispatch.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/core/heartbeat_dispatch.c -o $@
 
 ${BUILDDIR}/router.o: ${SRCDIR}/router/router.c
 	@mkdir -p ${BUILDDIR}
@@ -228,6 +268,14 @@ ${BUILDDIR}/conf.o: ${SRCDIR}/core/conf.c
 	@mkdir -p ${BUILDDIR}
 	${CC} ${CFLAGS} -c ${SRCDIR}/core/conf.c -o $@
 
+${BUILDDIR}/conf_defaults.o: ${SRCDIR}/core/conf_defaults.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/core/conf_defaults.c -o $@
+
+${BUILDDIR}/conf_validation.o: ${SRCDIR}/core/conf_validation.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/core/conf_validation.c -o $@
+
 ${BUILDDIR}/log.o: ${SRCDIR}/core/log.c
 	@mkdir -p ${BUILDDIR}
 	${CC} ${CFLAGS} -c ${SRCDIR}/core/log.c -o $@
@@ -248,17 +296,17 @@ unit-tests: ${BUILDDIR}/routes_test ${BUILDDIR}/template_test ${BUILDDIR}/heartb
 integration-test: ${BUILDDIR}/${PROG}
 	bash ${TESTDIR}/integration_endpoints.sh
 
-${BUILDDIR}/routes_test: ${TESTDIR}/routes_test.c ${TESTDIR}/routes_test_stubs.c ${SRCDIR}/router/route_table.c ${SRCDIR}/router/url_registry.c ${SRCDIR}/router/router.c ${SRCDIR}/router/module_attach.c ${SRCDIR}/render/template_render.c ${SRCDIR}/http/utils.c ${SRCDIR}/http/response.c
+${BUILDDIR}/routes_test: ${TESTDIR}/routes_test.c ${TESTDIR}/routes_test_stubs.c ${SRCDIR}/router/route_table.c ${SRCDIR}/router/url_registry.c ${SRCDIR}/router/url_registry_init.c ${SRCDIR}/router/url_registry_lookup.c ${SRCDIR}/router/url_registry_reverse.c ${SRCDIR}/router/router.c ${SRCDIR}/router/module_attach.c ${SRCDIR}/render/template_render.c ${SRCDIR}/http/utils.c ${SRCDIR}/http/utils_subprocess.c ${SRCDIR}/http/response.c
 	@mkdir -p ${BUILDDIR}
-	${CC} ${CFLAGS} ${LDFLAGS} -I${INCDIR} -o $@ ${TESTDIR}/routes_test.c ${TESTDIR}/routes_test_stubs.c ${SRCDIR}/router/route_table.c ${SRCDIR}/router/url_registry.c ${SRCDIR}/router/router.c ${SRCDIR}/router/module_attach.c ${SRCDIR}/render/template_render.c ${SRCDIR}/http/utils.c ${SRCDIR}/http/response.c ${SRCDIR}/core/log.c ${LDADD}
+	${CC} ${CFLAGS} ${LDFLAGS} -I${INCDIR} -o $@ ${TESTDIR}/routes_test.c ${TESTDIR}/routes_test_stubs.c ${SRCDIR}/router/route_table.c ${SRCDIR}/router/url_registry.c ${SRCDIR}/router/url_registry_init.c ${SRCDIR}/router/url_registry_lookup.c ${SRCDIR}/router/url_registry_reverse.c ${SRCDIR}/router/router.c ${SRCDIR}/router/module_attach.c ${SRCDIR}/render/template_render.c ${SRCDIR}/http/utils.c ${SRCDIR}/http/utils_subprocess.c ${SRCDIR}/http/response.c ${SRCDIR}/core/log.c ${LDADD}
 
 ${BUILDDIR}/template_test: ${TESTDIR}/template_test.c ${SRCDIR}/render/template_render.c
 	@mkdir -p ${BUILDDIR}
 	${CC} ${CFLAGS} -I${INCDIR} -o $@ ${TESTDIR}/template_test.c ${SRCDIR}/render/template_render.c
 
-${BUILDDIR}/heartbeat_test: ${TESTDIR}/heartbeat_test.c ${SRCDIR}/core/heartbeat.c
+${BUILDDIR}/heartbeat_test: ${TESTDIR}/heartbeat_test.c ${SRCDIR}/core/heartbeat.c ${SRCDIR}/core/heartbeat_schedule.c ${SRCDIR}/core/heartbeat_dispatch.c
 	@mkdir -p ${BUILDDIR}
-	${CC} ${CFLAGS} ${LDFLAGS} -I${INCDIR} -o $@ ${TESTDIR}/heartbeat_test.c ${SRCDIR}/core/heartbeat.c ${LDADD}
+	${CC} ${CFLAGS} ${LDFLAGS} -I${INCDIR} -o $@ ${TESTDIR}/heartbeat_test.c ${SRCDIR}/core/heartbeat.c ${SRCDIR}/core/heartbeat_schedule.c ${SRCDIR}/core/heartbeat_dispatch.c ${LDADD}
 
 .PHONY: all clean run debug install man unit-tests integration-test
 
