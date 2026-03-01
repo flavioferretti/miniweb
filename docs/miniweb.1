@@ -1057,7 +1057,7 @@ Compatibility-first refactor: feature parity required at every phase.
 .It
 .%U https://github.com/flavioferretti/miniweb
 .Sh REFACTOR STATUS
-As of 2026-02-26, server runtime decomposition is complete for the
+As of 2026-03-01, server runtime decomposition is complete for the
 networking layer and documentation is up to date:
 .Bl -bullet
 .It
@@ -1070,24 +1070,30 @@ networking layer and documentation is up to date:
 .Pa src/net/worker.c
 \(em worker request read, parse, and route dispatch.
 .El
-Module decomposition scaffolds are in place for all four feature modules:
+Module decomposition has started for metrics and scaffolded all feature modules:
 .Bl -bullet
 .It
-.Pa src/modules/metrics/metrics_service.c
-and
 .Pa src/modules/metrics/metrics_json.c
+and
+.Pa src/modules/metrics/metrics_process.c
+now own serializer/process extraction logic, while
+.Pa src/modules/metrics/metrics_module.c
+keeps orchestration and endpoint wiring.
 .It
 .Pa src/modules/networking/networking_service.c
 and
 .Pa src/modules/networking/networking_json.c
+remain scaffold units pending full extraction.
 .It
 .Pa src/modules/man/man_service.c
 and
 .Pa src/modules/man/man_json.c
+remain scaffold units pending full extraction.
 .It
 .Pa src/modules/packages/packages_service.c
 and
 .Pa src/modules/packages/packages_json.c
+remain scaffold units pending full extraction.
 .El
 All Doxygen
 .Sq TODO

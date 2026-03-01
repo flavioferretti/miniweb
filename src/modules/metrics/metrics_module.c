@@ -3,8 +3,6 @@
 
 #include <miniweb/router/router.h>
 #include <sys/mount.h>
-#include <sys/param.h>
-#include <sys/proc.h>
 #include <sys/sched.h> /* CPUSTATES, CP_USER, CP_SYS, CP_IDLE, CP_INTR */
 #include <sys/socket.h>
 #include <sys/swap.h>
@@ -14,7 +12,6 @@
 
 #include <errno.h>
 #include <pthread.h>
-#include <pwd.h> /* For struct passwd (process usernames). */
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,14 +38,6 @@
 		if (config_verbose)                                            \
 			log_debug("[METRICS] " __VA_ARGS__);                   \
 	} while (0)
-
-static struct kinfo_proc *get_procs_snapshot(size_t *nprocs);
-static void append_process_json_sections(char *top_cpu_json,
-					 size_t top_cpu_json_size,
-					 char *top_mem_json,
-					 size_t top_mem_json_size,
-					 char *proc_stats_json,
-					 size_t proc_stats_json_size);
 
 /**
  * @brief Internal data structure.
@@ -302,99 +291,6 @@ metrics_ring_bootstrap(void)
  * @param history Sample history array.
  * @param count Number of history entries.
  */
-
-/* qsort comparator: sort by descending RSS. */
-/**
- * @brief Compare memory.
- * @param a Parameter used by this function.
- * @param b Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented
- * otherwise.
- */
-static int
-compare_memory(const void *a, const void *b)
-{
-	const struct kinfo_proc *pa = a;
-	const struct kinfo_proc *pb = b;
-
-	/* p_vm_rssize is resident set size in pages. */
-	if (pa->p_vm_rssize < pb->p_vm_rssize)
-		return 1;
-	if (pa->p_vm_rssize > pb->p_vm_rssize)
-		return -1;
-	return 0;
-}
-
-/* Helper to snapshot all running processes. */
-/**
- * @brief Get procs snapshot.
- * @param nprocs Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented
- * otherwise.
- */
-static struct kinfo_proc *
-get_procs_snapshot(size_t *nprocs)
-{
-	int mib[6];
-	size_t size;
-	struct kinfo_proc *kp = NULL; /* Initialize to NULL. */
-	int retry = 0;
-	size_t elem_size;
-	int nelem;
-
-	mib[0] = CTL_KERN;
-	mib[1] = KERN_PROC;
-	mib[2] = KERN_PROC_ALL;
-	mib[3] = 0;
-	mib[4] = sizeof(struct kinfo_proc);
-	mib[5] = 0;
-
-	elem_size = sizeof(struct kinfo_proc);
-
-	for (retry = 0; retry < 4; retry++) {
-		if (sysctl(mib, 6, NULL, &size, NULL, 0) == -1) {
-			LOG("sysctl size query failed: %s", strerror(errno));
-			return NULL;
-		}
-
-		nelem = size / elem_size;
-		nelem = nelem * (5 + retry) / 4;
-		size = nelem * elem_size;
-		mib[5] = nelem;
-
-		kp = malloc(size);
-		if (kp == NULL) {
-			LOG("malloc failed for %zu bytes", size);
-			return NULL;
-		}
-
-		if (sysctl(mib, 6, kp, &size, NULL, 0) == 0) {
-			*nprocs = size / elem_size;
-			LOG("Successfully retrieved %zu processes (retry %d, "
-			    "requested %d)",
-			    *nprocs, retry, nelem);
-			return kp;
-		}
-
-		if (errno != ENOMEM) {
-			LOG("sysctl data query failed: %s", strerror(errno));
-			free(kp);
-			kp = NULL; /* Critical: reset pointer to NULL after
-				      free. */
-			return NULL;
-		}
-
-		LOG("ENOMEM on retry %d (requested %d elements), trying "
-		    "again...",
-		    retry, nelem);
-		free(kp);
-		kp = NULL; /* Critical: reset pointer to NULL after free. */
-	}
-
-	LOG("Failed to get process list after %d retries", retry);
-	/* kp is guaranteed to be NULL here. */
-	return NULL;
-}
 
 /**
  * @brief Metrics get cpu stats.
@@ -675,370 +571,10 @@ metrics_get_network_interfaces(NetworkInterface *interfaces, int max_interfaces)
 }
 
 /**
- * @brief Build top-process and process-stats JSON sections.
- * @param top_cpu_json Output buffer for top CPU processes section.
- * @param top_cpu_json_size Size of top_cpu_json.
- * @param top_mem_json Output buffer for top memory processes section.
- * @param top_mem_json_size Size of top_mem_json.
- * @param proc_stats_json Output buffer for process stats section.
- * @param proc_stats_json_size Size of proc_stats_json.
- */
-static void
-append_process_json_sections(char *top_cpu_json, size_t top_cpu_json_size,
-			     char *top_mem_json, size_t top_mem_json_size,
-			     char *proc_stats_json, size_t proc_stats_json_size)
-{
-	size_t nprocs = 0;
-	struct kinfo_proc *kp = get_procs_snapshot(&nprocs);
-	if (!kp) {
-		snprintf(top_cpu_json, top_cpu_json_size,
-			 "\"top_cpu_processes\": []");
-		snprintf(top_mem_json, top_mem_json_size,
-			 "\"top_memory_processes\": []");
-		snprintf(proc_stats_json, proc_stats_json_size,
-			 "\"process_stats\": null");
-		return;
-	}
-
-	/* Build process_stats from the same sysctl snapshot to avoid
-	 * extra process-list queries. */
-	int total = (int)nprocs;
-	int running = 0, sleeping = 0, zombie = 0;
-	for (size_t i = 0; i < nprocs; i++) {
-		if (kp[i].p_stat == SRUN || kp[i].p_stat == SONPROC)
-			running++;
-		else if (kp[i].p_stat == SSLEEP)
-			sleeping++;
-		else if (kp[i].p_stat == SZOMB)
-			zombie++;
-	}
-	snprintf(proc_stats_json, proc_stats_json_size,
-		 "\"process_stats\": {\"total\": %d, \"running\": %d, "
-		 "\"sleeping\": %d, \"zombie\": %d}",
-		 total, running, sleeping, zombie);
-
-	/* Top CPU. */
-	ProcessInfo top_cpu[10];
-	int top_cpu_count = 0;
-	for (size_t i = 0; i < nprocs && top_cpu_count < 10; i++) {
-		if (kp[i].p_stat == SZOMB)
-			continue;
-		top_cpu[top_cpu_count].pid = kp[i].p_pid;
-		top_cpu[top_cpu_count].cpu_percent =
-		    (100.0f * kp[i].p_pctcpu) / FSCALE;
-		strlcpy(top_cpu[top_cpu_count].command, kp[i].p_comm,
-			sizeof(top_cpu[top_cpu_count].command));
-
-		struct passwd pwd;
-		struct passwd *result = NULL;
-		char pwbuf[1024];
-		if (getpwuid_r(kp[i].p_uid, &pwd, pwbuf, sizeof(pwbuf),
-			       &result) == 0 &&
-		    result != NULL) {
-			strlcpy(top_cpu[top_cpu_count].user, pwd.pw_name,
-				sizeof(top_cpu[top_cpu_count].user));
-		} else {
-			snprintf(top_cpu[top_cpu_count].user,
-				 sizeof(top_cpu[top_cpu_count].user), "%d",
-				 kp[i].p_uid);
-		}
-		top_cpu_count++;
-	}
-
-	for (int i = 0; i < top_cpu_count - 1; i++) {
-		for (int j = 0; j < top_cpu_count - i - 1; j++) {
-			if (top_cpu[j].cpu_percent <
-			    top_cpu[j + 1].cpu_percent) {
-				ProcessInfo tmp = top_cpu[j];
-				top_cpu[j] = top_cpu[j + 1];
-				top_cpu[j + 1] = tmp;
-			}
-		}
-	}
-
-	char *cpu_ptr = top_cpu_json;
-	size_t cpu_left = top_cpu_json_size;
-	int w = snprintf(cpu_ptr, cpu_left, "\"top_cpu_processes\": [");
-	cpu_ptr += w;
-	cpu_left -= (size_t)w;
-	for (int i = 0; i < top_cpu_count && cpu_left > 100; i++) {
-		if (i > 0) {
-			w = snprintf(cpu_ptr, cpu_left, ", ");
-			cpu_ptr += w;
-			cpu_left -= (size_t)w;
-		}
-		w = snprintf(
-		    cpu_ptr, cpu_left,
-		    "{\"user\": \"%s\", \"pid\": %d, \"cpu_percent\": %.1f, "
-		    "\"command\": \"%s\"}",
-		    top_cpu[i].user, top_cpu[i].pid, top_cpu[i].cpu_percent,
-		    top_cpu[i].command);
-		cpu_ptr += w;
-		cpu_left -= (size_t)w;
-	}
-	snprintf(cpu_ptr, cpu_left, "]");
-
-	/* Top memory requires a sorted copy, still from same snapshot. */
-	struct kinfo_proc *kmem = malloc(nprocs * sizeof(struct kinfo_proc));
-	if (!kmem) {
-		snprintf(top_mem_json, top_mem_json_size,
-			 "\"top_memory_processes\": []");
-		free(kp);
-		return;
-	}
-	memcpy(kmem, kp, nprocs * sizeof(struct kinfo_proc));
-	qsort(kmem, nprocs, sizeof(struct kinfo_proc), compare_memory);
-
-	MemoryStats mem_stats;
-	long total_memory_kb = 0;
-	if (metrics_get_memory_stats(&mem_stats) == 0)
-		total_memory_kb = mem_stats.total_mb * 1024;
-	long page_size = sysconf(_SC_PAGESIZE);
-
-	char *mem_ptr = top_mem_json;
-	size_t mem_left = top_mem_json_size;
-	w = snprintf(mem_ptr, mem_left, "\"top_memory_processes\": [");
-	mem_ptr += w;
-	mem_left -= (size_t)w;
-
-	int mem_count = 0;
-	for (size_t i = 0; i < nprocs && mem_count < 10 && mem_left > 100;
-	     i++) {
-		if (kmem[i].p_stat == SZOMB)
-			continue;
-		ProcessInfo proc;
-		proc.pid = kmem[i].p_pid;
-		proc.memory_mb =
-		    (kmem[i].p_vm_rssize * page_size) / (1024 * 1024);
-		if (total_memory_kb > 0) {
-			long mem_kb = (kmem[i].p_vm_rssize * page_size) / 1024;
-			proc.memory_percent =
-			    (100.0f * mem_kb) / total_memory_kb;
-		} else {
-			proc.memory_percent = 0.0f;
-		}
-		strlcpy(proc.command, kmem[i].p_comm, sizeof(proc.command));
-		struct passwd pwd;
-		struct passwd *result = NULL;
-		char pwbuf[1024];
-		if (getpwuid_r(kmem[i].p_uid, &pwd, pwbuf, sizeof(pwbuf),
-			       &result) == 0 &&
-		    result != NULL) {
-			strlcpy(proc.user, pwd.pw_name, sizeof(proc.user));
-		} else {
-			snprintf(proc.user, sizeof(proc.user), "%d",
-				 kmem[i].p_uid);
-		}
-		if (mem_count > 0) {
-			w = snprintf(mem_ptr, mem_left, ", ");
-			mem_ptr += w;
-			mem_left -= (size_t)w;
-		}
-		w = snprintf(
-		    mem_ptr, mem_left,
-		    "{\"user\": \"%s\", \"pid\": %d, \"memory_percent\": %.1f, "
-		    "\"memory_mb\": %d, \"command\": \"%s\"}",
-		    proc.user, proc.pid, proc.memory_percent, proc.memory_mb,
-		    proc.command);
-		mem_ptr += w;
-		mem_left -= (size_t)w;
-		mem_count++;
-	}
-	snprintf(mem_ptr, mem_left, "]");
-
-	free(kmem);
-	free(kp);
-}
-
-/**
- * @brief Metrics get top cpu processes.
- * @param processes Parameter used by this function.
- * @param max_processes Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented
- * otherwise.
- */
-int
-metrics_get_top_cpu_processes(ProcessInfo *processes, int max_processes)
-{
-	LOG("Getting top CPU processes (max: %d)...", max_processes);
-	size_t nprocs = 0;
-	struct kinfo_proc *kp = get_procs_snapshot(&nprocs);
-	if (!kp) {
-		LOG("ERROR: get_procs_snapshot returned NULL");
-		return 0;
-	}
-
-	LOG("Processing %zu processes for CPU stats...", nprocs);
-
-	ProcessInfo *temp = calloc(nprocs, sizeof(ProcessInfo));
-	if (!temp) {
-		free(kp);
-		return 0;
-	}
-
-	int valid_count = 0;
-	for (size_t i = 0; i < nprocs; i++) {
-		if (kp[i].p_stat == SZOMB)
-			continue;
-
-		temp[valid_count].pid = kp[i].p_pid;
-		temp[valid_count].cpu_percent =
-		    (100.0 * kp[i].p_pctcpu) / FSCALE;
-		strlcpy(temp[valid_count].command, kp[i].p_comm,
-			sizeof(temp[valid_count].command));
-
-		/* Critical: use getpwuid_r() instead of getpwuid(). */
-		struct passwd pwd;
-		struct passwd *result;
-		char pwbuf[1024];
-
-		if (getpwuid_r(kp[i].p_uid, &pwd, pwbuf, sizeof(pwbuf),
-			       &result) == 0 &&
-		    result != NULL) {
-			strlcpy(temp[valid_count].user, pwd.pw_name,
-				sizeof(temp[valid_count].user));
-		} else {
-			snprintf(temp[valid_count].user,
-				 sizeof(temp[valid_count].user), "%d",
-				 kp[i].p_uid);
-		}
-
-		valid_count++;
-	}
-
-	/* Sort by descending CPU usage. */
-	for (int i = 0; i < valid_count - 1; i++) {
-		for (int j = 0; j < valid_count - i - 1; j++) {
-			if (temp[j].cpu_percent < temp[j + 1].cpu_percent) {
-				ProcessInfo swap = temp[j];
-				temp[j] = temp[j + 1];
-				temp[j + 1] = swap;
-			}
-		}
-	}
-
-	int count = (valid_count < max_processes) ? valid_count : max_processes;
-	for (int i = 0; i < count; i++) {
-		processes[i] = temp[i];
-	}
-
-	LOG("Returning %d CPU processes (valid: %d, total: %zu)", count,
-	    valid_count, nprocs);
-	free(temp);
-	free(kp);
-	return count;
-}
-
-/**
- * @brief Metrics get top memory processes.
- * @param processes Parameter used by this function.
- * @param max_processes Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented
- * otherwise.
- */
-int
-metrics_get_top_memory_processes(ProcessInfo *processes, int max_processes)
-{
-	LOG("Getting top memory processes (max: %d)...", max_processes);
-	size_t nprocs = 0;
-	struct kinfo_proc *kp = get_procs_snapshot(&nprocs);
-	if (!kp) {
-		LOG("ERROR: get_procs_snapshot returned NULL");
-		return 0;
-	}
-
-	LOG("Processing %zu processes for memory stats...", nprocs);
-
-	qsort(kp, nprocs, sizeof(struct kinfo_proc), compare_memory);
-
-	MemoryStats mem_stats;
-	long total_memory_kb = 0;
-	if (metrics_get_memory_stats(&mem_stats) == 0) {
-		total_memory_kb = mem_stats.total_mb * 1024;
-	}
-
-	int count = 0;
-	long page_size = sysconf(_SC_PAGESIZE);
-
-	for (size_t i = 0; i < nprocs && count < max_processes; i++) {
-		if (kp[i].p_stat == SZOMB)
-			continue;
-
-		processes[count].pid = kp[i].p_pid;
-		processes[count].memory_mb =
-		    (kp[i].p_vm_rssize * page_size) / (1024 * 1024);
-
-		if (total_memory_kb > 0) {
-			long mem_kb = (kp[i].p_vm_rssize * page_size) / 1024;
-			processes[count].memory_percent =
-			    (100.0 * mem_kb) / total_memory_kb;
-		} else {
-			processes[count].memory_percent = 0.0;
-		}
-
-		strlcpy(processes[count].command, kp[i].p_comm,
-			sizeof(processes[count].command));
-
-		/* Critical: use getpwuid_r() instead of getpwuid(). */
-		struct passwd pwd;
-		struct passwd *result;
-		char pwbuf[1024];
-
-		if (getpwuid_r(kp[i].p_uid, &pwd, pwbuf, sizeof(pwbuf),
-			       &result) == 0 &&
-		    result != NULL) {
-			strlcpy(processes[count].user, pwd.pw_name,
-				sizeof(processes[count].user));
-		} else {
-			snprintf(processes[count].user,
-				 sizeof(processes[count].user), "%d",
-				 kp[i].p_uid);
-		}
-
-		count++;
-	}
-
-	LOG("Returning %d memory processes (total: %zu)", count, nprocs);
-	free(kp);
-	return count;
-}
-
-/* 1. Aggregate process counters. */
-/**
- * @brief Metrics get process stats.
- * @param total Parameter used by this function.
- * @param running Parameter used by this function.
- * @param sleeping Parameter used by this function.
- * @param zombie Parameter used by this function.
- * @return Returns 0 on success or a negative value on failure unless documented
- * otherwise.
- */
-int
-metrics_get_process_stats(int *total, int *running, int *sleeping, int *zombie)
-{
-	size_t nprocs = 0;
-	struct kinfo_proc *kp = get_procs_snapshot(&nprocs);
-	if (!kp)
-		return -1;
-
-	*total = (int)nprocs;
-	*running = *sleeping = *zombie = 0;
-	for (size_t i = 0; i < nprocs; i++) {
-		if (kp[i].p_stat == SRUN || kp[i].p_stat == SONPROC)
-			(*running)++;
-		else if (kp[i].p_stat == SSLEEP)
-			(*sleeping)++;
-		else if (kp[i].p_stat == SZOMB)
-			(*zombie)++;
-	}
-	free(kp);
-	return 0;
-}
-
-/**
- * @brief Get system metrics json.
- * @return Returns 0 on success or a negative value on failure unless documented
- * otherwise.
+ * @brief Build a complete metrics JSON payload.
+ * @param history History ring samples in chronological order.
+ * @param history_count Number of samples in history.
+ * @return Heap-allocated JSON string on success, NULL on failure.
  */
 static char *
 build_system_metrics_json(MetricSample *history, size_t history_count)
@@ -1084,9 +620,9 @@ build_system_metrics_json(MetricSample *history, size_t history_count)
 	metrics_json_append_uptime(uptime_json, sizeof(uptime_json));
 	metrics_json_append_disk_info(disks_json, sizeof(disks_json));
 	metrics_json_append_top_ports(ports_json, sizeof(ports_json));
-	append_process_json_sections(top_cpu_json, sizeof(top_cpu_json),
-				     top_mem_json, sizeof(top_mem_json),
-				     proc_stats_json, sizeof(proc_stats_json));
+	metrics_process_append_json_sections(top_cpu_json,
+	    sizeof(top_cpu_json), top_mem_json, sizeof(top_mem_json),
+	    proc_stats_json, sizeof(proc_stats_json));
 	metrics_json_append_history(history_json, sizeof(history_json), history,
 				    history_count);
 
@@ -1112,6 +648,9 @@ build_system_metrics_json(MetricSample *history, size_t history_count)
 	return json;
 }
 
+/**
+ * @brief Refresh the cached metrics JSON snapshot from ring history.
+ */
 static void
 metrics_snapshot_update(void)
 {
@@ -1129,6 +668,10 @@ metrics_snapshot_update(void)
 	pthread_mutex_unlock(&g_metrics_snapshot_lock);
 }
 
+/**
+ * @brief Get a stable metrics JSON snapshot for HTTP responses.
+ * @return Newly allocated JSON string, or NULL on allocation failure.
+ */
 char *
 get_system_metrics_json(void)
 {
@@ -1168,7 +711,9 @@ get_system_metrics_json(void)
 }
 
 /**
- * Handler HTTP
+ * @brief Handle GET /api/metrics by returning the latest metrics snapshot.
+ * @param req Request context used by the HTTP layer.
+ * @return HTTP send status code from the response layer.
  */
 int
 metrics_handler(http_request_t *req)
@@ -1201,6 +746,11 @@ metrics_handler(http_request_t *req)
 	return ret;
 }
 
+/**
+ * @brief Attach metrics API routes to the router.
+ * @param r Router to receive route registrations.
+ * @return 0 on success, -1 on registration failure.
+ */
 int
 metrics_module_attach_routes(struct router *r)
 {

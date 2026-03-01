@@ -15,6 +15,7 @@ SRCS=      ${SRCDIR}/app_main.c \
            ${SRCDIR}/modules/metrics/metrics_module.c \
            ${SRCDIR}/modules/metrics/metrics_service.c \
            ${SRCDIR}/modules/metrics/metrics_json.c \
+           ${SRCDIR}/modules/metrics/metrics_process.c \
            ${SRCDIR}/modules/man/man_module.c \
            ${SRCDIR}/modules/man/man_service.c \
            ${SRCDIR}/modules/man/man_json.c \
@@ -60,6 +61,7 @@ OBJS=      ${BUILDDIR}/app_main.o \
            ${BUILDDIR}/metrics_module.o \
            ${BUILDDIR}/metrics_service.o \
            ${BUILDDIR}/metrics_json.o \
+           ${BUILDDIR}/metrics_process.o \
            ${BUILDDIR}/man_module.o \
            ${BUILDDIR}/man_service.o \
            ${BUILDDIR}/man_json.o \
@@ -203,6 +205,10 @@ ${BUILDDIR}/man_module.o: ${SRCDIR}/modules/man/man_module.c
 ${BUILDDIR}/metrics_module.o: ${SRCDIR}/modules/metrics/metrics_module.c
 	@mkdir -p ${BUILDDIR}
 	${CC} ${CFLAGS} -c ${SRCDIR}/modules/metrics/metrics_module.c -o $@
+
+${BUILDDIR}/metrics_process.o: ${SRCDIR}/modules/metrics/metrics_process.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/modules/metrics/metrics_process.c -o $@
 
 ${BUILDDIR}/networking_module.o: ${SRCDIR}/modules/networking/networking_module.c
 	@mkdir -p ${BUILDDIR}
