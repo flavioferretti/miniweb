@@ -16,6 +16,8 @@ typedef struct miniweb_server_runtime {
 	volatile sig_atomic_t running;  /* Changed from plain int */
 	int kq_fd;
 	int listen_fd;
+	int signal_pipe_rfd;
+	int signal_pipe_wfd;
 	int spare_fd;
 	miniweb_conf_t *config;
 	miniweb_work_queue_t queue;
