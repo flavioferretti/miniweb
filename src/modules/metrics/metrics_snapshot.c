@@ -1,14 +1,15 @@
 /* metrics_snapshot.c - Metrics sampling ring and cached snapshot lifecycle */
 
-#include <sys/sched.h> /* CPUSTATES, CP_IDLE */
-#include <sys/sysctl.h>
-
 #include <errno.h>
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef __OpenBSD__
+#include <sys/sched.h> /* CPUSTATES, CP_IDLE */
+#include <sys/sysctl.h>
+#endif
 #include <time.h>
 
 #include <miniweb/core/config.h>
