@@ -2,6 +2,9 @@
 /* metrics_module.c - System metrics collection (Native kqueue version) */
 
 #include <miniweb/router/router.h>
+#include <stdint.h>
+#include <time.h>
+
 #include <sys/mount.h>
 #include <sys/sched.h> /* CPUSTATES, CP_USER, CP_SYS, CP_IDLE, CP_INTR */
 #include <sys/socket.h>
@@ -12,11 +15,9 @@
 
 #include <errno.h>
 #include <pthread.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include <unistd.h>
 
 #include <miniweb/core/config.h>
