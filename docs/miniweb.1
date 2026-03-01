@@ -211,6 +211,33 @@ Cache invalidation requires a server restart or TTL expiry.
 .El
 
 
+.Sh MODULE LAYOUT STATUS
+Current module layout in
+.Pa src/modules
+reflects the ongoing refactor plan:
+.Bl -dash -compact
+.It
+Manual pages: facade + split internals
+.Pq Pa man_module.c , Pa man_service.c , Pa man_json.c , Pa man_query.c , Pa man_index.c , Pa man_render.c .
+.It
+Metrics: orchestrator + collectors + snapshots + process/json units
+.Pq Pa metrics_module.c , Pa metrics_collectors.c , Pa metrics_snapshot.c , Pa metrics_process.c , Pa metrics_json.c .
+.It
+Networking and packages still keep larger orchestrator units and are next extraction targets.
+.El
+.Pp
+For the manual pages stack,
+.Pa man_module.c
+is now route wiring and cleanup delegation only;
+query validation/parsing lives in
+.Pa man_query.c ,
+index/search preparation lives in
+.Pa man_index.c ,
+and HTTP payload shaping/render caching lives in
+.Pa man_render.c .
+.Pa man_service.c
+remains the service-facing facade.
+
 .Sh RELIABILITY NOTES
 Recent hardening updates include:
 .Bl -dash -compact

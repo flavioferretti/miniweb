@@ -19,6 +19,9 @@ SRCS=      ${SRCDIR}/app_main.c \
            ${SRCDIR}/modules/metrics/metrics_process.c \
            ${SRCDIR}/modules/metrics/metrics_snapshot.c \
            ${SRCDIR}/modules/man/man_module.c \
+           ${SRCDIR}/modules/man/man_query.c \
+           ${SRCDIR}/modules/man/man_index.c \
+           ${SRCDIR}/modules/man/man_render.c \
            ${SRCDIR}/modules/man/man_service.c \
            ${SRCDIR}/modules/man/man_json.c \
            ${SRCDIR}/http/utils.c \
@@ -67,6 +70,9 @@ OBJS=      ${BUILDDIR}/app_main.o \
            ${BUILDDIR}/metrics_process.o \
            ${BUILDDIR}/metrics_snapshot.o \
            ${BUILDDIR}/man_module.o \
+           ${BUILDDIR}/man_query.o \
+           ${BUILDDIR}/man_index.o \
+           ${BUILDDIR}/man_render.o \
            ${BUILDDIR}/man_service.o \
            ${BUILDDIR}/man_json.o \
            ${BUILDDIR}/http_utils.o \
@@ -205,6 +211,18 @@ ${BUILDDIR}/worker.o: ${SRCDIR}/net/worker.c
 ${BUILDDIR}/man_module.o: ${SRCDIR}/modules/man/man_module.c
 	@mkdir -p ${BUILDDIR}
 	${CC} ${CFLAGS} -c ${SRCDIR}/modules/man/man_module.c -o $@
+
+${BUILDDIR}/man_query.o: ${SRCDIR}/modules/man/man_query.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/modules/man/man_query.c -o $@
+
+${BUILDDIR}/man_index.o: ${SRCDIR}/modules/man/man_index.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/modules/man/man_index.c -o $@
+
+${BUILDDIR}/man_render.o: ${SRCDIR}/modules/man/man_render.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/modules/man/man_render.c -o $@
 
 ${BUILDDIR}/metrics_module.o: ${SRCDIR}/modules/metrics/metrics_module.c
 	@mkdir -p ${BUILDDIR}
