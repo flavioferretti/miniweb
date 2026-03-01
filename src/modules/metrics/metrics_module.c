@@ -1,6 +1,9 @@
 /* metrics_module.c - Metrics API routing and system collectors */
 
 #include <miniweb/router/router.h>
+#include <stdint.h>
+#include <time.h>
+
 #include <sys/mount.h>
 #include <sys/sched.h> /* CPUSTATES, CP_USER, CP_SYS, CP_IDLE, CP_INTR */
 #include <sys/socket.h>
@@ -9,7 +12,9 @@
 #include <sys/types.h>
 #include <sys/utsname.h> /* Required for uname() and struct utsname. */
 
-#include <stdint.h>
+
+#include <errno.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
