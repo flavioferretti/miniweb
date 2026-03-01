@@ -89,28 +89,56 @@ Current LOC focus after this step is still man/networking/packages plus remainin
 
 ### Phase 2 — Man module
 
+One-round extraction target (single PR / single implementation pass):
+
 1. Split `man_module.c` into:
    - `man_query.c` (query parsing/validation)
    - `man_index.c` (index/search data prep)
    - `man_render.c` (response payload shaping)
 2. Preserve `man_service.c` as service-facing facade.
 3. Keep `man_json.c` as serializer-only unit (or fold into `man_render.c` if it remains tiny).
+4. Phase completion criteria:
+   - `man_module.c` is reduced to route wiring + high-level request orchestration.
+   - query/index/render units expose narrow internal interfaces via `man_internal.h`.
+   - existing man endpoints remain behavior-compatible (status codes, payload shape, pagination semantics).
 
 ### Phase 3 — Networking module
+
+One-round extraction target (same implementation batch as Man):
 
 1. Split `networking_module.c` into:
    - `networking_scan.c` (iface/route/socket collection)
    - `networking_transform.c` (normalization and filtering)
    - `networking_render.c` / `networking_json.c` (serialization)
 2. Ensure OpenBSD-specific sysctl/socket code stays encapsulated in scan layer.
+3. Phase completion criteria:
+   - `networking_module.c` keeps handler registration and top-level flow control only.
+   - scan layer owns all OS-collection details and raw record acquisition.
+   - transform layer performs deterministic filtering/sorting independent of HTTP concerns.
+   - render/json layer is serializer-only and receives pre-normalized data.
 
 ### Phase 4 — Packages module
+
+One-round extraction target (same implementation batch as Man + Networking):
 
 1. Split `packages_module.c` into:
    - `packages_backend.c` (pkg_info/pkg_* subprocess and parsing)
    - `packages_cache.c` (optional short-lived cache)
    - `packages_render.c` / `packages_json.c` (serialization)
 2. Keep HTTP handler thin and deterministic.
+3. Phase completion criteria:
+   - backend layer encapsulates subprocess invocation, parsing, and error mapping.
+   - cache layer (if enabled) is bounded/TTL-based and explicitly invalidated.
+   - module entrypoint remains side-effect-light and testable with backend/cache seams.
+
+## Next execution batch (apply together)
+
+The next extraction round should land **Phases 2-4 together** in one cohesive pass:
+
+1. Man split (`man_query.c`, `man_index.c`, `man_render.c`) with facade preserved.
+2. Networking split (`networking_scan.c`, `networking_transform.c`, `networking_render.c`/`networking_json.c`) with OpenBSD specifics isolated to scan.
+3. Packages split (`packages_backend.c`, `packages_cache.c`, `packages_render.c`/`packages_json.c`) with deterministic HTTP handler.
+
 
 ## OpenBSD-style direction (unchanged)
 

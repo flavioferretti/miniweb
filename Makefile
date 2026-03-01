@@ -13,6 +13,7 @@ SRCS=      ${SRCDIR}/app_main.c \
            ${SRCDIR}/router/route_table.c \
            ${SRCDIR}/render/template_render.c \
            ${SRCDIR}/modules/metrics/metrics_module.c \
+           ${SRCDIR}/modules/metrics/metrics_collectors.c \
            ${SRCDIR}/modules/metrics/metrics_service.c \
            ${SRCDIR}/modules/metrics/metrics_json.c \
            ${SRCDIR}/modules/metrics/metrics_process.c \
@@ -60,6 +61,7 @@ OBJS=      ${BUILDDIR}/app_main.o \
            ${BUILDDIR}/route_table.o \
            ${BUILDDIR}/template_render.o \
            ${BUILDDIR}/metrics_module.o \
+           ${BUILDDIR}/metrics_collectors.o \
            ${BUILDDIR}/metrics_service.o \
            ${BUILDDIR}/metrics_json.o \
            ${BUILDDIR}/metrics_process.o \
@@ -207,6 +209,10 @@ ${BUILDDIR}/man_module.o: ${SRCDIR}/modules/man/man_module.c
 ${BUILDDIR}/metrics_module.o: ${SRCDIR}/modules/metrics/metrics_module.c
 	@mkdir -p ${BUILDDIR}
 	${CC} ${CFLAGS} -c ${SRCDIR}/modules/metrics/metrics_module.c -o $@
+
+${BUILDDIR}/metrics_collectors.o: ${SRCDIR}/modules/metrics/metrics_collectors.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -c ${SRCDIR}/modules/metrics/metrics_collectors.c -o $@
 
 ${BUILDDIR}/metrics_process.o: ${SRCDIR}/modules/metrics/metrics_process.c
 	@mkdir -p ${BUILDDIR}
