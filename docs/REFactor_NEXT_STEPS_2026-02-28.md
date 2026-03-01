@@ -1,48 +1,109 @@
-# MiniWeb refactor track (post HTTP response split)
+# MiniWeb refactor track (status refresh + modules extraction)
 
 ## Scope analyzed in `src/`
 
-- `src/http/`: high complexity surface, request/response marshalling, header parsing, static file path.
+- `src/http/`: request/response marshalling, header parsing, static file path and subprocess helpers.
 - `src/net/`: accept loop, worker handoff, queueing, kqueue lifecycle.
 - `src/router/`: route lookup tables, URL registry, module attachment.
 - `src/render/`: template expansion and page composition logic.
 - `src/core/`: config loading, logging, heartbeat management.
-- `src/modules/*`: feature modules (metrics/man/networking/packages) and JSON rendering.
+- `src/modules/*`: feature modules (`metrics`, `man`, `networking`, `packages`) and JSON/service delegation.
 - `src/storage/`: sqlite connection/schema/statement wrappers.
 - `src/platform/openbsd/`: OpenBSD specific security hooks.
 
-## What was extracted now
+## What is already extracted (current tree)
 
-`src/http/response.c` was split into narrow files to reduce per-file LOC and isolate responsibilities:
+The older “next steps” list is partially obsolete. Current split status:
 
-- `src/http/response_api.c`: response lifecycle + serialization.
-- `src/http/response_helpers.c`: request header/proxy helpers and generic response helpers.
-- `src/http/response_file.c`: file serving path, cache use, stream fallback.
-- `src/http/response_io.c`: robust write/writev retry loops.
-- `src/http/response_pool.c`: response object pool shards.
-- `src/http/response_file_cache.c`: sharded static file cache + lifecycle.
-- `include/miniweb/http/response_internal.h`: private shared contracts.
+- HTTP response path is split into:
+  - `src/http/response_api.c`
+  - `src/http/response_helpers.c`
+  - `src/http/response_file.c`
+  - `src/http/response_io.c`
+  - `src/http/response_pool.c`
+  - `src/http/response_file_cache.c`
+  - shared private contract: `include/miniweb/http/response_internal.h`
+- Router URL registry is split into:
+  - `src/router/url_registry.c`
+  - `src/router/url_registry_init.c`
+  - `src/router/url_registry_lookup.c`
+  - `src/router/url_registry_reverse.c`
+  - shared private contract: `src/router/url_registry_internal.h`
+- Core heartbeat is split into:
+  - `src/core/heartbeat.c`
+  - `src/core/heartbeat_schedule.c`
+  - `src/core/heartbeat_dispatch.c`
+  - shared private contract: `src/core/heartbeat_internal.h`
+- Core config is split into:
+  - `src/core/conf.c`
+  - `src/core/conf_defaults.c`
+  - `src/core/conf_validation.c`
+  - shared private contract: `src/core/conf_internal.h`
 
-## OpenBSD-style direction (next)
+## Current high-LOC hotspots (2026-02-28 refresh)
+
+- `src/modules/man/man_module.c` (1311 LOC)
+- `src/modules/metrics/metrics_module.c` (1218 LOC)
+- `src/modules/networking/networking_module.c` (876 LOC)
+- `src/modules/packages/packages_module.c` (837 LOC)
+- `src/render/template_render.c` (516 LOC)
+
+These should be the primary extraction targets in the next iterations.
+
+## Implemented in this update (modules extraction start)
+
+`src/modules/metrics/*` now has the first real extraction step beyond thin adapters:
+
+- Added `include/miniweb/modules/metrics_internal.h` for private module-internal contracts (`MetricSample` + JSON assembly helpers).
+- Expanded `src/modules/metrics/metrics_json.c` from compatibility shim into concrete JSON section builder functions:
+  - history section serialization
+  - cpu/memory/load/os/uptime/disks/top-ports section assembly
+- Slimmed `src/modules/metrics/metrics_module.c` by delegating those JSON responsibilities to `metrics_json.c`.
+
+This establishes a repeatable module pattern: `*_module.c` owns orchestration and route/handler lifecycles; `*_json.c` owns serialization details; `*_service.c` remains the service boundary.
+
+## Modules extraction plan (`src/modules/*`)
+
+### Phase 1 — Metrics (in progress)
+
+1. ✅ Extracted JSON section builders into `metrics_json.c`.
+2. Next:
+   - Extract process snapshot + sorting helpers into `metrics_process.c` (or `metrics_processes.c`).
+   - Extract ring/snapshot cache lifecycle into `metrics_snapshot.c`.
+   - Keep `metrics_module.c` as routing + endpoint orchestration only.
+
+### Phase 2 — Man module
+
+1. Split `man_module.c` into:
+   - `man_query.c` (query parsing/validation)
+   - `man_index.c` (index/search data prep)
+   - `man_render.c` (response payload shaping)
+2. Preserve `man_service.c` as service-facing facade.
+3. Keep `man_json.c` as serializer-only unit (or fold into `man_render.c` if it remains tiny).
+
+### Phase 3 — Networking module
+
+1. Split `networking_module.c` into:
+   - `networking_scan.c` (iface/route/socket collection)
+   - `networking_transform.c` (normalization and filtering)
+   - `networking_render.c` / `networking_json.c` (serialization)
+2. Ensure OpenBSD-specific sysctl/socket code stays encapsulated in scan layer.
+
+### Phase 4 — Packages module
+
+1. Split `packages_module.c` into:
+   - `packages_backend.c` (pkg_info/pkg_* subprocess and parsing)
+   - `packages_cache.c` (optional short-lived cache)
+   - `packages_render.c` / `packages_json.c` (serialization)
+2. Keep HTTP handler thin and deterministic.
+
+## OpenBSD-style direction (unchanged)
 
 1. Keep single-purpose files under ~150-250 LOC where feasible.
 2. Prefer narrow `static` functions and one exported concern per compilation unit.
 3. Keep data ownership explicit (`*_acquire`, `*_release`, `*_cleanup`).
 4. Reduce cross-module state: move globals behind clear accessor APIs.
 5. Stabilize branch-predictable fast paths in network + router (early return style).
-
-## Recommended next extraction sequence
-
-1. `src/render/template_render.c` (515 LOC)
-   - split parsing, placeholder expansion, filesystem reads, layout composition.
-2. `src/core/heartbeat.c` (366 LOC)
-   - split state machine/timer arithmetic/output renderer.
-3. `src/router/url_registry.c` (324 LOC)
-   - split static table init, lookup, and reverse routing helpers.
-4. `src/core/conf.c` (301 LOC)
-   - split parser, defaults, and validation phases.
-5. `src/http/utils.c` (245 LOC)
-   - split MIME detection, URL decode, and sanitizers.
 
 ## Benchmark hardening backlog
 
