@@ -129,7 +129,53 @@ conf_apply_kv(miniweb_conf_t *conf, const char *key, const char *val)
         } else {
             return -1;
         }
-        return 0;
+	    return 0;
+}
+
+static int
+conf_validate(miniweb_conf_t *conf)
+{
+	if (conf->port <= 0 || conf->port > 65535)
+		return -1;
+	if (conf->threads <= 0)
+		return -1;
+	if (conf->max_conns <= 0)
+		return -1;
+	if (conf->conn_timeout <= 0)
+		return -1;
+	if (conf->max_req_size <= 0)
+		return -1;
+	if (conf->mandoc_timeout <= 0)
+		return -1;
+	return 0;
+}
+
+static int
+conf_parse_line(miniweb_conf_t *conf, const char *path, int lineno, char *line)
+{
+	char *p, *key, *val;
+
+	p = ltrim(line);
+	rtrim(p);
+	if (*p == '\0' || *p == '#')
+		return 0;
+
+	key = p;
+	val = key;
+	while (*val && !isspace((unsigned char)*val))
+		val++;
+	if (*val == '\0') {
+		fprintf(stderr, "%s:%d: missing value for key '%s'\n", path, lineno, key);
+		return -1;
+	}
+	*val++ = '\0';
+	val = ltrim(val);
+
+	if (conf_apply_kv(conf, key, val) != 0) {
+		fprintf(stderr, "%s:%d: unknown key '%s'\n", path, lineno, key);
+		return -1;
+	}
+	return 0;
 }
 
 /**
@@ -152,37 +198,19 @@ conf_parse_file(const char *path, miniweb_conf_t *conf)
         return 1; /* file not found */
     }
 
-    while (fgets(line, sizeof(line), fp) != NULL) {
-        char *p, *key, *val;
+	while (fgets(line, sizeof(line), fp) != NULL) {
+		lineno++;
+		if (conf_parse_line(conf, path, lineno, line) != 0) {
+			fclose(fp);
+			return -1;
+		}
+	}
 
-        lineno++;
-        p = ltrim(line);
-        rtrim(p);
-
-        /* Skip blank lines and comments */
-        if (*p == '\0' || *p == '#')
-            continue;
-
-        /* Split on first whitespace */
-        key = p;
-        val = key;
-        while (*val && !isspace((unsigned char)*val))
-            val++;
-        if (*val == '\0') {
-            fprintf(stderr, "%s:%d: missing value for key '%s'\n",
-                    path, lineno, key);
-            fclose(fp);
-            return -1;
-        }
-        *val++ = '\0';
-        val = ltrim(val);
-
-        if (conf_apply_kv(conf, key, val) != 0) {
-            fprintf(stderr, "%s:%d: unknown key '%s'\n", path, lineno, key);
-            fclose(fp);
-            return -1;
-        }
-    }
+	if (conf_validate(conf) != 0) {
+		fprintf(stderr, "%s: invalid configuration values\n", path);
+		fclose(fp);
+		return -1;
+	}
 
         fclose(fp);
         return 0;

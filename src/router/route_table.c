@@ -10,6 +10,7 @@
 #include <time.h>
 
 #include <miniweb/http/handler.h>
+#include <miniweb/http/utils.h>
 #include <miniweb/core/config.h>
 #include <miniweb/router/routes.h>
 #include <miniweb/router/urls.h>
@@ -166,23 +167,7 @@ favicon_handler(http_request_t *req)
 
 	 // printf("DEBUG: static_handler trying to serve: %s\n", fullpath);
 
-	 // Determine MIME type.
-	 const char *mime = "application/octet-stream";
-	 const char *ext = strrchr(path, '.');
-	 if (ext) {
-		 if (strcmp(ext, ".html") == 0) mime = "text/html";
-		 else if (strcmp(ext, ".css") == 0) mime = "text/css";
-		 else if (strcmp(ext, ".js") == 0) mime = "application/javascript";
-		 else if (strcmp(ext, ".png") == 0) mime = "image/png";
-		 else if (strcmp(ext, ".svg") == 0) mime = "image/svg+xml";
-		 else if (strcmp(ext, ".jpg") == 0 || strcmp(ext, ".jpeg") == 0) mime = "image/jpeg";
-		 else if (strcmp(ext, ".gif") == 0) mime = "image/gif";
-		 else if (strcmp(ext, ".ico") == 0) mime = "image/x-icon";
-		 else if (strcmp(ext, ".pdf") == 0) mime = "application/pdf";
-		 else if (strcmp(ext, ".ps") == 0) mime = "application/postscript";
-		 else if (strcmp(ext, ".md") == 0) mime = "text/markdown; charset=utf-8";
-		 else if (strcmp(ext, ".txt") == 0) mime = "text/plain; charset=utf-8";
-	 }
+	 const char *mime = mime_type_for_path(path);
 
 	 return http_send_file(req, fullpath, mime);
  }

@@ -292,9 +292,50 @@ read_template_file(const char *filename, char **content)
 	return ret;
 }
 
+static int
+load_template_component(const char *filename, char **content)
+{
+	if (!filename) {
+		*content = NULL;
+		return 0;
+	}
+	if (read_template_file(filename, content) != 0) {
+		*content = NULL;
+		return -1;
+	}
+	return 0;
+}
+
 /* Forward declaration for the single placeholder replacement logic */
 static char *replace_single(const char *str, const char *needle,
 							const char *value);
+
+struct placeholder_pair {
+	const char *needle;
+	const char *value;
+};
+
+static char *
+replace_placeholders(const char *template_str,
+	const struct placeholder_pair *pairs, size_t pair_count)
+{
+	char *result = strdup(template_str);
+	if (!result)
+		return NULL;
+
+	for (size_t i = 0; i < pair_count; i++) {
+		char *next = replace_single(result, pairs[i].needle,
+			pairs[i].value ? pairs[i].value : "");
+		if (!next) {
+			free(result);
+			return NULL;
+		}
+		free(result);
+		result = next;
+	}
+
+	return result;
+}
 
 /**
  * @brief Substitute all standard placeholders ({{TITLE}}, {{PAGE_CONTENT}}, etc.) in a template.
@@ -319,54 +360,37 @@ replace_all(const char *template_str, const char *title,
 			const char *page_content, const char *extra_head,
 			const char *extra_js)
 {
-	char *result = NULL;
-	char *temp1 = NULL, *temp2 = NULL, *temp3 = NULL;
+	const struct placeholder_pair pairs[] = {
+		{ "{{title}}", title },
+		{ "{{page_content}}", page_content },
+		{ "{{extra_head}}", extra_head },
+		{ "{{extra_js}}", extra_js },
+	};
 
-	/* Initialize result with a copy of the original template */
-	result = strdup(template_str);
-	if (!result)
-		return NULL;
+	return replace_placeholders(template_str, pairs,
+		sizeof(pairs) / sizeof(pairs[0]));
+}
 
-	/* Replace {{title}} tag */
-	temp1 = replace_single(result, "{{title}}", title ? title : "");
-	if (!temp1) {
-		free(result);
-		return NULL;
-	}
-	free(result);
-	result = temp1;
+static int
+load_layout_fragments(const struct template_data *data,
+	char **base_template, char **page_content, char **extra_head,
+	char **extra_js)
+{
+	if (read_template_file("base.html", base_template) != 0)
+		return -1;
+	if (read_template_file(data->page_content, page_content) != 0)
+		return -1;
+	(void)load_template_component(data->extra_head_file, extra_head);
+	(void)load_template_component(data->extra_js_file, extra_js);
+	return 0;
+}
 
-	/* Replace {{page_content}} tag */
-	temp2 = replace_single(result, "{{page_content}}",
-						   page_content ? page_content : "");
-	if (!temp2) {
-		free(result);
-		return NULL;
-	}
-	free(result);
-	result = temp2;
-
-	/* Replace {{extra_head}} tag */
-	temp3 = replace_single(result, "{{extra_head}}",
-						   extra_head ? extra_head : "");
-	if (!temp3) {
-		free(result);
-		return NULL;
-	}
-	free(result);
-	result = temp3;
-
-	/* Replace {{extra_js}} tag */
-	temp1 =
-	replace_single(result, "{{extra_js}}", extra_js ? extra_js : "");
-	if (!temp1) {
-		free(result);
-		return NULL;
-	}
-	free(result);
-	result = temp1;
-
-	return result;
+static char *
+compose_layout(const struct template_data *data, const char *base_template,
+	const char *page_content, const char *extra_head, const char *extra_js)
+{
+	return replace_all(base_template, data->title, page_content,
+		extra_head ? extra_head : "", extra_js ? extra_js : "");
 }
 
 /**
@@ -437,36 +461,13 @@ template_render_with_data(struct template_data *data, char **output)
 		return -1;
 	}
 
-	/* Load the global base layout (shell) */
-	if (read_template_file("base.html", &base_template) != 0) {
+	if (load_layout_fragments(data, &base_template, &page_content,
+		&extra_head, &extra_js) != 0) {
 		goto cleanup;
 	}
 
-	/* Load the specific inner page content */
-	if (read_template_file(data->page_content, &page_content) != 0) {
-		goto cleanup;
-	}
-
-	/* Load optional header file if specified in template_data */
-	if (data->extra_head_file) {
-		if (read_template_file(data->extra_head_file, &extra_head) !=
-			0) {
-			/* Fail silently if file is missing, keeping it empty */
-			extra_head = NULL;
-			}
-	}
-
-	/* Load optional JS file if specified in template_data */
-	if (data->extra_js_file) {
-		if (read_template_file(data->extra_js_file, &extra_js) != 0) {
-			extra_js = NULL;
-		}
-	}
-
-	/* Execute placeholder replacements */
-	result =
-	replace_all(base_template, data->title, page_content,
-				extra_head ? extra_head : "", extra_js ? extra_js : "");
+	result = compose_layout(data, base_template, page_content,
+		extra_head, extra_js);
 	if (!result) {
 		goto cleanup;
 	}
