@@ -1,13 +1,11 @@
 /* packages_module.c - pkg manager implementation with ring buffer cache */
 
 #include <ctype.h>
-#include <errno.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <unistd.h>
 
 #include <miniweb/core/config.h>
 #include <miniweb/core/heartbeat.h>
@@ -335,6 +333,26 @@ is_safe_path(const char *path)
 	return 1;
 }
 
+static void
+trim_ascii_whitespace(char **start)
+{
+	char *s;
+	char *end;
+
+	if (!start || !*start)
+		return;
+
+	s = *start;
+	while (*s == ' ' || *s == '\t')
+		s++;
+
+	end = s + strlen(s);
+	while (end > s && (end[-1] == ' ' || end[-1] == '\t'))
+		*--end = '\0';
+
+	*start = s;
+}
+
 static char *
 make_raw_json(const char *output)
 {
@@ -435,7 +453,8 @@ pkg_search_json(const char *query)
 										   PKG_CMD_MAX_OUTPUT, 5, NULL);
 
 		if (list_output) {
-			char *line = strtok(list_output, "\n");
+			char *saveptr = NULL;
+			char *line = strtok_r(list_output, "\n", &saveptr);
 			size_t total = 0;
 			output = malloc(PKG_CMD_MAX_OUTPUT);
 			if (output) {
@@ -452,7 +471,7 @@ pkg_search_json(const char *query)
 							total += len;
 						}
 					}
-					line = strtok(NULL, "\n");
+					line = strtok_r(NULL, "\n", &saveptr);
 				}
 				LOG("grep found %zu bytes", total);
 			}
@@ -515,12 +534,7 @@ pkg_search_json(const char *query)
 	while (line && offset < PKG_JSON_MAX - 256) {
 		line[strcspn(line, "\r")] = '\0';
 
-		/* Remove spaces */
-		while (*line == ' ' || *line == '\t')
-			line++;
-		char *end = line + strlen(line) - 1;
-		while (end > line && (*end == ' ' || *end == '\t'))
-			*end-- = '\0';
+		trim_ascii_whitespace(&line);
 
 		if (*line != '\0' && strlen(line) > 1) {
 			char *escaped_line = json_escape_string(line);
