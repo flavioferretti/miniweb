@@ -177,6 +177,27 @@ int metrics_get_network_interfaces(NetworkInterface *interfaces, int max_interfa
  */
 int metrics_get_top_cpu_processes(ProcessInfo *processes, int max_processes);
 
+
+/**
+ * Collect top processes sorted by memory usage.
+ *
+ * @param processes Output array receiving process rows.
+ * @param max_processes Maximum number of processes to return.
+ * @return Number of entries written.
+ */
+int metrics_get_top_memory_processes(ProcessInfo *processes, int max_processes);
+
+/**
+ * Collect aggregate process counters by scheduler state.
+ *
+ * @param total Receives total process count.
+ * @param running Receives running process count.
+ * @param sleeping Receives sleeping process count.
+ * @param zombie Receives zombie process count.
+ * @return 0 on success, -1 on failure.
+ */
+int metrics_get_process_stats(int *total, int *running, int *sleeping, int *zombie);
+
 int metrics_module_attach_routes(struct router *r);
 
 #endif /* MINIWEB_MODULES_METRICS_H */

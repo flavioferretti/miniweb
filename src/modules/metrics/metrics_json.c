@@ -3,6 +3,13 @@
 
 #include <stdio.h>
 
+/**
+ * @brief Append history samples to a JSON section.
+ * @param buffer Destination JSON buffer.
+ * @param size Destination buffer size.
+ * @param history Chronological metrics samples.
+ * @param count Number of samples in @p history.
+ */
 void
 metrics_json_append_history(char *buffer, size_t size, MetricSample *history,
 			    size_t count)
@@ -36,6 +43,11 @@ metrics_json_append_history(char *buffer, size_t size, MetricSample *history,
 		snprintf(ptr, size, "]");
 }
 
+/**
+ * @brief Append CPU usage statistics to a JSON section.
+ * @param buffer Destination JSON buffer.
+ * @param size Destination buffer size.
+ */
 void
 metrics_json_append_cpu_stats(char *buffer, size_t size)
 {
@@ -59,6 +71,11 @@ metrics_json_append_cpu_stats(char *buffer, size_t size)
 	}
 }
 
+/**
+ * @brief Append memory and swap statistics to a JSON section.
+ * @param buffer Destination JSON buffer.
+ * @param size Destination buffer size.
+ */
 void
 metrics_json_append_memory_stats(char *buffer, size_t size)
 {
@@ -83,6 +100,11 @@ metrics_json_append_memory_stats(char *buffer, size_t size)
 	}
 }
 
+/**
+ * @brief Append system load averages to a JSON section.
+ * @param buffer Destination JSON buffer.
+ * @param size Destination buffer size.
+ */
 void
 metrics_json_append_load_average(char *buffer, size_t size)
 {
@@ -99,6 +121,11 @@ metrics_json_append_load_average(char *buffer, size_t size)
 	}
 }
 
+/**
+ * @brief Append operating system information to a JSON section.
+ * @param buffer Destination JSON buffer.
+ * @param size Destination buffer size.
+ */
 void
 metrics_json_append_os_info(char *buffer, size_t size)
 {
@@ -116,6 +143,11 @@ metrics_json_append_os_info(char *buffer, size_t size)
 	}
 }
 
+/**
+ * @brief Append human-readable uptime data to a JSON section.
+ * @param buffer Destination JSON buffer.
+ * @param size Destination buffer size.
+ */
 void
 metrics_json_append_uptime(char *buffer, size_t size)
 {
@@ -126,6 +158,11 @@ metrics_json_append_uptime(char *buffer, size_t size)
 		snprintf(buffer, size, "\"uptime\": \"unknown\"");
 }
 
+/**
+ * @brief Append mounted filesystem usage to a JSON section.
+ * @param buffer Destination JSON buffer.
+ * @param size Destination buffer size.
+ */
 void
 metrics_json_append_disk_info(char *buffer, size_t size)
 {
@@ -159,6 +196,11 @@ metrics_json_append_disk_info(char *buffer, size_t size)
 	snprintf(ptr, size, "]");
 }
 
+/**
+ * @brief Append top-port information to a JSON section.
+ * @param buffer Destination JSON buffer.
+ * @param size Destination buffer size.
+ */
 void
 metrics_json_append_top_ports(char *buffer, size_t size)
 {

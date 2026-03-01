@@ -40,15 +40,15 @@ The older “next steps” list is partially obsolete. Current split status:
   - `src/core/conf_validation.c`
   - shared private contract: `src/core/conf_internal.h`
 
-## Current high-LOC hotspots (2026-02-28 refresh)
+## Current high-LOC hotspots (status after this update)
 
 - `src/modules/man/man_module.c` (1311 LOC)
-- `src/modules/metrics/metrics_module.c` (1218 LOC)
 - `src/modules/networking/networking_module.c` (876 LOC)
 - `src/modules/packages/packages_module.c` (837 LOC)
+- `src/modules/metrics/metrics_module.c` (762 LOC)
 - `src/render/template_render.c` (516 LOC)
 
-These should be the primary extraction targets in the next iterations.
+These remain the primary extraction targets in next iterations.
 
 ## Implemented in this update (modules extraction start)
 
@@ -62,13 +62,28 @@ These should be the primary extraction targets in the next iterations.
 
 This establishes a repeatable module pattern: `*_module.c` owns orchestration and route/handler lifecycles; `*_json.c` owns serialization details; `*_service.c` remains the service boundary.
 
+
+## Implemented in this update (metrics process extraction)
+
+`src/modules/metrics/*` extraction continued with a concrete split of process-focused responsibilities:
+
+- Added `src/modules/metrics/metrics_process.c` with:
+  - process table snapshot acquisition (`sysctl KERN_PROC_ALL`)
+  - user resolution helper (`getpwuid_r`)
+  - process JSON section builder (`top_cpu_processes`, `top_memory_processes`, `process_stats`)
+  - exported process collectors (`metrics_get_top_cpu_processes`, `metrics_get_top_memory_processes`, `metrics_get_process_stats`)
+- `src/modules/metrics/metrics_module.c` now delegates process serialization to `metrics_process_append_json_sections()` and keeps endpoint/snapshot orchestration behavior.
+- `include/miniweb/modules/metrics_internal.h` now documents private JSON/process helper contracts with Doxygen comments.
+
+Current LOC focus after this step is still man/networking/packages plus remaining metrics orchestrator cleanup.
+
 ## Modules extraction plan (`src/modules/*`)
 
-### Phase 1 — Metrics (in progress)
+### Phase 1 — Metrics (in progress, advanced)
 
 1. ✅ Extracted JSON section builders into `metrics_json.c`.
-2. Next:
-   - Extract process snapshot + sorting helpers into `metrics_process.c` (or `metrics_processes.c`).
+2. ✅ Extracted process snapshot/sorting/aggregation helpers into `metrics_process.c`.
+3. Next:
    - Extract ring/snapshot cache lifecycle into `metrics_snapshot.c`.
    - Keep `metrics_module.c` as routing + endpoint orchestration only.
 
