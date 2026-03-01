@@ -14,7 +14,13 @@
 #include <miniweb/router/routes.h>
 
 miniweb_conf_t config;
-static miniweb_server_runtime_t g_server;
+static miniweb_server_runtime_t g_server = {
+	.kq_fd = -1,
+	.listen_fd = -1,
+	.signal_pipe_rfd = -1,
+	.signal_pipe_wfd = -1,
+	.spare_fd = -1,
+};
 
 int config_verbose = 0;
 char config_static_dir[CONF_STR_MAX] = "static";
@@ -117,6 +123,7 @@ main(int argc, char *argv[])
 	sa.sa_flags = 0;
 	(void)sigaction(SIGINT, &sa, NULL);
 	(void)sigaction(SIGTERM, &sa, NULL);
+	(void)signal(SIGPIPE, SIG_IGN);
 	miniweb_apply_openbsd_security(&config);
 	(void)miniweb_server_run(&g_server);
 

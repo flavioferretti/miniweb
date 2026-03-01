@@ -4,6 +4,7 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <string.h>
@@ -24,6 +25,21 @@ set_nonblock(int fd)
 	if (flags == -1)
 		flags = 0;
 	(void)fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+}
+
+/** Drain all pending bytes from the signal self-pipe. */
+static void
+drain_signal_pipe(int fd)
+{
+	char buf[64];
+	for (;;) {
+		ssize_t n = read(fd, buf, sizeof(buf));
+		if (n > 0)
+			continue;
+		if (n < 0 && errno == EINTR)
+			continue;
+		break;
+	}
 }
 
 /** Accept and register all pending client sockets for EV_DISPATCH reads. */
@@ -98,8 +114,18 @@ miniweb_server_run(miniweb_server_runtime_t *rt)
 	rt->running = 1;
 	rt->listen_fd = -1;
 	rt->kq_fd = -1;
+	rt->signal_pipe_rfd = -1;
+	rt->signal_pipe_wfd = -1;
 	miniweb_work_queue_init(&rt->queue);
 	miniweb_connection_pool_init(&rt->pool);
+
+	int signal_pipe[2];
+	if (pipe(signal_pipe) < 0)
+		goto out;
+	rt->signal_pipe_rfd = signal_pipe[0];
+	rt->signal_pipe_wfd = signal_pipe[1];
+	set_nonblock(rt->signal_pipe_rfd);
+	set_nonblock(rt->signal_pipe_wfd);
 
 	rt->listen_fd = socket(AF_INET, SOCK_STREAM, 0);
 	if (rt->listen_fd < 0)
@@ -123,6 +149,9 @@ miniweb_server_run(miniweb_server_runtime_t *rt)
 
 	struct kevent chg;
 	EV_SET(&chg, rt->listen_fd, EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, NULL);
+	if (kevent(rt->kq_fd, &chg, 1, NULL, 0, NULL) < 0)
+		goto out;
+	EV_SET(&chg, rt->signal_pipe_rfd, EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, NULL);
 	if (kevent(rt->kq_fd, &chg, 1, NULL, 0, NULL) < 0)
 		goto out;
 
@@ -153,6 +182,11 @@ miniweb_server_run(miniweb_server_runtime_t *rt)
 		}
 		for (int i = 0; i < n; i++) {
 			struct kevent *ev = &events[i];
+			if ((int)ev->ident == rt->signal_pipe_rfd) {
+				drain_signal_pipe(rt->signal_pipe_rfd);
+				rt->running = 0;
+				continue;
+			}
 			if ((int)ev->ident == rt->listen_fd) {
 				handle_accept(rt);
 				continue;
@@ -189,6 +223,14 @@ out:
 		close(rt->listen_fd);
 		rt->listen_fd = -1;
 	}
+	if (rt->signal_pipe_rfd >= 0) {
+		close(rt->signal_pipe_rfd);
+		rt->signal_pipe_rfd = -1;
+	}
+	if (rt->signal_pipe_wfd >= 0) {
+		close(rt->signal_pipe_wfd);
+		rt->signal_pipe_wfd = -1;
+	}
 	return rc;
 }
 
@@ -196,5 +238,13 @@ out:
 void
 miniweb_server_stop(miniweb_server_runtime_t *rt)
 {
+	int saved_errno = errno;
+	if (!rt)
+		return;
 	rt->running = 0;
+	if (rt->signal_pipe_wfd >= 0) {
+		const char b = 'x';
+		(void)write(rt->signal_pipe_wfd, &b, 1);
+	}
+	errno = saved_errno;
 }
