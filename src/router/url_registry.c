@@ -19,6 +19,53 @@ static size_t route_count = 0;
 static struct prefix_route prefix_routes[MAX_PREFIX_ROUTES];
 static size_t prefix_route_count = 0;
 
+static int
+path_slash_count(const char *path)
+{
+	int slashes = 0;
+
+	while (*path)
+		if (*path++ == '/')
+			slashes++;
+	return slashes;
+}
+
+static int
+prefix_route_matches(const struct prefix_route *pr, const char *method,
+	const char *path)
+{
+	if (strcmp(pr->method, method) != 0)
+		return 0;
+	if (strncmp(path, pr->prefix, strlen(pr->prefix)) != 0)
+		return 0;
+	if (pr->min_slashes <= 0)
+		return 1;
+
+	return path_slash_count(path + strlen(pr->prefix)) >= pr->min_slashes;
+}
+
+static int
+prefix_route_path_matches(const struct prefix_route *pr, const char *path)
+{
+	if (strncmp(path, pr->prefix, strlen(pr->prefix)) != 0)
+		return 0;
+	if (pr->min_slashes <= 0)
+		return 1;
+
+	return path_slash_count(path + strlen(pr->prefix)) >= pr->min_slashes;
+}
+
+static int
+route_method_seen_for_path(size_t route_index, const char *path)
+{
+	for (size_t j = 0; j < route_index; j++) {
+		if (strcmp(routes[j].path, path) == 0 &&
+			strcmp(routes[j].method, routes[route_index].method) == 0)
+			return 1;
+	}
+	return 0;
+}
+
 static const struct view_route view_routes[] = {
 	{"GET", "/", "MiniWeb - Dashboard", "dashboard.html",
 		"dashboard_extra_head.html", "dashboard_extra_js.html"},
@@ -71,7 +118,7 @@ int
 views_module_attach_routes(struct router *r)
 {
 	for (size_t i = 0; i < sizeof(view_routes) / sizeof(view_routes[0]);
-		 i++) {
+			 i++) {
 		if (router_register(r, view_routes[i].method,
 			view_routes[i].path,
 			view_template_handler) != 0)
@@ -136,7 +183,7 @@ const struct view_route *
 find_view_route(const char *method, const char *path)
 {
 	for (size_t i = 0; i < sizeof(view_routes) / sizeof(view_routes[0]);
-		 i++) {
+			 i++) {
 		if (strcmp(view_routes[i].method, method) == 0 &&
 			strcmp(view_routes[i].path, path) == 0)
 			return &view_routes[i];
@@ -206,23 +253,8 @@ route_match(const char *method, const char *path)
 	}
 
 	for (size_t i = 0; i < prefix_route_count; i++) {
-		const struct prefix_route *pr = &prefix_routes[i];
-		const char *p;
-		int slashes = 0;
-
-		if (strcmp(pr->method, method) != 0)
-			continue;
-		if (strncmp(path, pr->prefix, strlen(pr->prefix)) != 0)
-			continue;
-		if (pr->min_slashes <= 0)
-			return pr->handler;
-
-		p = path + strlen(pr->prefix);
-		while (*p)
-			if (*p++ == '/')
-				slashes++;
-		if (slashes >= pr->min_slashes)
-			return pr->handler;
+		if (prefix_route_matches(&prefix_routes[i], method, path))
+			return prefix_routes[i].handler;
 	}
 
 	return NULL;
@@ -249,15 +281,7 @@ route_allow_methods(const char *path, char *buf, size_t buf_len)
 		if (strcmp(routes[i].path, path) != 0)
 			continue;
 
-		int seen = 0;
-		for (size_t j = 0; j < i; j++) {
-			if (strcmp(routes[j].path, path) == 0 &&
-				strcmp(routes[j].method, routes[i].method) == 0) {
-				seen = 1;
-			break;
-				}
-		}
-		if (seen)
+		if (route_method_seen_for_path(i, path))
 			continue;
 
 		int wrote = snprintf(buf + used, buf_len - used, "%s%s",
@@ -305,18 +329,7 @@ route_path_known(const char *path)
 	}
 
 	for (size_t i = 0; i < prefix_route_count; i++) {
-		if (strncmp(path, prefix_routes[i].prefix,
-			strlen(prefix_routes[i].prefix)) != 0)
-			continue;
-		if (prefix_routes[i].min_slashes <= 0)
-			return 1;
-
-		const char *p = path + strlen(prefix_routes[i].prefix);
-		int slashes = 0;
-		while (*p)
-			if (*p++ == '/')
-				slashes++;
-		if (slashes >= prefix_routes[i].min_slashes)
+		if (prefix_route_path_matches(&prefix_routes[i], path))
 			return 1;
 	}
 

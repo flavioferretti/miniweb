@@ -11,6 +11,12 @@ char *json_escape_string(const char *src);
 /** Replace characters unsafe for filesystem usage with '_'. */
 void sanitize_string(char *s);
 
+/** Decode URL percent-encoded text into dst and NUL-terminate it. */
+int url_decode(const char *src, char *dst, size_t dst_len);
+
+/** Return a best-effort content type for a path by extension. */
+const char *mime_type_for_path(const char *path);
+
 /**
  * Execute a shell command and capture stdout/stderr up to max_size bytes.
  *
