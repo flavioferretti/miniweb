@@ -874,3 +874,22 @@ networking_module_attach_routes(struct router *r)
 	return router_register(r, "GET", "/api/networking",
 			       networking_api_handler);
 }
+
+void
+networking_module_cleanup(void)
+{
+	if (g_networking_ring.buf == NULL)
+		return;
+
+	pthread_mutex_lock(&g_networking_ring.lock);
+	free(g_networking_ring.cached_json);
+	g_networking_ring.cached_json = NULL;
+	g_networking_ring.cached_json_len = 0;
+	g_networking_ring.cached_json_ts = 0;
+	free(g_networking_ring.buf);
+	g_networking_ring.buf = NULL;
+	g_networking_ring.head = 0;
+	g_networking_ring.count = 0;
+	pthread_mutex_unlock(&g_networking_ring.lock);
+	pthread_mutex_destroy(&g_networking_ring.lock);
+}

@@ -16,4 +16,7 @@ int pkg_api_handler(http_request_t *req);
 
 int packages_module_attach_routes(struct router *r);
 
+/** Release heap allocations owned by the packages module. */
+void packages_cache_cleanup(void);
+
 #endif /* MINIWEB_MODULES_PKG_MANAGER_H */
