@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>miniweb — Call Graph</title>
+  <link rel="stylesheet" href="/static/css/custom.css">
+  <style>
+    /* ... (stile invariato) ... */
+  </style>
+</head>
+<body>
+<div class="container">
+    <h1>📊 MiniWeb — Call Graph Analysis</h1>
+    <p>Progetto: <code>/home/flavio/DEV/miniweb</code> &nbsp;|&nbsp; Generato: <span id="date"></span></p>
+
+    <div class="legend">
+        <div class="legend-item"><span class="dot" style="background:#89b4fa"></span> entry/net</div>
+        <div class="legend-item"><span class="dot" style="background:#a6e3a1"></span> core</div>
+        <div class="legend-item"><span class="dot" style="background:#cba6f7"></span> http</div>
+        <div class="legend-item"><span class="dot" style="background:#fab387"></span> router</div>
+        <div class="legend-item"><span class="dot" style="background:#f38ba8"></span> man module</div>
+        <div class="legend-item"><span class="dot" style="background:#94e2d5"></span> metrics</div>
+        <div class="legend-item"><span class="dot" style="background:#89dceb"></span> networking</div>
+        <div class="legend-item"><span class="dot" style="background:#b4befe"></span> packages</div>
+        <div class="legend-item"><span class="dot" style="background:#f5c2e7"></span> storage</div>
+        <div class="legend-item"><span class="dot" style="background:#eba0ac"></span> platform</div>
+    </div>
+
+    <nav>
+        <a href="#compact">📦 Call Graph Compatto</a>
+        <a href="#compact-lr">↔️ Compatto Orizzontale</a>
+        <a href="#main">🎯 Call Graph da main()</a>
+        <a href="#files">📄 File</a>
+    </nav>
+
+    <h2 id="compact">📦 Call Graph Compatto (profondità 3, senza librerie di sistema) <span class="badge">SVG</span></h2>
+    <p>Vista semplificata che mostra le relazioni principali tra le funzioni del progetto, filtrando le chiamate alle librerie standard.</p>
+    <div class="graph-wrap">
+        <object type="image/svg+xml" data="callgraph_compact.svg"></object>
+    </div>
+
+    <h2 id="compact-lr">↔️ Call Graph Compatto — Layout Orizzontale <span class="badge">SVG</span></h2>
+    <p>La stessa vista compatta ma con orientamento orizzontale, utile per grafi molto larghi.</p>
+    <div class="graph-wrap">
+        <object type="image/svg+xml" data="callgraph_compact_lr.svg"></object>
+    </div>
+
+    <h2 id="main">🎯 Call Graph a partire da main() <span class="badge">SVG</span></h2>
+    <p>Mostra tutte le funzioni raggiungibili dal main, con profondità illimitata. Utile per capire il flusso principale dell'applicazione.</p>
+    <div class="graph-wrap">
+        <object type="image/svg+xml" data="callgraph_main.svg"></object>
+    </div>
+
+    <h2 id="files">📄 File sorgente generati</h2>
+    <div class="file-grid">
+        <a href="callgraph_compact.dot">callgraph_compact.dot</a>
+        <a href="callgraph_main.dot">callgraph_main.dot</a>
+        <a href="callgraph_compact.svg">callgraph_compact.svg</a>
+        <a href="callgraph_compact_lr.svg">callgraph_compact_lr.svg</a>
+        <a href="callgraph_main.svg">callgraph_main.svg</a>
+        <a href="function_inventory.txt">function_inventory.txt</a>
+        <a href="_cflow2dot.awk">_cflow2dot.awk (parser AWK)</a>
+        <a href="callgraph_full.txt">callgraph_full.txt (raw cflow)</a>
+        <a href="callgraph_from_main.txt">callgraph_from_main.txt (raw cflow)</a>
+        <a href="callgraph_compact.txt">callgraph_compact.txt (raw cflow)</a>
+        <a href="callgraph_reverse.txt">callgraph_reverse.txt (raw cflow)</a>
+    </div>
+
+    <footer>
+        <p>🔧 Generato con cflow + graphviz | <code>./docs/generate_callgraph.sh</code></p>
+        <p>I grafi DOT sono modificabili manualmente: <code>dot -Tsvg foo.dot -o foo.svg</code></p>
+        <p>📊 Grafici disponibili: compatti (3 livelli) e da main (profondità illimitata)</p>
+    </footer>
+</div>
+<script>
+    document.getElementById('date').textContent = new Date().toLocaleString('it-IT');
+</script>
+</body>
+</html>
