@@ -89,4 +89,7 @@ int networking_api_handler(http_request_t *req);
 
 int networking_module_attach_routes(struct router *r);
 
+/** Release heap allocations owned by the networking module. */
+void networking_module_cleanup(void);
+
 #endif /* MINIWEB_MODULES_NETWORKING_H */

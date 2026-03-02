@@ -8,6 +8,9 @@
 #include <miniweb/core/config.h>
 #include <miniweb/core/log.h>
 #include <miniweb/modules/man.h>
+#include <miniweb/modules/metrics.h>
+#include <miniweb/modules/networking.h>
+#include <miniweb/modules/pkg_manager.h>
 #include <miniweb/net/server.h>
 #include <miniweb/platform/openbsd/security.h>
 #include <miniweb/render/template_engine.h>
@@ -131,6 +134,9 @@ main(int argc, char *argv[])
 
 	log_info("MiniWeb shutting down");
 	man_module_cleanup();
+	networking_module_cleanup();
+	metrics_module_cleanup();
+	packages_cache_cleanup();
 	http_handler_globals_cleanup();
 	template_cache_cleanup();
 	log_close();

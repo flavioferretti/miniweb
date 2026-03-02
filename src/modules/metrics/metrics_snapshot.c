@@ -413,3 +413,17 @@ get_system_metrics_json(void)
 	pthread_mutex_unlock(&g_metrics_snapshot_lock);
 	return fallback;
 }
+
+void
+metrics_module_cleanup(void)
+{
+	pthread_mutex_lock(&g_metrics_snapshot_lock);
+	free(g_metrics_snapshot_json);
+	g_metrics_snapshot_json = NULL;
+	g_metrics_snapshot_updated_at = 0;
+	pthread_mutex_unlock(&g_metrics_snapshot_lock);
+
+	if (g_metrics_ring_ready)
+		ring_free(&g_metrics_ring);
+	g_metrics_ring_ready = 0;
+}

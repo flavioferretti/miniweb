@@ -200,4 +200,7 @@ int metrics_get_process_stats(int *total, int *running, int *sleeping, int *zomb
 
 int metrics_module_attach_routes(struct router *r);
 
+/** Release heap allocations owned by the metrics module. */
+void metrics_module_cleanup(void);
+
 #endif /* MINIWEB_MODULES_METRICS_H */
