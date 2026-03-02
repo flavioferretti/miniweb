@@ -687,7 +687,7 @@ pkg_list_json(void)
 
 	LOG("Cache miss, generating fresh package list");
 
-	char *const argv[] = {"pkg_info", "-q", NULL};
+	char *const argv[] = {"pkg_info", "-qmz", NULL};
 	char *output = safe_popen_read_argv("/usr/sbin/pkg_info", argv,
 										PKG_CMD_MAX_OUTPUT, 5, NULL);
 

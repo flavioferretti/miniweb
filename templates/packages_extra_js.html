@@ -1,3 +1,4 @@
+<!-- packages_extra_js.html -->
 <script>
 (() => {
   const tabs = document.getElementById('pkgTabNavigation');
@@ -44,11 +45,13 @@
     <div id="pkg-which-result" class="muted">No path provided.</div>
   `);
 
-  const listView = () => panel('List all installed packages', `
+  const listView = () => panel('All installed packages', `
     <form class="pkg-form" id="pkg-list-form">
       <button type="submit">Load package list</button>
     </form>
     <div id="pkg-list-result" class="muted">No list loaded.</div>
+    <div id="pkg-list-download" style="margin-top: 1rem;"></div>
+    <div id="pkg-bulk-install-info" style="margin-top: 1rem;"></div>
   `);
 
   const render = () => {
@@ -78,6 +81,56 @@
     }
   };
 
+  const createDownloadButton = (packages, container) => {
+    if (!packages || !packages.length) return;
+
+    const textContent = packages.join('\n');
+    const blob = new Blob([textContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const filename = `installed_packages_${new Date().toISOString().slice(0,10)}.txt`;
+
+    container.innerHTML = `
+      <div class="panel stat-card" style="padding: 1rem;">
+        <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
+          <a href="${url}" download="${filename}" class="tab-button" style="text-decoration: none; padding: 0.55rem 0.9rem; background: var(--primary); color: white; border: none;">
+            ⬇️ Download package list (${packages.length} packages)
+          </a>
+          <span class="muted">installed_packages.txt</span>
+        </div>
+      </div>
+    `;
+  };
+
+  const renderBulkInstallInfo = (container) => {
+    container.innerHTML = `
+      <div class="panel stat-card">
+        <h4>📦 Bulk installation with pkg_add</h4>
+        <p>Use the downloaded package list to reinstall all packages on another OpenBSD system:</p>
+
+        <div style="background: var(--surface-2); border-radius: 0.5rem; padding: 1rem; margin: 1rem 0;">
+          <code style="display: block; white-space: pre-wrap; font-family: monospace;"># As root, install all packages from the list:
+pkg_add -l installed_packages.txt
+
+# Or as a regular user with doas:
+doas pkg_add -l installed_packages.txt
+
+# To update all packages from the list:
+doas pkg_add -u -l installed_packages.txt</code>
+        </div>
+
+        <details>
+          <summary style="cursor: pointer; color: var(--text);">📋 Additional tips</summary>
+          <ul style="margin-top: 0.75rem; padding-left: 1.5rem;">
+            <li>The package list contains only package names (stems), which pkg_add will resolve to the latest available version.</li>
+            <li>For exact version installation, use <code>pkg_add -r</code> with full package names (e.g., curl-8.8.0).</li>
+            <li>To generate a list of fully qualified package names, use <code>pkg_info -Q</code> instead.</li>
+            <li>Always review package lists before bulk installation on production systems.</li>
+          </ul>
+        </details>
+      </div>
+    `;
+  };
+
   const renderPackageDetails = async (container, pkgName) => {
     container.innerHTML = '<p class="muted">Loading package info...</p>';
     try {
@@ -87,7 +140,7 @@
       ]);
       const infoData = await infoResp.json();
       const filesData = await filesResp.json();
-      const info = infoData.raw || '';  /* API returns {raw, found} */
+      const info = infoData.raw || '';
       const files = filesData.files || [];
 
       container.innerHTML = `
@@ -181,13 +234,25 @@
     listForm?.addEventListener('submit', async (event) => {
       event.preventDefault();
       const target = document.getElementById('pkg-list-result');
+      const downloadContainer = document.getElementById('pkg-list-download');
+      const infoContainer = document.getElementById('pkg-bulk-install-info');
+
       target.textContent = 'Loading installed package list...';
+      downloadContainer.innerHTML = '';
+
       try {
         const resp = await fetch('/api/packages/list');
         const data = await resp.json();
-        renderList(target, data.packages || [], async (pkgName) => {
+        const packages = data.packages || [];
+
+        renderList(target, packages, async (pkgName) => {
           await renderPackageDetails(target, pkgName);
         });
+
+        if (packages.length > 0) {
+          createDownloadButton(packages, downloadContainer);
+          renderBulkInstallInfo(infoContainer);
+        }
       } catch {
         target.innerHTML = '<p class="muted">Unable to load package list.</p>';
       }
