@@ -189,6 +189,14 @@ Supported keys:
 > Default:
 > *templates*.
 
+**autoindex**
+
+> Enable index-file fallback when a static directory is requested.
+> When enabled, requests such as *GET /static/doxygen/html/*
+> automatically serve *index.html* or *index.htm* if present.
+> Default:
+> **no**.
+
 **mandoc\_path**
 
 > Path to the

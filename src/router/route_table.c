@@ -8,6 +8,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
+#include <unistd.h>
 
 #include <miniweb/http/handler.h>
 #include <miniweb/http/utils.h>
@@ -164,6 +165,24 @@ favicon_handler(http_request_t *req)
 	 // Build absolute file path.
 	 char fullpath[512];
 	 snprintf(fullpath, sizeof(fullpath), "%s/%s", config_static_dir, path);
+
+	 if (config_autoindex) {
+		struct stat st;
+		if (stat(fullpath, &st) == 0 && S_ISDIR(st.st_mode)) {
+			char index_path[512];
+			snprintf(index_path, sizeof(index_path), "%s/index.html", fullpath);
+			if (access(index_path, R_OK) == 0) {
+				strlcpy(fullpath, index_path, sizeof(fullpath));
+				path = "index.html";
+			} else {
+				snprintf(index_path, sizeof(index_path), "%s/index.htm", fullpath);
+				if (access(index_path, R_OK) == 0) {
+					strlcpy(fullpath, index_path, sizeof(fullpath));
+					path = "index.htm";
+				}
+			}
+		}
+	 }
 
 	 // printf("DEBUG: static_handler trying to serve: %s\n", fullpath);
 

@@ -156,6 +156,17 @@ Default:
 Path to the HTML templates directory.
 Default:
 .Pa templates .
+.It Cm autoindex
+Enable index-file fallback when a static directory is requested.
+When enabled, requests such as
+.Cm GET /static/doxygen/html/
+automatically serve
+.Pa index.html
+or
+.Pa index.htm
+if present.
+Default:
+.Cm no .
 .It Cm mandoc_path
 Path to the
 .Xr mandoc 1

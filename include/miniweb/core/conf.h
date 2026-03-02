@@ -35,6 +35,7 @@ typedef struct miniweb_conf {
     /* Filesystem */
     char static_dir[CONF_STR_MAX];    /*   default: "static"       */
     char templates_dir[CONF_STR_MAX]; /*   default: "templates"    */
+    int  autoindex;                   /*   default: 0 (disabled)    */
     char mandoc_path[CONF_STR_MAX];   /*   default: "/usr/bin/mandoc" */
 
     /* Reverse proxy */
