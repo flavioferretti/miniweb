@@ -76,3 +76,10 @@ port 9001
     verbose no
 
 log_file miniweb.log
+
+#-- Autoindex -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+# Automatic index.htm/html for static folder/subfolders; list page
+# generation if index.htm/html not exists
+# Accepted values : yes / no / true / false / 1 / 0
+# default: no
+    autoindex no
