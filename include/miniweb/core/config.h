@@ -20,4 +20,9 @@ extern char config_static_dir[];
  */
 extern char config_templates_dir[];
 
+/**
+ * @brief Runtime toggle for static autoindex fallback behavior.
+ */
+extern int config_autoindex;
+
 #endif /* MINIWEB_CORE_CONFIG_H */

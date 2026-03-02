@@ -20,6 +20,7 @@ conf_defaults(miniweb_conf_t *conf)
 
 	strlcpy(conf->static_dir, "static", sizeof(conf->static_dir));
 	strlcpy(conf->templates_dir, "templates", sizeof(conf->templates_dir));
+	conf->autoindex = 0;
 	strlcpy(conf->mandoc_path, "/usr/bin/mandoc", sizeof(conf->mandoc_path));
 
 	strlcpy(conf->trusted_proxy, "127.0.0.1", sizeof(conf->trusted_proxy));
@@ -64,6 +65,7 @@ conf_dump(const miniweb_conf_t *conf)
 	fprintf(stderr, "  mandoc_timeout: %d\n", conf->mandoc_timeout);
 	fprintf(stderr, "  static_dir    : %s\n", conf->static_dir);
 	fprintf(stderr, "  templates_dir : %s\n", conf->templates_dir);
+	fprintf(stderr, "  autoindex     : %d\n", conf->autoindex);
 	fprintf(stderr, "  mandoc_path   : %s\n", conf->mandoc_path);
 	fprintf(stderr, "  trusted_proxy : %s\n", conf->trusted_proxy);
 	fprintf(stderr, "  verbose       : %d\n", conf->verbose);

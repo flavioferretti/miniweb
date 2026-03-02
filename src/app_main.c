@@ -25,6 +25,7 @@ static miniweb_server_runtime_t g_server = {
 int config_verbose = 0;
 char config_static_dir[CONF_STR_MAX] = "static";
 char config_templates_dir[CONF_STR_MAX] = "templates";
+int config_autoindex = 0;
 
 /** Print command-line usage text. */
 static void
@@ -81,6 +82,7 @@ parse_args(int argc, char *argv[])
 	config_verbose = config.verbose;
 	strlcpy(config_static_dir, config.static_dir, sizeof(config_static_dir));
 	strlcpy(config_templates_dir, config.templates_dir, sizeof(config_templates_dir));
+	config_autoindex = config.autoindex;
 }
 
 /** Stop the server on signal-driven shutdown requests. */

@@ -48,6 +48,13 @@ conf_apply_kv(miniweb_conf_t *conf, const char *key, const char *val)
 		strlcpy(conf->static_dir, val, sizeof(conf->static_dir));
 	} else if (strcasecmp(key, "templates_dir") == 0) {
 		strlcpy(conf->templates_dir, val, sizeof(conf->templates_dir));
+	} else if (strcasecmp(key, "autoindex") == 0) {
+		if (strcasecmp(val, "yes") == 0 || strcasecmp(val, "true") == 0)
+			conf->autoindex = 1;
+		else if (strcasecmp(val, "no") == 0 || strcasecmp(val, "false") == 0)
+			conf->autoindex = 0;
+		else
+			conf->autoindex = atoi(val);
 	} else if (strcasecmp(key, "mandoc_path") == 0) {
 		strlcpy(conf->mandoc_path, val, sizeof(conf->mandoc_path));
 	} else if (strcasecmp(key, "trusted_proxy") == 0) {
