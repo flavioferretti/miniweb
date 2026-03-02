@@ -1,7 +1,9 @@
 /* metrics_collectors.c - Metrics system collection helpers */
 
+#include <stdio.h>
 #include <stdint.h>
 #include <time.h>
+#include <sys/types.h>
 
 #include <sys/mount.h>
 #ifdef __OpenBSD__
@@ -9,9 +11,8 @@
 #include <sys/swap.h>
 #include <sys/sysctl.h>
 #endif
-#include <sys/types.h>
-#include <sys/utsname.h>
 
+#include <sys/utsname.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>

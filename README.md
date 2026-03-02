@@ -253,6 +253,30 @@ Man render cache
 > On a full miss, mandoc is invoked as a subprocess.
 > Cache invalidation requires a server restart or TTL expiry.
 
+# MODULE LAYOUT STATUS
+
+Current module layout in
+*src/modules*
+reflects the ongoing refactor plan:
+
+-	Manual pages: facade + split internals
+	(*man\_module.c*, *man\_service.c*, *man\_json.c*, *man\_query.c*, *man\_index.c*, *man\_render.c*).
+-	Metrics: orchestrator + collectors + snapshots + process/json units
+	(*metrics\_module.c*, *metrics\_collectors.c*, *metrics\_snapshot.c*, *metrics\_process.c*, *metrics\_json.c*).
+-	Networking and packages still keep larger orchestrator units and are next extraction targets.
+
+For the manual pages stack,
+*man\_module.c*
+is now route wiring and cleanup delegation only;
+query validation/parsing lives in
+*man\_query.c*,
+index/search preparation lives in
+*man\_index.c*,
+and HTTP payload shaping/render caching lives in
+*man\_render.c*.
+*man\_service.c*
+remains the service-facing facade.
+
 # RELIABILITY NOTES
 
 Recent hardening updates include:
@@ -1215,7 +1239,7 @@ relayd(8)
 
 # REFACTOR STATUS
 
-As of 2026-02-26, server runtime decomposition is complete for the
+As of 2026-03-01, server runtime decomposition is complete for the
 networking layer and documentation is up to date:
 
 *	*src/net/server.c*
@@ -1227,23 +1251,29 @@ networking layer and documentation is up to date:
 *	*src/net/worker.c*
 	&#8212; worker request read, parse, and route dispatch.
 
-Module decomposition scaffolds are in place for all four feature modules:
+Module decomposition has started for metrics and scaffolded all feature modules:
 
-*	*src/modules/metrics/metrics\_service.c*
+*	*src/modules/metrics/metrics\_json.c*
 	and
-	*src/modules/metrics/metrics\_json.c*
+	*src/modules/metrics/metrics\_process.c*
+	now own serializer/process extraction logic, while
+	*src/modules/metrics/metrics\_module.c*
+	keeps orchestration and endpoint wiring.
 
 *	*src/modules/networking/networking\_service.c*
 	and
 	*src/modules/networking/networking\_json.c*
+	remain scaffold units pending full extraction.
 
 *	*src/modules/man/man\_service.c*
 	and
 	*src/modules/man/man\_json.c*
+	remain scaffold units pending full extraction.
 
 *	*src/modules/packages/packages\_service.c*
 	and
 	*src/modules/packages/packages\_json.c*
+	remain scaffold units pending full extraction.
 
 All Doxygen
 'TODO'
