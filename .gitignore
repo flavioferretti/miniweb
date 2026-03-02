@@ -113,3 +113,5 @@ benchmark_assets/
 
 # Kate
 *.kate-swp
+
+callgraph/*
