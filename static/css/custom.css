@@ -1,7 +1,55 @@
 @import url('satoshi.css');
 
+/* ----------------------------------------------------------------------------
+ *  Miniweb - globals
+ *  ----------------------------------------------------------------------------
+ *  Miniweb minimal base CSS
+  *  ------------------------------------------------------------------------- */
+
 :root {
-  /* Variabili Chiaro (Default) */
+  /* Spacing - baseline 4px = 0.25rem */
+  --space-1: 0.35rem;   /* 4px */
+  --space-2: 0.5rem;    /* 8px */
+  --space-3: 0.75rem;   /* 12px */
+  --space-4: 1rem;      /* 16px */
+  --space-5: 1.25rem;   /* 20px */
+  --space-6: 1.5rem;    /* 24px */
+  --space-8: 2rem;      /* 32px */
+  --space-10: 2.5rem;   /* 40px */
+  --space-12: 3rem;     /* 48px */
+  --space-16: 4rem;     /* 64px */
+
+  /* Typography - modular scaling */
+  --font-family-base: 'Satoshi-Medium', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-family-mono: ui-monospace, 'Monaco', 'Menlo', 'Courier New', monospace;
+
+  --text-xs: 0.75rem;   /* 12px */
+  --text-sm: 0.875rem;  /* 14px */
+  --text-base: 1rem;    /* 16px */
+  --text-lg: 1.125rem;  /* 18px */
+  --text-xl: 1.25rem;   /* 20px */
+  --text-2xl: 1.5rem;   /* 24px */
+  --text-3xl: 1.875rem; /* 30px */
+
+  /* Borders and radius */
+  --radius-sm: 0.25rem;  /* 4px */
+  --radius-md: 0.5rem;   /* 8px */
+  --radius-lg: 0.75rem;  /* 12px */
+  --radius-xl: 1rem;     /* 16px */
+
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-base: 250ms ease;
+  --transition-slow: 350ms ease;
+
+  /* Z-index scale */
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-modal: 300;
+  --z-popover: 400;
+  --z-toast: 500;
+
+  /* Light theme */
   --bg: #f4f7fb;
   --surface: #ffffff;
   --surface-2: #f8fafc;
@@ -14,9 +62,21 @@
   --warning: #d97706;
   --danger: #dc2626;
   --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+
+  /* semantics var II */
+  --color-surface-hover: #f1f5f9;
+  --color-border-strong: #cbd5e1;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-soft-hover: #bfdbfe;
+
+  /* Shadows II */
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.08);
+  --shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 10px 30px rgba(15, 23, 42, 0.08);
+  --shadow-xl: 0 20px 40px -8px rgba(15, 23, 42, 0.12);
 }
 
-/* Questa riga è il segreto: si attiva quando JS cambia l'attributo */
+/* Dark theme */
 :root[data-theme='dark'] {
   --bg: #0b1220;
   --surface: #111b2f;
@@ -26,52 +86,84 @@
   --border: #27344d;
   --primary: #60a5fa;
   --primary-soft: rgba(96, 165, 250, 0.18);
-  --success: #0c6e0e;
+  --success: #22c55e;
   --warning: #fbbf24;
   --danger: #f87171;
   --shadow: 0 12px 32px rgba(2, 8, 23, 0.35);
+
+  /* Dark theme vars */
+  --color-surface-hover: #1e2b45;
+  --color-border-strong: #334155;
+  --color-primary-hover: #3b82f6;
+  --color-primary-soft-hover: rgba(96, 165, 250, 0.28);
+
+  --shadow-sm: 0 1px 3px rgba(2, 8, 23, 0.35);
+  --shadow-md: 0 4px 6px -1px rgba(2, 8, 23, 0.35);
+  --shadow-lg: 0 12px 32px rgba(2, 8, 23, 0.35);
 }
 
+/* ----------------------------------------------------------------------------
+ *  RESET & BASE
+ *  ------------------------------------------------------------------------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
 
-
-* { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; }
-
-/* STICKY FOOTER: usa flexbox per spingere il footer in fondo */
 html {
   height: 100%;
+  font-size: 16px; /* Base for rem */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
   min-height: 100%;
   display: flex;
   flex-direction: column;
-  font-family: 'Satoshi-Medium', sans-serif;
+  font-family: var(--font-family-base);
+  font-size: var(--text-base);
   background: var(--bg);
   color: var(--text);
   line-height: 1.5;
 }
 
+/* ----------------------------------------------------------------------------
+ *  LAYOUT
+ *  ------------------------------------------------------------------------- */
 .container {
-  width: min(1200px, 100% - 2rem);
+  width: min(1200px, 100% - var(--space-8));
   margin-inline: auto;
 }
 
+.app-shell {
+  padding: var(--space-6) 0 var(--space-8);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ----------------------------------------------------------------------------
+ *  HEADER & NAVIGATION
+ *  ------------------------------------------------------------------------- */
 .site-header {
   position: sticky;
   top: 0;
-  z-index: 20;
+  z-index: var(--z-sticky);
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--surface), transparent 8%);
   backdrop-filter: blur(6px);
-  flex-shrink: 0; /* Header non si comprime mai */
+  flex-shrink: 0;
 }
 
 .header-row {
   min-height: 4rem;
   display: grid;
   grid-template-columns: auto 1fr auto auto;
-  gap: 1rem;
+  gap: var(--space-4);
   align-items: center;
 }
 
@@ -79,37 +171,50 @@ body {
   color: var(--text);
   text-decoration: none;
   font-weight: 700;
-  font-size: 1.1rem;
+  font-size: var(--text-lg);
+  transition: color var(--transition-fast);
 }
 
+.brand:hover {
+  color: var(--primary);
+}
+
+/* Navigation */
 .navbar-menu {
   display: flex;
-  gap: 0.75rem;
+  gap: var(--space-3);
   justify-content: center;
 }
 
 .nav-link {
   color: var(--text-muted);
   text-decoration: none;
-  padding: 0.5rem 0.75rem;
-  border-radius: 0.20rem;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  transition: all var(--transition-fast);
+  border: 1px solid transparent;
 }
 
 .nav-link:hover,
 .nav-link.active {
   color: var(--text);
   background: var(--primary-soft);
-  border: 1px solid var(--primary);
-  /*   border-color: var(--primary); */
-  text-decoration: none;
+  border-color: var(--primary);
 }
 
 .navbar-toggle {
   display: none;
   background: transparent;
   border: 1px solid var(--border);
-  border-radius: 0.5rem;
-  padding: 0.45rem;
+  border-radius: var(--radius-md);
+  padding: var(--space-2);
+  cursor: pointer;
+  transition: border-color var(--transition-fast);
+}
+
+.navbar-toggle:hover {
+  border-color: var(--primary);
 }
 
 .navbar-toggle span {
@@ -118,181 +223,353 @@ body {
   height: 2px;
   background: var(--text);
   margin: 3px 0;
+  transition: background var(--transition-fast);
 }
 
+.navbar-toggle:hover span {
+  background: var(--primary);
+}
+
+/* Theme toggle */
 .theme-toggle {
   border: 1px solid var(--border);
-  border-radius: 0.5rem;
+  border-radius: var(--radius-md);
   background: var(--surface);
   color: var(--text);
   width: 2.25rem;
   height: 2.25rem;
   cursor: pointer;
-}
-
-.app-shell {
-  padding: 1.5rem 0 2rem;
-  flex: 1; /* Cresce per riempire lo spazio e spingere il footer in fondo */
+  transition: all var(--transition-fast);
+  font-size: var(--text-lg);
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 
+.theme-toggle:hover {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  transform: scale(1.05);
+}
+
+/* ----------------------------------------------------------------------------
+ *  COMPONENTS
+ *  ------------------------------------------------------------------------- */
+/* Panels/Cards */
 .panel {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 0.5rem;
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow);
-  padding: 1rem;
+  padding: var(--space-4);
+  transition: box-shadow var(--transition-fast), border-color var(--transition-fast);
 }
 
-h1,h2,h3 { margin: 0 0 0.75rem; }
-.muted { color: var(--text-muted); }
-
-main {
-  flex: 1; /* Main cresce per spingere il footer in fondo */
+.panel:hover {
+  box-shadow: var(--shadow-lg);
+  border-color: var(--color-border-strong);
 }
 
+/* Stat cards */
+.stat-card {
+  padding: var(--space-5);
+}
+
+.stat-card h3 {
+  font-size: var(--text-lg);
+  margin-bottom: var(--space-4);
+  color: var(--text);
+}
+
+/* Tab navigation */
+.tab-navigation {
+  display: flex;
+  gap: var(--space-2);
+  overflow-x: auto;
+  padding-bottom: var(--space-2);
+  margin-bottom: var(--space-4);
+  scrollbar-width: thin;
+}
+
+.tab-button {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  transition: all var(--transition-fast);
+}
+
+.tab-button:hover,
+.tab-button.active {
+  color: var(--text);
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+/* Typography utilities */
+h1, h2, h3, h4, h5, h6 {
+  margin: 0 0 var(--space-3);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+h1 { font-size: var(--text-3xl); }
+h2 { font-size: var(--text-2xl); }
+h3 { font-size: var(--text-xl); }
+h4 { font-size: var(--text-lg); }
+
+.muted {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+/* Links */
+a {
+  color: var(--primary);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+a:hover {
+  color: var(--color-primary-hover);
+  text-decoration: underline;
+}
+
+/* ----------------------------------------------------------------------------
+ *  FOOTER
+ *  ------------------------------------------------------------------------- */
 footer {
-  margin-top: 2rem;
+  margin-top: var(--space-8);
   border-top: 1px solid var(--border);
   color: var(--text-muted);
-  padding-top: 1rem;
+  padding-top: var(--space-4);
   text-align: center;
-  flex-shrink: 0; /* Footer non si comprime mai */
+  flex-shrink: 0;
+  font-size: var(--text-sm);
 }
 
+/* ----------------------------------------------------------------------------
+ *  MANDOC (MAN PAGES)
+ *  ------------------------------------------------------------------------- */
+.permalink { color: var(--primary); }
+.Dv {
+  color: var(--primary);
+  font-style: italic;
+  font-weight: 600;
+}
+
+.Nd, .Bf, .Op { display: inline; }
+
+.Pa, .Ad { font-style: italic; }
+.Ms { font-weight: bold; }
+.Bl-diag > dt { font-weight: bold; }
+
+code.Nm, .Fl, .Cm,
+.Ic, code.In, .Fd,
+.Fn, .Cd {
+  font-weight: bold;
+  font-family: inherit;
+}
+
+/* Manual page container */
+.manual-text {
+  width: min(1200px, 100% - var(--space-8));
+  margin-inline: auto;
+  background: var(--surface-2);
+  padding: var(--space-8);
+  border-radius: var(--radius-lg);
+}
+
+.head, .foot {
+  width: min(1200px, 100% - var(--space-8));
+  margin-inline: auto;
+  background: var(--surface);
+  color: var(--text-muted);
+  padding: var(--space-4) var(--space-8);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+}
+
+/* Code blocks */
+pre {
+  background: var(--surface) !important;
+  color: var(--text);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  padding-top: var(--space-8);
+  overflow-x: auto;
+  margin: var(--space-4) 0;
+  border: 1px solid var(--border);
+  font-family: var(--font-family-mono);
+  font-size: var(--text-sm);
+  position: relative;
+}
+
+/* Add a fake terminal bar to code blocks */
+pre::before {
+  content: '';
+  position: absolute;
+  top: var(--space-3);
+  left: var(--space-4);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #f87171;
+  box-shadow: 20px 0 #fbbf24, 40px 0 #22c55e;
+}
+
+/* ----------------------------------------------------------------------------
+ *  UTILITY CLASSES
+ *  ------------------------------------------------------------------------- */
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+.text-left { text-align: left; }
+
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.gap-1 { gap: var(--space-1); }
+.gap-2 { gap: var(--space-2); }
+.gap-4 { gap: var(--space-4); }
+
+.mt-1 { margin-top: var(--space-1); }
+.mt-2 { margin-top: var(--space-2); }
+.mt-4 { margin-top: var(--space-4); }
+.mb-1 { margin-bottom: var(--space-1); }
+.mb-2 { margin-bottom: var(--space-2); }
+.mb-4 { margin-bottom: var(--space-4); }
+
+.p-1 { padding: var(--space-1); }
+.p-2 { padding: var(--space-2); }
+.p-4 { padding: var(--space-4); }
+
+/* ----------------------------------------------------------------------------
+ *  MEDIA QUERIES - Mobile First
+ *  ------------------------------------------------------------------------- */
 @media (max-width: 860px) {
-
-  .site-header {
-    margin-top: 0.1rem;
-  }
-
+  /* Header mobile */
   .header-row {
     grid-template-columns: auto auto auto;
   }
 
-  .navbar-toggle { display: inline-block; }
+  .navbar-toggle {
+    display: inline-block;
+  }
 
   .navbar-menu {
     display: none;
     position: absolute;
-    left: 1rem;
-    right: 1rem;
-    top: calc(100% + 0.35rem);
+    left: var(--space-4);
+    right: var(--space-4);
+    top: calc(100% + var(--space-2));
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 0.5rem;
-    padding: 0.5rem;
+    border-radius: var(--radius-md);
+    padding: var(--space-2);
     flex-direction: column;
+    box-shadow: var(--shadow-lg);
+    z-index: var(--z-dropdown);
   }
 
-  .navbar-menu.show { display: flex; }
+  .navbar-menu.show {
+    display: flex;
+  }
+
+  .nav-link {
+    padding: var(--space-3);
+    width: 100%;
+    text-align: center;
+  }
+
+  /* Typography mobile */
+  h1 { font-size: var(--text-2xl); }
+  h2 { font-size: var(--text-xl); }
+
+  /* Manual pages mobile */
+  .manual-text,
+  .head,
+  .foot {
+    padding: var(--space-4);
+  }
+
+  pre {
+    padding: var(--space-4);
+    padding-top: var(--space-8);
+    font-size: var(--text-xs);
+  }
 }
 
-/* -- mandoc(1) HTML output ---------------------------------------------------
- * Classes emitted by mandoc -T html. Integrated here so man pages rendered
- * by miniweb inherit the site theme (colors, font) without a separate file.
- * Ref: mandoc.css distributed with mandoc, stripped to the essential rules.
- * --------------------------------------------------------------------------- */
-
-/* Header / footer tables (NAME(SECTION) ... date ... OS) */
-  .permalink {
-    color: #0f1040;
-  }
-  .Dv {
-    color: #0f1040;
-    font-style: italic;
-    font-weight: 600;
+@media (max-width: 480px) {
+  /* Small phones */
+  .container {
+    width: 100% - var(--space-4);
   }
 
-/* Inline macros that must not break to a new line */
-  .Nd, .Bf, .Op       { display: inline; }
-
-/* Semantic typography */
-  .Pa, .Ad            { font-style: italic; }            /* path / address */
-  .Ms                 { font-weight: bold; }             /* math symbol    */
-  .Bl-diag > dt       { font-weight: bold; }             /* diag list term */
-  code.Nm, .Fl, .Cm,
-  .Ic, code.In, .Fd,
-  .Fn, .Cd            { font-weight: bold; font-family: inherit; }
-
-  /* -- Theme integration ---------------------------------------------------- */
-
-  /* Wrap the entire mandoc page in a readable container */
-  .Pp {
-    max-width: 80ch;
-    padding: 0 1rem;
-    font-family: 'Satoshi-Medium', ui-monospace, monospace;
-    color: var(--text);
-  }
-
-  .head {
-    width: min(1200px, 100% - 2rem);
-    margin-top: 1.5rem;
-    margin-inline: auto;
-    background-color: #111b2f;
-    color: #edecce;
-    padding: 2rem;
-    border-radius: 0.5rem;
-  }
-
-  .manual-text {
-    width: min(1200px, 100% - 2rem);
-    margin-inline: auto;
-    background: #dfdfef;
-    padding: 2rem;
-    border-radius: 0.5rem;
-  }
-
-  .foot {
-    width: min(1200px, 100% - 2rem);
-    margin-inline: auto;
-    background-color: #111b2f;
-    color: #edecce;
-    padding: 2rem;
-    border-radius: 0.5rem;
-  }
-
-  /* Inline code / pre blocks */
-  pre {
-    background-color: #282c34 !important;
-    color: #dfdfef;
-    border-radius: 0.5rem;
-    padding: 1rem;
-    padding-top: 2.5rem;
-    overflow-x: auto;
-    margin: 0;
-  }
-
-  /* Links inherit primary colour */
-  a       { color: var(--primary); }
-  a:hover { text-decoration: underline; }
-
-
-  /* Common flv items */
-
-  /* Tab navigation - Same style as dashboard */
-  .tab-navigation {
-    display: flex;
-    gap: 0.5rem;
-    overflow-x: auto;
-    padding-bottom: 0.35rem;
-    margin-bottom: 1rem;
+  .panel {
+    padding: var(--space-3);
   }
 
   .tab-button {
-    border: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text-muted);
-    border-radius: 0.15rem;
-    padding: 0.45rem 0.7rem;
-    cursor: pointer;
-    white-space: nowrap;
+    padding: var(--space-1) var(--space-2);
+    font-size: var(--text-xs);
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ *  PRINT STYLES
+ *  ------------------------------------------------------------------------- */
+@media print {
+  .site-header,
+  .theme-toggle,
+  .navbar-toggle,
+  footer {
+    display: none;
   }
 
-  .tab-button:hover,
-  .tab-button.active {
-    color: var(--text);
-    border-color: var(--primary);
-    background: var(--primary-soft);
+  body {
+    background: white;
+    color: black;
   }
+
+  .panel {
+    box-shadow: none;
+    border: 1px solid #ddd;
+  }
+
+  a {
+    color: black;
+    text-decoration: underline;
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ *  ANIMATIONS
+ *  ------------------------------------------------------------------------- */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.fade-in {
+  animation: fadeIn var(--transition-base);
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.slide-in {
+  animation: slideIn var(--transition-base);
+}

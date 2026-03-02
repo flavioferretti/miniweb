@@ -11,19 +11,18 @@
 # Dependencies: cflow  graphviz(dot/fdp)
 #   OpenBSD:  pkg_add cflow graphviz
 #
-# Location: /home/flavio/DEV/miniweb/docs/generate_callgraph.sh
+# Location: miniweb/docs/generate_callgraph.sh
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-PROJECT_ROOT="/home/flavio/DEV/miniweb"
+PROJECT_ROOT="/home/$USER/DEV/miniweb"
 SRC_DIR="$PROJECT_ROOT/src"
 INCLUDE_DIR="$PROJECT_ROOT/include"
 OUTPUT_DIR="$PROJECT_ROOT/static/callgraph"
 
-# Profondità ridotte per evitare saturazione CPU
-REVERSE_DEPTH=3        # Era 5, ora 3
-COMPACT_DEPTH=3        # Era 4, ora 3
+# Lower depth (avoid CPU saturation)
+COMPACT_DEPTH=3
 
 # ---------------------------------------------------------------------------
 # Terminal colours (only on a real tty)
@@ -51,7 +50,6 @@ cd "$PROJECT_ROOT" || die "cannot cd to $PROJECT_ROOT"
 info "=== miniweb Call Graph Generator ==="
 print "  Source dir : $SRC_DIR"
 print "  Output dir : $OUTPUT_DIR"
-print "  Reverse depth : $REVERSE_DEPTH (ridotta per performance)"
 print "  Compact depth : $COMPACT_DEPTH"
 print ""
 
@@ -88,11 +86,6 @@ cflow -d $COMPACT_DEPTH -m main $CFLOW_OPTS $C_FILES \
     > "$OUTPUT_DIR/callgraph_compact.txt" 2>/dev/null
 ok "Saved: callgraph_compact.txt"
 
-info "Running cflow (reverse: who calls each function, depth $REVERSE_DEPTH)..."
-cflow -d $REVERSE_DEPTH -r $CFLOW_OPTS $C_FILES \
-    > "$OUTPUT_DIR/callgraph_reverse.txt" 2>/dev/null
-ok "Saved: callgraph_reverse.txt"
-
 # ---------------------------------------------------------------------------
 # 3. AWK parser: cflow indented tree -> DOT
 #
@@ -127,7 +120,7 @@ cat > "$CFLOW_TO_DOT_AWK" << 'AWKEOF'
 BEGIN {
     indent_unit = 0
     if (MAX_DEPTH == "") MAX_DEPTH = 99999
-    if (MAX_EDGES == "") MAX_EDGES = 5000   # limite sicurezza reverse graph
+    if (MAX_EDGES == "") MAX_EDGES = 5000
 
     print "digraph callgraph {"
     print "  // " TITLE
@@ -239,14 +232,6 @@ awk -f "$CFLOW_TO_DOT_AWK" \
     > "$OUTPUT_DIR/callgraph_compact.dot"
 ok "Saved: callgraph_compact.dot"
 
-awk -f "$CFLOW_TO_DOT_AWK" \
-    -v TITLE="miniweb — reverse call graph (depth $REVERSE_DEPTH)" \
-    -v STYLE="compact" \
-    -v MAX_DEPTH=$REVERSE_DEPTH \
-    -v MAX_EDGES=1500 \
-    "$OUTPUT_DIR/callgraph_reverse.txt" \
-    > "$OUTPUT_DIR/callgraph_reverse.dot"
-ok "Saved: callgraph_reverse.dot"
 
 # ---------------------------------------------------------------------------
 # 5. Render SVG files from each DOT (con timeout)
@@ -261,24 +246,23 @@ render_svg() {
 
     print "    Rendering $(basename "$dotfile") with $layout (max ${timeout}s)..."
 
-    # Usa timeout se disponibile, altrimenti esegui direttamente
+    # Use timeout if present, otherwise run directly
     if command -v timeout >/dev/null 2>&1; then
         if timeout $timeout "$layout" -Tsvg "$dotfile" -o "$svgfile" 2>/dev/null; then
             ok "Saved: $(basename "$svgfile")  [layout: $layout]"
         else
-            warn "Render fallito o timeout: $(basename "$dotfile")"
+            warn "Render failed or timeout: $(basename "$dotfile")"
         fi
     else
-        # Su OpenBSD timeout potrebbe non essere disponibile
+        # On OpenBSD timeout maybe not present
         "$layout" -Tsvg "$dotfile" -o "$svgfile" 2>/dev/null && \
             ok "Saved: $(basename "$svgfile")  [layout: $layout]" || \
-            warn "Render fallito: $(basename "$dotfile")"
+            warn "Render failed: $(basename "$dotfile")"
     fi
 }
 
 # Compact graphs: dot (hierarchical) works best
 render_svg "$OUTPUT_DIR/callgraph_compact.dot"  dot
-render_svg "$OUTPUT_DIR/callgraph_reverse.dot"  dot
 
 # From-main full-depth: dot is still cleaner than fdp here
 render_svg "$OUTPUT_DIR/callgraph_main.dot"     dot
@@ -317,11 +301,11 @@ info "Building function inventory..."
 ok "Saved: function_inventory.txt"
 
 # ---------------------------------------------------------------------------
-# 7. HTML viewer (resto invariato...)
+# 7. HTML viewer
 # ---------------------------------------------------------------------------
 info "Generating HTML viewer..."
 
-cat > "$OUTPUT_DIR/index.html" << '_HTML_'
+cat > "$OUTPUT_DIR/callgraph.html" << '_HTML_'
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
@@ -333,23 +317,10 @@ cat > "$OUTPUT_DIR/index.html" << '_HTML_'
     /* ... (stile invariato) ... */
   </style>
 </head>
-<body>
+<body style="background-color: var(--bg);">
 <div class="container">
     <h1>📊 MiniWeb — Call Graph Analysis</h1>
     <p>Progetto: <code>/home/flavio/DEV/miniweb</code> &nbsp;|&nbsp; Generato: <span id="date"></span></p>
-
-    <div class="legend">
-        <div class="legend-item"><span class="dot" style="background:#89b4fa"></span> entry/net</div>
-        <div class="legend-item"><span class="dot" style="background:#a6e3a1"></span> core</div>
-        <div class="legend-item"><span class="dot" style="background:#cba6f7"></span> http</div>
-        <div class="legend-item"><span class="dot" style="background:#fab387"></span> router</div>
-        <div class="legend-item"><span class="dot" style="background:#f38ba8"></span> man module</div>
-        <div class="legend-item"><span class="dot" style="background:#94e2d5"></span> metrics</div>
-        <div class="legend-item"><span class="dot" style="background:#89dceb"></span> networking</div>
-        <div class="legend-item"><span class="dot" style="background:#b4befe"></span> packages</div>
-        <div class="legend-item"><span class="dot" style="background:#f5c2e7"></span> storage</div>
-        <div class="legend-item"><span class="dot" style="background:#eba0ac"></span> platform</div>
-    </div>
 
     <nav>
         <a href="#compact">📦 Call Graph Compatto</a>
@@ -388,7 +359,6 @@ cat > "$OUTPUT_DIR/index.html" << '_HTML_'
         <a href="callgraph_full.txt">callgraph_full.txt (raw cflow)</a>
         <a href="callgraph_from_main.txt">callgraph_from_main.txt (raw cflow)</a>
         <a href="callgraph_compact.txt">callgraph_compact.txt (raw cflow)</a>
-        <a href="callgraph_reverse.txt">callgraph_reverse.txt (raw cflow)</a>
     </div>
 
     <footer>
@@ -403,7 +373,7 @@ cat > "$OUTPUT_DIR/index.html" << '_HTML_'
 </body>
 </html>
 _HTML_
-ok "Saved: index.html"
+ok "Saved: callgraph.html"
 
 # ---------------------------------------------------------------------------
 # 8. Summary
@@ -418,11 +388,10 @@ ls -lh "$OUTPUT_DIR" 2>/dev/null | \
     awk 'NR>1 {printf "  %-46s %6s\n", $NF, $5}'
 print ""
 print "Performance note:"
-print "  - Reverse depth ridotta da 5 a $REVERSE_DEPTH"
-print "  - Compact depth ridotta da 4 a $COMPACT_DEPTH"
-print "  - Limite edges: 5000 per full, 1500 per reverse"
-print "  - Timeout 30 secondi per rendering"
+print "  - Compact depth reduced from 4 to $COMPACT_DEPTH"
+print "  - Limit edges: 5000 full"
+print "  - Timeout 30 seconds for rendering"
 print ""
-print "Tip — Se un grafico è troppo grande, usa:"
-print "  grep -c '->' *.dot  # per contare le relazioni"
-print "  e modifica MAX_EDGES nello script"
+print "Tip — if chartis too big, use:"
+print "  grep -c '->' *.dot  # count relations"
+print "  modify MAX_EDGES accordingly into the script"
