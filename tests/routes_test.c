@@ -3,12 +3,15 @@
 #include <string.h>
 
 #include <miniweb/core/config.h>
+#include <miniweb/core/conf.h>
 #include <miniweb/router/routes.h>
 #include <miniweb/router/urls.h>
 
 int config_verbose = 0;
 char config_static_dir[] = "static";
 char config_templates_dir[] = "templates";
+int config_autoindex = 0;
+miniweb_conf_t config = {0};
 
 /**
  * @brief TODO: Describe main.
