@@ -1,4 +1,4 @@
-.Dd February 28, 2026
+.Dd March 2, 2026
 .Dt MINIWEB 1
 .Os OpenBSD
 .Sh NAME
@@ -469,7 +469,7 @@ Routes are stored in a flat array (up to
 = 32 entries) registered at startup by
 .Fn init_routes
 in
-.Pa src/router/url_registry.c .
+.Pa src/router/url_registry_init.c .
 .Pp
 .Fn route_match
 resolves a handler in two passes:
@@ -521,7 +521,7 @@ Add the module descriptor to the
 array in
 .Fn init_routes
 inside
-.Pa src/router/url_registry.c
+.Pa src/router/url_registry_init.c
 with
 .Va enabled_by_default
 set to 1.
@@ -668,7 +668,11 @@ and drives its 1-second sampler through it.
 All modules are registered at startup through
 .Fn miniweb_module_attach_enabled
 in
-.Pa src/router/url_registry.c .
+.Pa src/router/module_attach.c ,
+called from
+.Fn init_routes
+in
+.Pa src/router/url_registry_init.c .
 Each module provides an
 .Fn attach_routes
 callback that registers its endpoints through the
@@ -785,7 +789,7 @@ The interfaces are stable and intended to be implemented during the Phase 5
 storage refactor.
 .Sh OPENBSD SECURITY HARDENING
 After worker threads are started,
-.Fn apply_openbsd_security
+.Fn miniweb_apply_openbsd_security
 restricts the process with
 .Xr unveil 2
 and
@@ -919,6 +923,11 @@ The kqueue dispatcher and accept loop live in
 .Pa src/net/server.c .
 .It Pa src/net/server.c
 kqueue loop, worker pool, accept, idle sweep, shutdown.
+.It Pa src/net/connection_pool.c
+Flat fd-indexed connection pool with O(1) alloc/free via LIFO free-stack
+and per-slot generation counters.
+.It Pa src/net/worker.c
+Worker thread: request read, parse, route dispatch, keep-alive re-arm.
 .It Pa src/net/work_queue.c
 Thread-safe FIFO transport work queue extracted from the server entrypoint.
 .It Pa src/platform/openbsd/security.c
@@ -927,16 +936,67 @@ OpenBSD sandbox boundary setup using
 and
 .Xr pledge 2 .
 .It Pa src/core/conf.c
-Configuration file parser and CLI override logic.
+Configuration file parser:
+.Fn conf_load ,
+.Fn conf_parse_file ,
+.Fn conf_apply_kv .
+.It Pa src/core/conf_defaults.c
+Compiled-in defaults, CLI override application, and config dump:
+.Fn conf_defaults ,
+.Fn conf_apply_cli ,
+.Fn conf_dump .
+.It Pa src/core/conf_validation.c
+Post-parse range and consistency validation:
+.Fn conf_validate .
 .It Pa src/core/heartbeat.c
-Periodic task scheduler (up to 32 named tasks, overrun tracking) using
-CLOCK_MONOTONIC to avoid NTP skew.
+Public API and background thread loop for the periodic task scheduler:
+.Fn heartbeat_register ,
+.Fn heartbeat_unregister ,
+.Fn heartbeat_update ,
+.Fn heartbeat_start ,
+.Fn heartbeat_stop ,
+.Fn heartbeat_shutdown ,
+.Fn heartbeat_get_stats .
+.It Pa src/core/heartbeat_schedule.c
+Due-task collection and timed-wait logic:
+.Fn hb_collect_due_tasks ,
+.Fn hb_collect_all_active ,
+.Fn hb_wait_for_next_tick ,
+.Fn hb_mark_stopped .
+.It Pa src/core/heartbeat_dispatch.c
+Batch execution helpers:
+.Fn hb_batch_reset ,
+.Fn hb_batch_push ,
+.Fn hb_batch_run .
 .It Pa src/core/log.c
 Thread-safe logger.
-.It Pa src/http/response.c
-Response pool, serialisation, sharded file cache, HTTP send helpers.
+.It Pa src/http/response_api.c
+Response object allocation, deallocation, and field setters.
+.It Pa src/http/response_helpers.c
+High-level HTTP send helpers:
+.Fn http_send_response ,
+.Fn http_send_error ,
+.Fn http_render_template ,
+and client-IP extraction.
+.It Pa src/http/response_file.c
+Static file serving via the sharded file cache.
+.It Pa src/http/response_io.c
+Low-level write helpers:
+.Fn write_all
+and
+.Fn writev_all .
+.It Pa src/http/response_pool.c
+Sharded response pool (16 shards, 1024 slots each) with heap fallback.
+.It Pa src/http/response_file_cache.c
+Sharded static file cache (16 shards, 32 slots, 256 KiB limit, 2-hit
+admission, 8 inserts/shard/sec, 120 s TTL, mtime validation).
 .It Pa src/http/utils.c
-JSON escaping (fixed buffer overrun), subprocess execution (fork / poll / timeout).
+JSON string escaping and
+.Fn safe_popen_read
+(single-string shell invocation).
+.It Pa src/http/utils_subprocess.c
+.Fn safe_popen_read_argv
+\(em execvp-based subprocess execution with poll timeout and SIGKILL.
 .It Pa src/router/module_attach.c
 .Fn miniweb_module_attach_enabled
 module registration.
@@ -948,15 +1008,51 @@ and
 .Fn router_register_prefix
 wrappers.
 .It Pa src/router/url_registry.c
-Route table, prefix routes,
-.Va view_routes[] ,
-.Fn init_routes .
-All built-in modules are attached here through the module attach API.
+Route registration table and
+.Va view_routes[]
+array.
+.It Pa src/router/url_registry_init.c
+.Fn init_routes
+\(em registers all built-in modules through the module attach API.
+.It Pa src/router/url_registry_lookup.c
+.Fn route_match ,
+.Fn route_path_known ,
+.Fn find_view_route
+\(em two-pass exact/prefix resolver.
+.It Pa src/router/url_registry_reverse.c
+.Fn route_reverse
+\(em reverse URL lookup.
 .It Pa src/modules/man/
 Man page rendering, two-level render cache (L1: RAM, L2: filesystem), JSON API.
+.Pa man_module.c
+handles route wiring, cleanup delegation, and the render/API entry points.
+.Pa man_query.c
+performs query validation and parameter parsing.
+.Pa man_index.c
+builds and manages the man page index.
+.Pa man_render.c
+invokes mandoc and manages the filesystem render cache.
+.Pa man_service.c
+and
+.Pa man_json.c
+are Phase 3 decomposition scaffolds pending full migration.
 Semaphore limits concurrent mandoc subprocesses.
 .It Pa src/modules/metrics/
 System metrics collection, heartbeat task, ring buffer, and JSON API.
+.Pa metrics_module.c
+handles route wiring and orchestration.
+.Pa metrics_collectors.c
+performs sysctl data collection (CPU, memory, load, disk, OS info).
+.Pa metrics_process.c
+extracts per-process statistics via
+.Dv KERN_PROC_ALL .
+.Pa metrics_snapshot.c
+maintains the ring buffer, cached JSON snapshot, and
+.Fn metrics_heartbeat_cb .
+.Pa metrics_service.c
+and
+.Pa metrics_json.c
+are Phase 3 decomposition scaffolds pending full migration.
 .It Pa src/modules/networking/
 Networking diagnostics, heartbeat task, ring buffer, and JSON API.
 .It Pa src/modules/packages/
@@ -1025,14 +1121,6 @@ After migration,
 should contain only route handler entry points and
 .Fn attach_routes .
 .It
-Split
-.Pa src/http/response.c
-(~973 LOC) into
-.Pa response_writer.c ,
-.Pa static_files.c ,
-and
-.Pa mime.c .
-.It
 Extract platform-specific collectors into dedicated translation units under
 .Pa src/platform/openbsd/
 for CPU, memory, disk, process, network interfaces, and routing table.
@@ -1095,8 +1183,9 @@ Compatibility-first refactor: feature parity required at every phase.
 .It
 .%U https://github.com/flavioferretti/miniweb
 .Sh REFACTOR STATUS
-As of 2026-03-01, server runtime decomposition is complete for the
-networking layer and documentation is up to date:
+As of 2026-03-02, server runtime decomposition is complete for the
+networking layer, HTTP response layer, and routing layer; documentation
+is up to date:
 .Bl -bullet
 .It
 .Pa src/net/server.c
@@ -1107,14 +1196,35 @@ networking layer and documentation is up to date:
 .It
 .Pa src/net/worker.c
 \(em worker request read, parse, and route dispatch.
+.It
+.Pa src/http/response_api.c ,
+.Pa src/http/response_helpers.c ,
+.Pa src/http/response_file.c ,
+.Pa src/http/response_io.c ,
+.Pa src/http/response_pool.c ,
+.Pa src/http/response_file_cache.c
+\(em HTTP response layer fully decomposed from the former monolithic
+.Pa response.c .
+.It
+.Pa src/http/utils_subprocess.c
+\(em subprocess execution split from
+.Pa utils.c .
+.It
+.Pa src/router/url_registry_init.c ,
+.Pa src/router/url_registry_lookup.c ,
+.Pa src/router/url_registry_reverse.c
+\(em URL registry split into init, lookup, and reverse units.
 .El
 Module decomposition has started for metrics and scaffolded all feature modules:
 .Bl -bullet
 .It
-.Pa src/modules/metrics/metrics_json.c
+.Pa src/modules/metrics/metrics_collectors.c ,
+.Pa src/modules/metrics/metrics_process.c ,
+.Pa src/modules/metrics/metrics_snapshot.c ,
 and
-.Pa src/modules/metrics/metrics_process.c
-now own serializer/process extraction logic, while
+.Pa src/modules/metrics/metrics_json.c
+now own data collection, process extraction, ring-buffer/snapshot, and
+serialisation logic respectively, while
 .Pa src/modules/metrics/metrics_module.c
 keeps orchestration and endpoint wiring.
 .It

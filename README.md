@@ -523,7 +523,7 @@ Routes are stored in a flat array (up to
 &equals; 32 entries) registered at startup by
 **init\_routes**()
 in
-*src/router/url\_registry.c*.
+*src/router/url\_registry\_init.c*.
 
 **route\_match**()
 resolves a handler in two passes:
@@ -570,7 +570,7 @@ Add the module descriptor to the
 array in
 **init\_routes**()
 inside
-*src/router/url\_registry.c*
+*src/router/url\_registry\_init.c*
 with
 *enabled\_by\_default*
 set to 1.
@@ -723,7 +723,11 @@ and drives its 1-second sampler through it.
 All modules are registered at startup through
 **miniweb\_module\_attach\_enabled**()
 in
-*src/router/url\_registry.c*.
+*src/router/module\_attach.c*,
+called from
+**init\_routes**()
+in
+*src/router/url\_registry\_init.c*.
 Each module provides an
 **attach\_routes**()
 callback that registers its endpoints through the
@@ -847,7 +851,7 @@ storage refactor.
 # OPENBSD SECURITY HARDENING
 
 After worker threads are started,
-**apply\_openbsd\_security**()
+**miniweb\_apply\_openbsd\_security**()
 restricts the process with
 unveil(2)
 and
@@ -1037,6 +1041,15 @@ The following API endpoints are available:
 
 > kqueue loop, worker pool, accept, idle sweep, shutdown.
 
+*src/net/connection\_pool.c*
+
+> Flat fd-indexed connection pool with O(1) alloc/free via LIFO free-stack
+> and per-slot generation counters.
+
+*src/net/worker.c*
+
+> Worker thread: request read, parse, route dispatch, keep-alive re-arm.
+
 *src/net/work\_queue.c*
 
 > Thread-safe FIFO transport work queue extracted from the server entrypoint.
@@ -1050,24 +1063,95 @@ The following API endpoints are available:
 
 *src/core/conf.c*
 
-> Configuration file parser and CLI override logic.
+> Configuration file parser:
+> **conf\_load**(),
+> **conf\_parse\_file**(),
+> **conf\_apply\_kv**().
+
+*src/core/conf\_defaults.c*
+
+> Compiled-in defaults, CLI override application, and config dump:
+> **conf\_defaults**(),
+> **conf\_apply\_cli**(),
+> **conf\_dump**().
+
+*src/core/conf\_validation.c*
+
+> Post-parse range and consistency validation:
+> **conf\_validate**().
 
 *src/core/heartbeat.c*
 
-> Periodic task scheduler (up to 32 named tasks, overrun tracking) using
-> CLOCK\_MONOTONIC to avoid NTP skew.
+> Public API and background thread loop for the periodic task scheduler:
+> **heartbeat\_register**(),
+> **heartbeat\_unregister**(),
+> **heartbeat\_update**(),
+> **heartbeat\_start**(),
+> **heartbeat\_stop**(),
+> **heartbeat\_shutdown**(),
+> **heartbeat\_get\_stats**().
+
+*src/core/heartbeat\_schedule.c*
+
+> Due-task collection and timed-wait logic:
+> **hb\_collect\_due\_tasks**(),
+> **hb\_collect\_all\_active**(),
+> **hb\_wait\_for\_next\_tick**(),
+> **hb\_mark\_stopped**().
+
+*src/core/heartbeat\_dispatch.c*
+
+> Batch execution helpers:
+> **hb\_batch\_reset**(),
+> **hb\_batch\_push**(),
+> **hb\_batch\_run**().
 
 *src/core/log.c*
 
 > Thread-safe logger.
 
-*src/http/response.c*
+*src/http/response\_api.c*
 
-> Response pool, serialisation, sharded file cache, HTTP send helpers.
+> Response object allocation, deallocation, and field setters.
+
+*src/http/response\_helpers.c*
+
+> High-level HTTP send helpers:
+> **http\_send\_response**(),
+> **http\_send\_error**(),
+> **http\_render\_template**(),
+> and client-IP extraction.
+
+*src/http/response\_file.c*
+
+> Static file serving via the sharded file cache.
+
+*src/http/response\_io.c*
+
+> Low-level write helpers:
+> **write\_all**()
+> and
+> **writev\_all**().
+
+*src/http/response\_pool.c*
+
+> Sharded response pool (16 shards, 1024 slots each) with heap fallback.
+
+*src/http/response\_file\_cache.c*
+
+> Sharded static file cache (16 shards, 32 slots, 256 KiB limit, 2-hit
+> admission, 8 inserts/shard/sec, 120 s TTL, mtime validation).
 
 *src/http/utils.c*
 
-> JSON escaping (fixed buffer overrun), subprocess execution (fork / poll / timeout).
+> JSON string escaping and
+> **safe\_popen\_read**()
+> (single-string shell invocation).
+
+*src/http/utils\_subprocess.c*
+
+> **safe\_popen\_read\_argv**()
+> &#8212; execvp-based subprocess execution with poll timeout and SIGKILL.
 
 *src/router/module\_attach.c*
 
@@ -1087,19 +1171,61 @@ The following API endpoints are available:
 
 *src/router/url\_registry.c*
 
-> Route table, prefix routes,
-> *view\_routes\[]*,
-> **init\_routes**().
-> All built-in modules are attached here through the module attach API.
+> Route registration table and
+> *view\_routes\[]*
+> array.
+
+*src/router/url\_registry\_init.c*
+
+> **init\_routes**()
+> &#8212; registers all built-in modules through the module attach API.
+
+*src/router/url\_registry\_lookup.c*
+
+> **route\_match**(),
+> **route\_path\_known**(),
+> **find\_view\_route**()
+> &#8212; two-pass exact/prefix resolver.
+
+*src/router/url\_registry\_reverse.c*
+
+> **route\_reverse**()
+> &#8212; reverse URL lookup.
 
 *src/modules/man/*
 
 > Man page rendering, two-level render cache (L1: RAM, L2: filesystem), JSON API.
+> *man\_module.c*
+> handles route wiring, cleanup delegation, and the render/API entry points.
+> *man\_query.c*
+> performs query validation and parameter parsing.
+> *man\_index.c*
+> builds and manages the man page index.
+> *man\_render.c*
+> invokes mandoc and manages the filesystem render cache.
+> *man\_service.c*
+> and
+> *man\_json.c*
+> are Phase 3 decomposition scaffolds pending full migration.
 > Semaphore limits concurrent mandoc subprocesses.
 
 *src/modules/metrics/*
 
 > System metrics collection, heartbeat task, ring buffer, and JSON API.
+> *metrics\_module.c*
+> handles route wiring and orchestration.
+> *metrics\_collectors.c*
+> performs sysctl data collection (CPU, memory, load, disk, OS info).
+> *metrics\_process.c*
+> extracts per-process statistics via
+> `KERN_PROC_ALL`.
+> *metrics\_snapshot.c*
+> maintains the ring buffer, cached JSON snapshot, and
+> **metrics\_heartbeat\_cb**().
+> *metrics\_service.c*
+> and
+> *metrics\_json.c*
+> are Phase 3 decomposition scaffolds pending full migration.
 
 *src/modules/networking/*
 
@@ -1192,29 +1318,22 @@ LOC-per-file and low LOC-per-function targets across the codebase.
 	*\*\_module.c*
 	should contain only route handler entry points and
 	**attach\_routes**().
-2.	Split
-	*src/http/response.c*
-	(~973 LOC) into
-	*response\_writer.c*,
-	*static\_files.c*,
-	and
-	*mime.c*.
-3.	Extract platform-specific collectors into dedicated translation units under
+2.	Extract platform-specific collectors into dedicated translation units under
 	*src/platform/openbsd/*
 	for CPU, memory, disk, process, network interfaces, and routing table.
 	Modules must consume only collector APIs; no direct sysctl or kvm calls
 	should remain inside module files.
-4.	Apply function-size limits (soft 40 LOC, review trigger 80 LOC) to
+3.	Apply function-size limits (soft 40 LOC, review trigger 80 LOC) to
 	**miniweb\_server\_run**(),
 	**man\_render\_handler**(),
 	and
 	**build\_system\_metrics\_json**().
-5.	Upgrade
+4.	Upgrade
 	*tests/integration\_endpoints.sh*
 	from reachability smoke tests to contract-level assertions: explicit
 	status checks for 200/404/405 and JSON key-presence checks for core
 	endpoints.
-6.	Implement the SQLite3 backend (Phase 5): connect
+5.	Implement the SQLite3 backend (Phase 5): connect
 	*src/storage/*
 	stubs to real
 	**sqlite3\_open\_v2**(),
@@ -1252,8 +1371,9 @@ relayd(8)
 
 # REFACTOR STATUS
 
-As of 2026-03-01, server runtime decomposition is complete for the
-networking layer and documentation is up to date:
+As of 2026-03-02, server runtime decomposition is complete for the
+networking layer, HTTP response layer, and routing layer; documentation
+is up to date:
 
 *	*src/net/server.c*
 	&#8212; kqueue dispatcher and accept loop.
@@ -1264,12 +1384,33 @@ networking layer and documentation is up to date:
 *	*src/net/worker.c*
 	&#8212; worker request read, parse, and route dispatch.
 
+*	*src/http/response\_api.c*,
+	*src/http/response\_helpers.c*,
+	*src/http/response\_file.c*,
+	*src/http/response\_io.c*,
+	*src/http/response\_pool.c*,
+	*src/http/response\_file\_cache.c*
+	&#8212; HTTP response layer fully decomposed from the former monolithic
+	*response.c*.
+
+*	*src/http/utils\_subprocess.c*
+	&#8212; subprocess execution split from
+	*utils.c*.
+
+*	*src/router/url\_registry\_init.c*,
+	*src/router/url\_registry\_lookup.c*,
+	*src/router/url\_registry\_reverse.c*
+	&#8212; URL registry split into init, lookup, and reverse units.
+
 Module decomposition has started for metrics and scaffolded all feature modules:
 
-*	*src/modules/metrics/metrics\_json.c*
+*	*src/modules/metrics/metrics\_collectors.c*,
+	*src/modules/metrics/metrics\_process.c*,
+	*src/modules/metrics/metrics\_snapshot.c*,
 	and
-	*src/modules/metrics/metrics\_process.c*
-	now own serializer/process extraction logic, while
+	*src/modules/metrics/metrics\_json.c*
+	now own data collection, process extraction, ring-buffer/snapshot, and
+	serialisation logic respectively, while
 	*src/modules/metrics/metrics\_module.c*
 	keeps orchestration and endpoint wiring.
 
@@ -1301,4 +1442,4 @@ Recent bug fixes include:
 *	SQLite database path now properly stored.
 *	Heartbeat scheduler uses CLOCK\_MONOTONIC to avoid NTP skew.
 
-OpenBSD - February 28, 2026 - MINIWEB(1)
+OpenBSD - March 2, 2026 - MINIWEB(1)
