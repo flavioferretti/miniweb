@@ -311,65 +311,74 @@ cat > "$OUTPUT_DIR/callgraph.html" << '_HTML_'
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>miniweb — Call Graph</title>
+  <title>Miniweb — Call Graph</title>
   <link rel="stylesheet" href="/static/css/custom.css">
   <style>
-    /* ... (stile invariato) ... */
+    /*  */
   </style>
 </head>
 <body style="background-color: var(--bg);">
+<header class="site-header">
+    <div class="container header-row">
+      <a class="brand" href="/">MiniWeb</a>
+      <nav class="navbar-menu"><a class="nav-link active" href="/static/callgraph/callgraph.html">Callgraph</a></nav>
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle theme">&#9680;</button>
+    </div>
+  </header>
 <div class="container">
     <h1>📊 MiniWeb — Call Graph Analysis</h1>
-    <p>Progetto: <code>/home/flavio/DEV/miniweb</code> &nbsp;|&nbsp; Generato: <span id="date"></span></p>
+    <p>Project: <code>miniweb</code> &nbsp;|&nbsp; Generated: <span id="date"></span></p>
 
     <nav>
-        <a href="#compact">📦 Call Graph Compatto</a>
-        <a href="#compact-lr">↔️ Compatto Orizzontale</a>
-        <a href="#main">🎯 Call Graph da main()</a>
+        <a href="#compact">📦 Call Graph Compact</a>
+        <a href="#compact-lr">↔️ Compact Horizontal </a>
+        <a href="#main">🎯 Call Graph from main()</a>
         <a href="#files">📄 File</a>
     </nav>
 
-    <h2 id="compact">📦 Call Graph Compatto (profondità 3, senza librerie di sistema) <span class="badge">SVG</span></h2>
-    <p>Vista semplificata che mostra le relazioni principali tra le funzioni del progetto, filtrando le chiamate alle librerie standard.</p>
+    <h2 id="compact">📦 Call Graph Compact (depth 3) <span class="badge">SVG</span></h2>
+    <p>...</p>
     <div class="graph-wrap">
         <object type="image/svg+xml" data="callgraph_compact.svg"></object>
     </div>
 
-    <h2 id="compact-lr">↔️ Call Graph Compatto — Layout Orizzontale <span class="badge">SVG</span></h2>
-    <p>La stessa vista compatta ma con orientamento orizzontale, utile per grafi molto larghi.</p>
+    <h2 id="compact-lr">↔️ Call Graph Compact Horizontal <span class="badge">SVG</span></h2>
+    <p>...</p>
     <div class="graph-wrap">
         <object type="image/svg+xml" data="callgraph_compact_lr.svg"></object>
     </div>
 
-    <h2 id="main">🎯 Call Graph a partire da main() <span class="badge">SVG</span></h2>
-    <p>Mostra tutte le funzioni raggiungibili dal main, con profondità illimitata. Utile per capire il flusso principale dell'applicazione.</p>
+    <h2 id="main">🎯 Call Graph from main() <span class="badge">SVG</span></h2>
+    <p>...</p>
     <div class="graph-wrap">
         <object type="image/svg+xml" data="callgraph_main.svg"></object>
     </div>
 
-    <h2 id="files">📄 File sorgente generati</h2>
+    <h2 id="files">📄 Generated source files</h2>
     <div class="file-grid">
-        <a href="callgraph_compact.dot">callgraph_compact.dot</a>
-        <a href="callgraph_main.dot">callgraph_main.dot</a>
-        <a href="callgraph_compact.svg">callgraph_compact.svg</a>
-        <a href="callgraph_compact_lr.svg">callgraph_compact_lr.svg</a>
-        <a href="callgraph_main.svg">callgraph_main.svg</a>
-        <a href="function_inventory.txt">function_inventory.txt</a>
-        <a href="_cflow2dot.awk">_cflow2dot.awk (parser AWK)</a>
-        <a href="callgraph_full.txt">callgraph_full.txt (raw cflow)</a>
-        <a href="callgraph_from_main.txt">callgraph_from_main.txt (raw cflow)</a>
-        <a href="callgraph_compact.txt">callgraph_compact.txt (raw cflow)</a>
+        <ul>
+            <li><a href="callgraph_compact.dot">callgraph_compact.dot</a></li>
+            <li><a href="callgraph_main.dot">callgraph_main.dot</a></li>
+            <li><a href="callgraph_compact.svg">callgraph_compact.svg</a></li>
+            <li><a href="callgraph_compact_lr.svg">callgraph_compact_lr.svg</a></li>
+            <li><a href="callgraph_main.svg">callgraph_main.svg</a></li>
+            <li><a href="function_inventory.txt">function_inventory.txt</a></li>
+            <li><a href="_cflow2dot.awk">_cflow2dot.awk (parser AWK)</a></li>
+            <li><a href="callgraph_full.txt">callgraph_full.txt (raw cflow)</a></li>
+            <li><a href="callgraph_from_main.txt">callgraph_from_main.txt (raw cflow)</a></li>
+            <li><a href="callgraph_compact.txt">callgraph_compact.txt (raw cflow)</a></li>
+        </ul>
     </div>
 
     <footer>
-        <p>🔧 Generato con cflow + graphviz | <code>./docs/generate_callgraph.sh</code></p>
-        <p>I grafi DOT sono modificabili manualmente: <code>dot -Tsvg foo.dot -o foo.svg</code></p>
-        <p>📊 Grafici disponibili: compatti (3 livelli) e da main (profondità illimitata)</p>
+        <p>🔧 Generated with cflow + graphviz | <code>./docs/generate_callgraph.sh</code></p>
+        <p>DOT graph modify: <code>dot -Tsvg foo.dot -o foo.svg</code></p>
     </footer>
 </div>
 <script>
     document.getElementById('date').textContent = new Date().toLocaleString('it-IT');
 </script>
+<script src="/static/js/theme_toggler.js"></script>
 </body>
 </html>
 _HTML_
