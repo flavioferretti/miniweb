@@ -98,9 +98,19 @@ man_is_valid_section(const char *section)
 {
     if (!section || *section == '\0' || strlen(section) > 8)
         return 0;
+
+    // OpenBSD man sections are numbers, optionally with a letter suffix
+    // Valid examples: "1", "2", "3", "3p", "4", "5", "6", "7", "8", "9"
     for (const unsigned char *p = (const unsigned char *)section; *p; p++) {
-        if (!isalnum(*p))
-            return 0;
+        // First character must be a digit
+        if (p == (const unsigned char *)section) {
+            if (!isdigit(*p))
+                return 0;
+        } else {
+            // Subsequent characters can only be lowercase letters
+            if (!islower(*p))
+                return 0;
+        }
     }
     return 1;
 }

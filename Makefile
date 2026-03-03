@@ -109,7 +109,7 @@ OBJS=      ${BUILDDIR}/app_main.o \
            ${BUILDDIR}/security.o
 
 CC?=       cc
-CFLAGS+=   -std=c99 -O2 -Wall -Wextra -pedantic
+CFLAGS+=   -std=c99 -O0 -Wall -Wextra -pedantic
 CFLAGS+=   -fstack-protector-strong -I${INCDIR}
 CFLAGS+=   -D_FORTIFY_SOURCE=2
 CFLAGS+=   -Wformat -Wformat-security

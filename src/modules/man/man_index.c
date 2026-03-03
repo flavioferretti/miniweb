@@ -140,7 +140,7 @@ man_get_section_pages_json(const char *area, const char *section)
         return NULL;
     }
 
-#define JSON_CLOSE_RESERVE 4
+    #define JSON_CLOSE_RESERVE 4
     int n = snprintf(json, MAN_MAX_JSON_SIZE, "{\"pages\":[");
     size_t used = (n > 0) ? (size_t)n : 0;
 
@@ -152,6 +152,7 @@ man_get_section_pages_json(const char *area, const char *section)
             continue;
         if (de->d_type == DT_DIR)
             continue;
+
         char resolved_section[16];
         if (!man_parse_section_from_filename(de->d_name, resolved_section,
             sizeof(resolved_section)))
@@ -159,13 +160,16 @@ man_get_section_pages_json(const char *area, const char *section)
         if (strcmp(resolved_section, section) != 0)
             continue;
 
+        // Extract the page name by removing the .section suffix
+        // But keep any other dots in the name (e.g., cupsd.conf.5 -> cupsd.conf)
         char name[128];
-        char *dot = strchr(de->d_name, '.');
-        size_t name_len = dot ? (size_t)(dot - de->d_name) : strlen(de->d_name);
-        if (name_len >= sizeof(name))
-            name_len = sizeof(name) - 1;
-        memcpy(name, de->d_name, name_len);
-        name[name_len] = '\0';
+        strlcpy(name, de->d_name, sizeof(name));
+
+        // Find the last dot (which is the section separator)
+        char *last_dot = strrchr(name, '.');
+        if (last_dot) {
+            *last_dot = '\0';  // Remove the section suffix
+        }
 
         if (page_count < (sizeof(pages) / sizeof(pages[0]))) {
             pages[page_count] = strdup(name);
@@ -194,7 +198,7 @@ man_get_section_pages_json(const char *area, const char *section)
         }
     }
     (void)snprintf(json + used, MAN_MAX_JSON_SIZE - used, "]}");
-#undef JSON_CLOSE_RESERVE
+    #undef JSON_CLOSE_RESERVE
 
     return json;
 }
