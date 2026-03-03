@@ -115,9 +115,11 @@
 
 html {
   height: 100%;
-  font-size: 16px; /* Base for rem */
+  font-size: 16px !important; /* Lock base rem — resist Firefox Android system font scaling */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
@@ -129,21 +131,29 @@ body {
   background: var(--bg);
   color: var(--text);
   line-height: 1.5;
+  overflow-x: hidden; /* Prevent horizontal scroll on narrow viewports */
+  max-width: 100%;
 }
 
 /* ----------------------------------------------------------------------------
  *  LAYOUT
  *  ------------------------------------------------------------------------- */
 .container {
-  width: min(1200px, 100% - var(--space-8));
+  width: 100%;
+  max-width: 1200px;
   margin-inline: auto;
+  box-sizing: border-box;
+  padding-inline: var(--space-4);
 }
 
 .app-shell {
-  padding: var(--space-6) 0 var(--space-8);
+  padding-top: var(--space-6);
+  padding-bottom: var(--space-8);
   flex: 1;
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
 }
 
 /* ----------------------------------------------------------------------------
@@ -165,6 +175,13 @@ body {
   grid-template-columns: auto 1fr auto auto;
   gap: var(--space-4);
   align-items: center;
+}
+
+/* Header actions group (theme + hamburger) */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .brand {
@@ -236,14 +253,15 @@ body {
   border-radius: var(--radius-md);
   background: var(--surface);
   color: var(--text);
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 36px;
+  height: 36px;
   cursor: pointer;
   transition: all var(--transition-fast);
-  font-size: var(--text-lg);
+  font-size: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 .theme-toggle:hover {
@@ -454,11 +472,41 @@ pre::before {
 @media (max-width: 860px) {
   /* Header mobile */
   .header-row {
-    grid-template-columns: auto auto auto;
+    grid-template-columns: auto 1fr auto;
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    justify-self: end; /* push to right edge within its grid cell */
   }
 
   .navbar-toggle {
-    display: inline-block;
+    display: inline-flex;
+    width: 44px;
+    height: 36px;
+    padding: 8px;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .navbar-toggle span {
+    display: block;
+    width: 18px;
+    height: 2px;
+    margin: 0;
+  }
+
+  .theme-toggle {
+    width: 36px;
+    height: 36px;
+    font-size: 18px;
+    padding: 0;
+    flex-shrink: 0;
   }
 
   .navbar-menu {
@@ -506,9 +554,7 @@ pre::before {
 
 @media (max-width: 480px) {
   /* Small phones */
-  .container {
-    width: 100% - var(--space-4);
-  }
+  /* container already handles padding-inline globally */
 
   .panel {
     padding: var(--space-3);

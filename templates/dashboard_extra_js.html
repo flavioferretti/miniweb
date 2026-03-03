@@ -129,6 +129,33 @@
     memChart.plot(memSeries);
   };
 
+  // Sizes canvas to the inner content width of its .flvchart-card container,
+  // accounting for padding and devicePixelRatio for crisp HiDPI rendering.
+  const sizeCanvas = (id) => {
+    const canvas = document.getElementById(id);
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    // Find the .flvchart-card ancestor as the sizing reference
+    let ref = canvas.parentElement;
+    while (ref && !ref.classList.contains('flvchart-card')) ref = ref.parentElement;
+    if (!ref) ref = canvas.parentElement;
+    const st = window.getComputedStyle(ref);
+    const cssW = ref.getBoundingClientRect().width
+                 - parseFloat(st.paddingLeft)
+                 - parseFloat(st.paddingRight)
+                 - parseFloat(st.borderLeftWidth)
+                 - parseFloat(st.borderRightWidth);
+    if (cssW > 0) {
+      const cssH = Math.floor(cssW * 0.50);
+      canvas.width  = Math.floor(cssW * dpr);
+      canvas.height = Math.floor(cssH * dpr);
+      canvas.style.width  = cssW + 'px';
+      canvas.style.height = cssH + 'px';
+      const ctx = canvas.getContext('2d');
+      if (ctx) { ctx.resetTransform(); ctx.scale(dpr, dpr); }
+    }
+  };
+
   const mountOverview = () => {
     dashboard.innerHTML = [
 
@@ -136,13 +163,11 @@
         <div class="chart-grid">
           <div class="flvchart-card">
             <p class="flvchart-title">🔳 CPU</p>
-            <!-- <p class="flvchart-subtitle">filled area from /api/metrics ring buffer</p> -->
-            <div class="flvchart-wrap"><canvas id="cpuOverviewChart" class="flvchart-canvas" width="700" height="260"></canvas></div>
+            <div class="flvchart-wrap"><canvas id="cpuOverviewChart" class="flvchart-canvas"></canvas></div>
           </div>
           <div class="flvchart-card">
             <p class="flvchart-title">⛁ Memory</p>
-            <!-- <p class="flvchart-subtitle">filled area with the same 0-100% scale as overview</p> -->
-            <div class="flvchart-wrap"><canvas id="memOverviewChart" class="flvchart-canvas" width="700" height="260"></canvas></div>
+            <div class="flvchart-wrap"><canvas id="memOverviewChart" class="flvchart-canvas"></canvas></div>
           </div>
         </div>
       `, 'chart-panel'),
@@ -155,6 +180,11 @@
     cpuChart = null;
     memChart = null;
     overviewMounted = true;
+    // Size canvases after DOM is painted
+    requestAnimationFrame(() => {
+      sizeCanvas('cpuOverviewChart');
+      sizeCanvas('memOverviewChart');
+    });
   };
 
   const render = () => {
@@ -244,7 +274,27 @@
     }
 
     if (currentTab === 'disk') {
-      const disks = (latest.disks || []).map((d) => panel(`<p style="font-size: 1rem;">${d.mount}</p>`, `<p class="muted">${d.device}</p><p class="stat-value">${d.percent}%</p><div class="progress"><span style="width:${d.percent}%"></span></div>`)).join('');
+      const disks = (latest.disks || []).map((d) => {
+        const usedGb  = (d.used_mb  / 1024).toFixed(1);
+        const totalGb = (d.total_mb / 1024).toFixed(1);
+        const freeGb  = ((d.total_mb - d.used_mb) / 1024).toFixed(1);
+        const usedMb  = d.used_mb;
+        const freeMb  = d.total_mb - d.used_mb;
+        // Use MB label when total < 2 GB, GB otherwise
+        const useGb   = d.total_mb >= 2048;
+        const usedLabel  = useGb ? `${usedGb} GB` : `${usedMb} MB`;
+        const freeLabel  = useGb ? `${freeGb} GB` : `${freeMb} MB`;
+        const totalLabel = useGb ? `${totalGb} GB` : `${d.total_mb} MB`;
+        return panel(
+          `<p style="font-size:1rem;font-weight:600">${d.mount}</p>`,
+          `<p class="muted" style="margin-bottom:0.5rem">${d.device}</p>
+           <div class="kv"><span>Used</span><strong>${usedLabel}</strong></div>
+           <div class="kv"><span>Free</span><strong>${freeLabel}</strong></div>
+           <div class="kv" style="margin-bottom:0.5rem"><span>Total</span><strong>${totalLabel}</strong></div>
+           <div class="progress"><span style="width:${d.percent}%"></span></div>
+           <p class="muted" style="margin-top:0.35rem;font-size:0.76rem">${d.percent}% used</p>`
+        );
+      }).join('');
       dashboard.innerHTML = disks || panel('Disk', '<p class="muted">No mounted volumes detected.</p>');
       return;
     }

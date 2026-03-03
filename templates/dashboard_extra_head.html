@@ -21,40 +21,49 @@
   grid-column: 1 / -1;
 }
 
+/* On mobile: strip all box styling from chart-panel and flvchart-card
+   so the canvas can fill the same width as every other dashboard panel */
+@media (max-width: 859px) {
+  .chart-panel {
+    padding: 0 !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  .chart-panel:hover {
+    border-color: transparent !important;
+    box-shadow: none !important;
+  }
+  .flvchart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow);
+    padding: var(--space-3);
+  }
+}
+
 .chart-grid {
   display: grid;
-  gap: var(--space-4);
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: var(--space-2);
+  grid-template-columns: 1fr; /* single column — full width on mobile */
+}
+
+@media (min-width: 860px) {
+  .chart-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-4);
+  }
 }
 
 .flvchart-wrap {
-  margin-top: var(--space-3);
+  width: 100%;
+  margin-top: var(--space-2);
 }
 
-/* Chart canvas — altezza responsiva */
+/* Canvas: sized by JS sizeCanvas() */
 .flvchart-canvas {
-  width: 100% !important;
-  height: 260px !important;
-}
-
-@media (max-width: 767px) {
-  .flvchart-canvas {
-    height: 220px !important;
-  }
-
-  .chart-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .flvchart-card {
-    min-height: 280px;
-  }
-}
-
-@media (max-width: 480px) {
-  .flvchart-canvas {
-    height: 200px !important;
-  }
+  display: block;
 }
 
 /* Statistiche */
