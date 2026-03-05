@@ -83,3 +83,13 @@ log_file miniweb.log
 # Accepted values : yes / no / true / false / 1 / 0
 # default: no
     autoindex no
+
+
+#-- Modules --
+#Enable or disable route groups at bootstrap time.
+#Accepted values: yes/no/true/false/1/0
+	enable_views yes
+	enable_metrics yes
+	enable_networking yes
+	enable_man yes
+	enable_packages yes

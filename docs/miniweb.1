@@ -191,6 +191,71 @@ Default:
 .It Cm log_file
 Log file path.
 Empty or absent means stderr.
+.It Cm enable_views
+Enable or disable view/static route registration.
+Accepted values:
+.Cm yes , no , true , false , 1 , 0 .
+Default:
+.Cm yes .
+.It Cm enable_metrics
+Enable or disable metrics view/API routes.
+Default:
+.Cm yes .
+.It Cm enable_networking
+Enable or disable networking view/API routes.
+Default:
+.Cm yes .
+.It Cm enable_man
+Enable or disable manual page routes.
+Default:
+.Cm yes .
+.It Cm enable_packages
+Enable or disable package manager view/API routes.
+Default:
+.Cm yes .
+.El
+
+
+.Sh ROUTE ENABLE/DISABLE
+At bootstrap, route groups are attached by module.
+Each module can be enabled/disabled from the configuration file using
+.Cm enable_views ,
+.Cm enable_metrics ,
+.Cm enable_networking ,
+.Cm enable_man , and
+.Cm enable_packages .
+.Pp
+When a module is disabled, its related routes are not registered and will
+return 404/405 according to router matching rules.
+This allows deploying the same binary with reduced surface area by profile.
+
+.Sh ADD/REMOVE VIEWS
+Template-backed pages are declared in the static
+.Vt view_routes[]
+registry in
+.Pa src/router/url_registry_init.c .
+To add a view, append a new entry mapping method/path/title/template files.
+To remove a view, delete that entry.
+.Pp
+At runtime, all view routes can be disabled together via
+.Cm enable_views no
+without editing code.
+
+.Sh LAYOUT
+The project keeps a layered layout:
+.Bl -dash -compact
+.It
+.Pa src/router
+for route declarations, registration and matching.
+.It
+.Pa src/modules/*
+for domain modules (metrics, networking, man, packages).
+.It
+.Pa templates
+for HTML views and page-specific head/js fragments.
+.It
+.Pa src/storage
+for DB facades and schema/statement helpers.
 .El
 
 .Sh CACHING

@@ -27,6 +27,12 @@ conf_defaults(miniweb_conf_t *conf)
 
 	conf->verbose = 0;
 	conf->log_file[0] = '\0';
+
+	conf->enable_views = 1;
+	conf->enable_metrics = 1;
+	conf->enable_networking = 1;
+	conf->enable_man = 1;
+	conf->enable_packages = 1;
 }
 
 void
@@ -71,5 +77,10 @@ conf_dump(const miniweb_conf_t *conf)
 	fprintf(stderr, "  verbose       : %d\n", conf->verbose);
 	fprintf(stderr, "  log_file      : %s\n",
 		conf->log_file[0] ? conf->log_file : "(stderr)");
+	fprintf(stderr, "  enable_views  : %d\n", conf->enable_views);
+	fprintf(stderr, "  enable_metrics: %d\n", conf->enable_metrics);
+	fprintf(stderr, "  enable_networking: %d\n", conf->enable_networking);
+	fprintf(stderr, "  enable_man    : %d\n", conf->enable_man);
+	fprintf(stderr, "  enable_packages: %d\n", conf->enable_packages);
 	fprintf(stderr, "=====================================\n");
 }

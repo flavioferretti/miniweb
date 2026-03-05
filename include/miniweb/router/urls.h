@@ -35,7 +35,7 @@ struct view_route {
 };
 
 /** Initialize static route registrations. */
-void init_routes(void);
+void init_routes(void *module_cfg);
 
 /** Return the matching handler for method/path, or NULL when not found. */
 route_handler_t route_match(const char *method, const char *path);

@@ -46,6 +46,13 @@ typedef struct miniweb_conf {
     /* Logging */
     int  verbose;                   /* -v  default: 0              */
     char log_file[CONF_STR_MAX];    /*     default: "" (stderr)   */
+
+    /* Module toggles */
+    int enable_views;
+    int enable_metrics;
+    int enable_networking;
+    int enable_man;
+    int enable_packages;
 } miniweb_conf_t;
 
 /* Fill *conf with compiled-in defaults. */

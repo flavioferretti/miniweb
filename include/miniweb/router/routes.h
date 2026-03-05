@@ -12,7 +12,7 @@ struct router;
 typedef http_handler_t route_handler_t;
 
 /** Initialize and register all static routes. */
-void init_routes(void);
+void init_routes(void *module_cfg);
 
 /** Resolve the best handler for an HTTP method/path pair. */
 route_handler_t route_match(const char *method, const char *path);
