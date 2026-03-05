@@ -232,3 +232,30 @@ metrics_get_network_interfaces(NetworkInterface *interfaces, int max_interfaces)
 	 * Networking data is served by the dedicated networking API. */
 	return 0;
 }
+
+/* Cache popolata prima del pledge tramite metrics_init_cpu_freq(). */
+static int g_cpu_freq_mhz = -1;
+
+/*
+ * Da chiamare UNA VOLTA durante l'init, prima di miniweb_apply_openbsd_security().
+ * Legge CTL_HW/HW_CPUSPEED (non coperto da vminfo pledge).
+ */
+void
+metrics_init_cpu_freq(void)
+{
+	#ifdef __OpenBSD__
+	int mib[2] = {CTL_HW, HW_CPUSPEED};
+	int cpuspeed = 0;
+	size_t len = sizeof(cpuspeed);
+
+	if (sysctl(mib, 2, &cpuspeed, &len, NULL, 0) == 0)
+		g_cpu_freq_mhz = cpuspeed;
+	#endif
+}
+
+/* Callable in qualsiasi momento dopo l'init. Non tocca sysctl. */
+int
+metrics_get_cpu_freq_mhz(void)
+{
+	return g_cpu_freq_mhz;
+}

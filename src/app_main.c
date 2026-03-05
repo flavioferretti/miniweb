@@ -129,6 +129,7 @@ main(int argc, char *argv[])
 	(void)sigaction(SIGINT, &sa, NULL);
 	(void)sigaction(SIGTERM, &sa, NULL);
 	(void)signal(SIGPIPE, SIG_IGN);
+	metrics_init_cpu_freq();
 	miniweb_apply_openbsd_security(&config);
 	(void)miniweb_server_run(&g_server);
 

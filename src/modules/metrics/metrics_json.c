@@ -72,6 +72,23 @@ metrics_json_append_cpu_stats(char *buffer, size_t size)
 }
 
 /**
+ * @brief Append CPU frequency in MHz to a JSON section.
+ * @param buffer Destination JSON buffer.
+ * @param size   Destination buffer size.
+ */
+void
+metrics_json_append_cpu_freq(char *buffer, size_t size)
+{
+	int freq_mhz = metrics_get_cpu_freq_mhz();
+
+	if (freq_mhz > 0)
+		snprintf(buffer, size, "\"cpu_freq_mhz\": %d", freq_mhz);
+	else
+		snprintf(buffer, size, "\"cpu_freq_mhz\": null");
+}
+
+
+/**
  * @brief Append memory and swap statistics to a JSON section.
  * @param buffer Destination JSON buffer.
  * @param size Destination buffer size.

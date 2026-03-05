@@ -240,13 +240,18 @@
         const spanStyle = color ? `width:${w}%;background:${color}` : `width:${w}%`;
         return `<div class="kv"><span>${label}</span><strong>${val}%</strong></div><div class="progress" style="margin-bottom:0.6rem"><span style="${spanStyle}"></span></div>`;
       };
+      const freqMhz = latest.cpu_freq_mhz;
+      const freqRow = freqMhz != null
+        ? `<div class="kv" style="margin-top:1rem;padding-top:0.75rem;border-top:1px solid var(--border)"><span>Clock Frequency</span><strong>${freqMhz} MHz</strong></div>`
+        : '';
       dashboard.innerHTML = panel('CPU Breakdown',
         bar('Total Used (user+sys+intr)', cpu.used_pct ?? 0) +
         bar('User', cpu.user_pct ?? 0, '#3b82f6') +
         bar('System', cpu.system_pct ?? 0, '#f59e0b') +
         bar('Interrupt', cpu.interrupt_pct ?? 0, '#ef4444') +
         bar('Nice', cpu.nice_pct ?? 0, '#10b981') +
-        bar('Idle', cpu.idle_pct ?? 0, '#6b7280'));
+        bar('Idle', cpu.idle_pct ?? 0, '#6b7280') +
+        freqRow);
       return;
     }
 

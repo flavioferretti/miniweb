@@ -76,6 +76,13 @@ typedef struct {
 char *get_system_metrics_json(void);
 
 /**
+ * cpu frequency sample for json
+ */
+void metrics_json_append_cpu_freq(char *buffer, size_t size);
+void metrics_init_cpu_freq(void);
+int  metrics_get_cpu_freq_mhz(void);
+
+/**
  * HTTP endpoint handler for `/api/metrics`.
  *
  * Workflow: generates the metrics JSON, prepares a JSON HTTP response,
@@ -95,6 +102,11 @@ int metrics_handler(http_request_t *req);
  * @return 0 on success, -1 on error or unsupported platform.
  */
 int metrics_get_cpu_stats(CpuStats *stats);
+
+/**
+ * Collect CPU frequency in Mhz.
+ */
+int metrics_get_cpu_freq_mhz(void);
 
 /**
  * Collect memory and swap usage values (in MB).

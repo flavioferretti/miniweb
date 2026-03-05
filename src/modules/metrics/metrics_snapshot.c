@@ -303,6 +303,7 @@ build_system_metrics_json(MetricSample *history, size_t history_count)
 	char top_cpu_json[2048];
 	char top_mem_json[2048];
 	char proc_stats_json[256];
+	char cpu_freq_json[64];
 	char history_json[32768];
 
 	time(&now);
@@ -324,6 +325,7 @@ build_system_metrics_json(MetricSample *history, size_t history_count)
 	metrics_json_append_uptime(uptime_json, sizeof(uptime_json));
 	metrics_json_append_disk_info(disks_json, sizeof(disks_json));
 	metrics_json_append_top_ports(ports_json, sizeof(ports_json));
+	metrics_json_append_cpu_freq(cpu_freq_json, sizeof(cpu_freq_json));
 	metrics_process_append_json_sections(top_cpu_json,
 	    sizeof(top_cpu_json), top_mem_json, sizeof(top_mem_json),
 	    proc_stats_json, sizeof(proc_stats_json));
@@ -331,24 +333,25 @@ build_system_metrics_json(MetricSample *history, size_t history_count)
 				    history_count);
 
 	snprintf(json, JSON_BUFFER_SIZE,
-		 "{"
-		 "\"timestamp\": \"%s\","
-		 "\"hostname\": \"%s\","
-		 "%s,"
-		 "%s,"
-		 "%s,"
-		 "%s,"
-		 "%s,"
-		 "%s,"
-		 "%s,"
-		 "%s,"
-		 "%s,"
-		 "%s,"
-		 "%s"
-		 "}",
-		 timestamp, hostname, cpu_json, memory_json, load_json, os_json,
-		 uptime_json, disks_json, ports_json, top_cpu_json,
-		 top_mem_json, proc_stats_json, history_json);
+		"{"
+		"\"timestamp\": \"%s\","
+		"\"hostname\": \"%s\","
+		"%s,"   // cpu_json
+		"%s,"   // memory_json
+		"%s,"   // load_json
+		"%s,"   // os_json
+		"%s,"   // uptime_json
+		"%s,"   // disks_json
+		"%s,"   // ports_json
+		"%s,"   // top_cpu_json
+		"%s,"   // top_mem_json
+		"%s,"   // proc_stats_json
+		"%s,"   // cpu_freq_json
+		"%s"    // history_json
+		"}",
+		timestamp, hostname, cpu_json, memory_json, load_json, os_json,
+		uptime_json, disks_json, ports_json, top_cpu_json,
+		top_mem_json, proc_stats_json, cpu_freq_json, history_json);
 	return json;
 }
 
