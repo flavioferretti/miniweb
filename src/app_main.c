@@ -117,7 +117,7 @@ main(int argc, char *argv[])
 		log_error("template_cache_init failed");
 		return 1;
 	}
-	init_routes();
+	init_routes(&config);
 	log_info("Routes registered — listening");
 
 	g_server.config = &config;

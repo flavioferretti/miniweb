@@ -1,5 +1,6 @@
 #include <string.h>
 
+#include <miniweb/core/conf.h>
 #include <miniweb/modules/man.h>
 #include <miniweb/modules/metrics.h>
 #include <miniweb/modules/networking.h>
@@ -68,25 +69,50 @@ find_view_route(const char *method, const char *path)
 	return NULL;
 }
 
+struct module_attach_config {
+	int enable_views;
+	int enable_metrics;
+	int enable_networking;
+	int enable_man;
+	int enable_packages;
+};
+
 void
-init_routes(void)
+init_routes(void *module_cfg)
 {
+	const miniweb_conf_t *conf = module_cfg;
+	struct module_attach_config defaults = {
+		.enable_views = 1,
+		.enable_metrics = 1,
+		.enable_networking = 1,
+		.enable_man = 1,
+		.enable_packages = 1,
+	};
 	struct router r = {
 		.register_fn = url_registry_register,
 		.register_prefix_fn = url_registry_register_prefix,
 		.ctx = NULL,
 	};
+
+	if (conf != NULL) {
+		defaults.enable_views = conf->enable_views;
+		defaults.enable_metrics = conf->enable_metrics;
+		defaults.enable_networking = conf->enable_networking;
+		defaults.enable_man = conf->enable_man;
+		defaults.enable_packages = conf->enable_packages;
+	}
+
 	struct miniweb_module modules[] = {
 		{ .name = "views", .attach_routes = views_module_attach_routes,
-			.enabled_by_default = 1 },
+			.enabled_by_default = defaults.enable_views },
 		{ .name = "metrics", .attach_routes = metrics_module_attach_routes,
-			.enabled_by_default = 1 },
+			.enabled_by_default = defaults.enable_metrics },
 		{ .name = "networking", .attach_routes = networking_module_attach_routes,
-			.enabled_by_default = 1 },
+			.enabled_by_default = defaults.enable_networking },
 		{ .name = "man", .attach_routes = man_module_attach_routes,
-			.enabled_by_default = 1 },
+			.enabled_by_default = defaults.enable_man },
 		{ .name = "packages", .attach_routes = packages_module_attach_routes,
-			.enabled_by_default = 1 },
+			.enabled_by_default = defaults.enable_packages },
 	};
 
 	route_count = 0;
@@ -95,3 +121,4 @@ init_routes(void)
 	(void)miniweb_module_attach_enabled(
 		&r, modules, sizeof(modules) / sizeof(modules[0]), NULL);
 }
+

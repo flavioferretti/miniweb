@@ -23,7 +23,7 @@ miniweb_conf_t config = {0};
  */
 int main(void)
 {
-	init_routes();
+	init_routes(NULL);
 
 	/* Exact routes registered in init_routes() */
 	assert(route_match("GET",  "/")               != NULL);
@@ -58,6 +58,18 @@ int main(void)
 	assert(route_path_known("/missing")      == 0);
 	assert(route_match("GET",  "/missing") == NULL);
 	assert(route_match("GET",  "/man/x")   == NULL);
+
+	/* Module toggle: disable views only */
+	memset(&config, 0, sizeof(config));
+	config.enable_views = 0;
+	config.enable_metrics = 1;
+	config.enable_networking = 1;
+	config.enable_man = 1;
+	config.enable_packages = 1;
+	init_routes(&config);
+	assert(route_match("GET", "/") == NULL);
+	assert(route_match("GET", "/docs") == NULL);
+	assert(route_match("GET", "/api/metrics") != NULL);
 
 	puts("routes_test: ok");
 	return 0;

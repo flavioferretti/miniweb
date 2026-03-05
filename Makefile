@@ -324,10 +324,11 @@ ${BUILDDIR}/security.o: ${SRCDIR}/platform/openbsd/security.c
 	@mkdir -p ${BUILDDIR}
 	${CC} ${CFLAGS} -c ${SRCDIR}/platform/openbsd/security.c -o $@
 
-unit-tests: ${BUILDDIR}/routes_test ${BUILDDIR}/template_test ${BUILDDIR}/heartbeat_test
+unit-tests: ${BUILDDIR}/routes_test ${BUILDDIR}/template_test ${BUILDDIR}/heartbeat_test ${BUILDDIR}/sqlite_db_test
 	./${BUILDDIR}/routes_test
 	./${BUILDDIR}/template_test
 	./${BUILDDIR}/heartbeat_test
+	./${BUILDDIR}/sqlite_db_test
 
 integration-test: ${BUILDDIR}/${PROG}
 	bash ${TESTDIR}/integration_endpoints.sh
@@ -343,6 +344,10 @@ ${BUILDDIR}/template_test: ${TESTDIR}/template_test.c ${SRCDIR}/render/template_
 ${BUILDDIR}/heartbeat_test: ${TESTDIR}/heartbeat_test.c ${SRCDIR}/core/heartbeat.c ${SRCDIR}/core/heartbeat_schedule.c ${SRCDIR}/core/heartbeat_dispatch.c
 	@mkdir -p ${BUILDDIR}
 	${CC} ${CFLAGS} ${LDFLAGS} -I${INCDIR} -o $@ ${TESTDIR}/heartbeat_test.c ${SRCDIR}/core/heartbeat.c ${SRCDIR}/core/heartbeat_schedule.c ${SRCDIR}/core/heartbeat_dispatch.c ${LDADD}
+
+${BUILDDIR}/sqlite_db_test: ${TESTDIR}/sqlite_db_test.c ${SRCDIR}/storage/sqlite_db.c
+	@mkdir -p ${BUILDDIR}
+	${CC} ${CFLAGS} -I${INCDIR} -o $@ ${TESTDIR}/sqlite_db_test.c ${SRCDIR}/storage/sqlite_db.c
 
 .PHONY: all clean run debug install man unit-tests integration-test
 

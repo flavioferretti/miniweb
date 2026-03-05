@@ -26,6 +26,22 @@ rtrim(char *s)
 		s[--n] = '\0';
 }
 
+
+/**
+ * @brief Parse a permissive boolean value from config text.
+ * @param val Input value string.
+ * @return 1 for truthy values, 0 for falsy values, atoi()!=0 fallback.
+ */
+static int
+parse_bool(const char *val)
+{
+	if (strcasecmp(val, "yes") == 0 || strcasecmp(val, "true") == 0)
+		return 1;
+	if (strcasecmp(val, "no") == 0 || strcasecmp(val, "false") == 0)
+		return 0;
+	return atoi(val) != 0;
+}
+
 static int
 conf_apply_kv(miniweb_conf_t *conf, const char *key, const char *val)
 {
@@ -49,25 +65,25 @@ conf_apply_kv(miniweb_conf_t *conf, const char *key, const char *val)
 	} else if (strcasecmp(key, "templates_dir") == 0) {
 		strlcpy(conf->templates_dir, val, sizeof(conf->templates_dir));
 	} else if (strcasecmp(key, "autoindex") == 0) {
-		if (strcasecmp(val, "yes") == 0 || strcasecmp(val, "true") == 0)
-			conf->autoindex = 1;
-		else if (strcasecmp(val, "no") == 0 || strcasecmp(val, "false") == 0)
-			conf->autoindex = 0;
-		else
-			conf->autoindex = atoi(val);
+		conf->autoindex = parse_bool(val);
 	} else if (strcasecmp(key, "mandoc_path") == 0) {
 		strlcpy(conf->mandoc_path, val, sizeof(conf->mandoc_path));
 	} else if (strcasecmp(key, "trusted_proxy") == 0) {
 		strlcpy(conf->trusted_proxy, val, sizeof(conf->trusted_proxy));
 	} else if (strcasecmp(key, "verbose") == 0) {
-		if (strcasecmp(val, "yes") == 0 || strcasecmp(val, "true") == 0)
-			conf->verbose = 1;
-		else if (strcasecmp(val, "no") == 0 || strcasecmp(val, "false") == 0)
-			conf->verbose = 0;
-		else
-			conf->verbose = atoi(val);
+		conf->verbose = parse_bool(val);
 	} else if (strcasecmp(key, "log_file") == 0) {
 		strlcpy(conf->log_file, val, sizeof(conf->log_file));
+	} else if (strcasecmp(key, "enable_views") == 0) {
+		conf->enable_views = parse_bool(val);
+	} else if (strcasecmp(key, "enable_metrics") == 0) {
+		conf->enable_metrics = parse_bool(val);
+	} else if (strcasecmp(key, "enable_networking") == 0) {
+		conf->enable_networking = parse_bool(val);
+	} else if (strcasecmp(key, "enable_man") == 0) {
+		conf->enable_man = parse_bool(val);
+	} else if (strcasecmp(key, "enable_packages") == 0) {
+		conf->enable_packages = parse_bool(val);
 	} else {
 		return -1;
 	}
