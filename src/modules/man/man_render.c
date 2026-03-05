@@ -44,6 +44,14 @@ static sem_t g_mandoc_semaphore;
 static pthread_once_t g_mandoc_sem_once = PTHREAD_ONCE_INIT;
 static int g_mandoc_sem_initialized = 0;
 
+/**
+ * @brief Initialize mandoc concurrency semaphore.
+ *
+ * @details Sets the semaphore limit relative to configured worker threads and
+ * caps it to avoid excessive parallel mandoc executions.
+ *
+ * @return void.
+ */
 static void
 mandoc_semaphore_init(void)
 {
@@ -54,6 +62,11 @@ mandoc_semaphore_init(void)
 		g_mandoc_sem_initialized = 1;
 }
 
+/**
+ * @brief Initialize mutexes for all render-cache shards.
+ *
+ * @return void.
+ */
 static void
 man_render_cache_init(void)
 {
@@ -62,6 +75,18 @@ man_render_cache_init(void)
 	g_man_cache_initialized = 1;
 }
 
+/**
+ * @brief Compose canonical cache key for a rendered page variant.
+ *
+ * @param area Logical area (`system`, `x11`, `packages`).
+ * @param section Manual section identifier.
+ * @param page Manual page name.
+ * @param format Output format (`html`, `pdf`, etc.).
+ * @param out Destination buffer for key text.
+ * @param out_size Capacity of @p out in bytes.
+ *
+ * @return void.
+ */
 static void
 man_render_cache_key(const char *area, const char *section, const char *page,
 		     const char *format, char *out, size_t out_size)
@@ -69,6 +94,13 @@ man_render_cache_key(const char *area, const char *section, const char *page,
 	snprintf(out, out_size, "%s/%s/%s.%s", area, section, page, format);
 }
 
+/**
+ * @brief Map a cache key to one cache shard.
+ *
+ * @param key Cache key string.
+ *
+ * @return int Shard index in `[0, MAN_RENDER_CACHE_SHARDS)`.
+ */
 static int
 man_render_cache_shard(const char *key)
 {
@@ -80,6 +112,17 @@ man_render_cache_shard(const char *key)
 	return (int)(h % MAN_RENDER_CACHE_SHARDS);
 }
 
+/**
+ * @brief Lookup a rendered page variant in the in-memory cache.
+ *
+ * @param area Logical area.
+ * @param section Manual section.
+ * @param page Manual page name.
+ * @param format Response format.
+ * @param out_len Output byte length on cache hit.
+ *
+ * @return char* Heap-allocated copy of cached body, or NULL on miss/expiry.
+ */
 static char *
 man_render_cache_get(const char *area, const char *section, const char *page,
 		     const char *format, size_t *out_len)
@@ -117,6 +160,18 @@ man_render_cache_get(const char *area, const char *section, const char *page,
 	return NULL;
 }
 
+/**
+ * @brief Insert or update a rendered entry in the in-memory cache.
+ *
+ * @param area Logical area.
+ * @param section Manual section.
+ * @param page Manual page name.
+ * @param format Output format.
+ * @param body Rendered content buffer.
+ * @param len Number of bytes in @p body.
+ *
+ * @return void.
+ */
 static void
 man_render_cache_put(const char *area, const char *section, const char *page,
 		     const char *format, const char *body, size_t len)
@@ -178,6 +233,14 @@ man_render_cache_put(const char *area, const char *section, const char *page,
 	pthread_mutex_unlock(&shard->lock);
 }
 
+/**
+ * @brief Remove overstrike backspace sequences from mandoc ASCII output.
+ *
+ * @param text Mutable buffer to normalize in place.
+ * @param len In/out byte length for @p text.
+ *
+ * @return void.
+ */
 void
 man_strip_overstrike_ascii(char *text, size_t *len)
 {
@@ -196,6 +259,20 @@ man_strip_overstrike_ascii(char *text, size_t *len)
 	*len = out;
 }
 
+/**
+ * @brief Build relative and absolute cache file paths for rendered content.
+ *
+ * @param area Logical area.
+ * @param section Manual section.
+ * @param page Manual page name.
+ * @param format Output format.
+ * @param rel Optional output buffer for public relative path.
+ * @param rel_len Capacity of @p rel.
+ * @param abs_path Optional output buffer for filesystem path.
+ * @param abs_len Capacity of @p abs_path.
+ *
+ * @return int Returns 0 on success, -1 on invalid input or truncation.
+ */
 static int
 build_cache_paths(const char *area, const char *section, const char *page,
 		  const char *format, char *rel, size_t rel_len, char *abs_path,
@@ -221,6 +298,14 @@ build_cache_paths(const char *area, const char *section, const char *page,
 	return 0;
 }
 
+/**
+ * @brief Create directory tree recursively.
+ *
+ * @param dir Target directory path.
+ * @param base_dir Optional immutable prefix skipped while iterating segments.
+ *
+ * @return int Returns 0 on success, -1 on failure.
+ */
 static int
 mkdir_p(const char *dir, const char *base_dir)
 {
@@ -250,6 +335,15 @@ mkdir_p(const char *dir, const char *base_dir)
 	return 0;
 }
 
+/**
+ * @brief Persist binary response content to disk.
+ *
+ * @param path Destination file path.
+ * @param buf Buffer to write.
+ * @param len Number of bytes to write.
+ *
+ * @return int Returns 0 on success, -1 on error.
+ */
 static int
 write_file_binary(const char *path, const char *buf, size_t len)
 {
@@ -271,6 +365,13 @@ write_file_binary(const char *path, const char *buf, size_t len)
 	return 0;
 }
 
+/**
+ * @brief Map output format token to HTTP MIME type.
+ *
+ * @param format Render format token.
+ *
+ * @return const char* MIME type string for response headers.
+ */
 const char *
 man_mime_for_format(const char *format)
 {
@@ -285,6 +386,15 @@ man_mime_for_format(const char *format)
 	return "text/html; charset=utf-8";
 }
 
+/**
+ * @brief Add format-specific Content-Disposition headers.
+ *
+ * @param resp Response object to mutate.
+ * @param format Output format token.
+ * @param page Manual page name used for generated filenames.
+ *
+ * @return void.
+ */
 void
 man_add_content_disposition_for_format(http_response_t *resp,
 				       const char *format, const char *page)
@@ -305,6 +415,17 @@ man_add_content_disposition_for_format(http_response_t *resp,
 	}
 }
 
+/**
+ * @brief Render a manual page to a requested output format.
+ *
+ * @param area Logical area (currently unused by renderer).
+ * @param section Manual section token.
+ * @param page Manual page name.
+ * @param format Output format (`html`, `pdf`, `ps`, `md`, `txt`).
+ * @param out_len Output byte length when rendering succeeds.
+ *
+ * @return char* Heap-allocated rendered body, or NULL on failure.
+ */
 char *
 man_render_page(const char *area, const char *section, const char *page,
 		const char *format, size_t *out_len)
@@ -371,6 +492,16 @@ man_render_page(const char *area, const char *section, const char *page,
 	return output;
 }
 
+/**
+ * @brief Handle `/man/{area}/{section}/{page}[.format]` requests.
+ *
+ * @details Parses and validates path tokens, serves in-memory/filesystem cache
+ * hits, renders on misses, and emits content with cache-friendly headers.
+ *
+ * @param req Incoming HTTP request.
+ *
+ * @return int HTTP send status/result code from the response helpers.
+ */
 int
 man_render_handler(http_request_t *req)
 {
@@ -492,44 +623,6 @@ man_render_handler(http_request_t *req)
 				       "Invalid section or page name");
 	}
 
-	// First try with the requested section
-	char *test_path = man_resolve_path(page, section);
-	if (!test_path) {
-		log_debug("[MAN] Failed to resolve with section %s, probing "
-			  "other sections...",
-			  section);
-
-		// Common sections to probe, in order of likelihood
-		static const char *probe_sections[] = {
-		    "1", "8", "2", "3", "5", "7", "6", "4", "9", "3p"};
-
-		for (size_t i = 0;
-		     i < sizeof(probe_sections) / sizeof(probe_sections[0]);
-		     i++) {
-			if (strcmp(probe_sections[i], section) == 0)
-				continue; // Already tried
-
-			test_path = man_resolve_path(page, probe_sections[i]);
-			if (test_path) {
-				log_debug("[MAN] Found page in section %s",
-					  probe_sections[i]);
-				strlcpy(section, probe_sections[i],
-					sizeof(section));
-				break;
-			}
-		}
-	}
-
-	if (test_path) {
-		log_debug("[MAN] Resolved path: %s", test_path);
-		free(test_path);
-	} else {
-		log_debug(
-		    "[MAN] Failed to resolve path for page='%s' in any section",
-		    page);
-		return http_send_error(req, 404, "Manual page not found");
-	}
-
 	char cache_rel[256] = {0};
 	char cache_abs[512] = {0};
 	int have_paths = (build_cache_paths(area, section, page, format,
@@ -604,6 +697,44 @@ man_render_handler(http_request_t *req)
 		  "section=%s, page=%s, format=%s)",
 		  area, section, page, format);
 
+	// First try with the requested section.
+	char *test_path = man_resolve_path(page, section);
+	if (!test_path) {
+		log_debug("[MAN] Failed to resolve with section %s, probing "
+			  "other sections...",
+		  section);
+
+		// Common sections to probe, in order of likelihood.
+		static const char *probe_sections[] = {
+		    "1", "8", "2", "3", "5", "7", "6", "4", "9", "3p"};
+
+		for (size_t i = 0;
+		     i < sizeof(probe_sections) / sizeof(probe_sections[0]);
+		     i++) {
+			if (strcmp(probe_sections[i], section) == 0)
+				continue; // Already tried.
+
+			test_path = man_resolve_path(page, probe_sections[i]);
+			if (test_path) {
+				log_debug("[MAN] Found page in section %s",
+					  probe_sections[i]);
+				strlcpy(section, probe_sections[i],
+					sizeof(section));
+				break;
+			}
+		}
+	}
+
+	if (test_path) {
+		log_debug("[MAN] Resolved path: %s", test_path);
+		free(test_path);
+	} else {
+		log_debug(
+		    "[MAN] Failed to resolve path for page='%s' in any section",
+		    page);
+		return http_send_error(req, 404, "Manual page not found");
+	}
+
 	response_body =
 	    man_render_page(area, section, page, format, &response_len);
 	if (!response_body) {
@@ -645,6 +776,16 @@ send_response: {
 }
 }
 
+/**
+ * @brief Handle `/api/man*` endpoints.
+ *
+ * @details Dispatches to sections/pages/resolve/search handlers and emits
+ * either JSON or plain text depending on endpoint semantics.
+ *
+ * @param req Incoming HTTP request.
+ *
+ * @return int HTTP send status/result code.
+ */
 int
 man_api_handler(http_request_t *req)
 {
@@ -809,6 +950,14 @@ man_api_handler(http_request_t *req)
 	return ret;
 }
 
+/**
+ * @brief Free all in-memory man render cache entries.
+ *
+ * @details Walks each shard and slot, frees cached response bodies, and
+ * resets bookkeeping fields.
+ *
+ * @return void.
+ */
 void
 man_render_cache_cleanup(void)
 {
