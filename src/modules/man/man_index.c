@@ -8,6 +8,14 @@
 #include <miniweb/modules/man.h>
 #include "man_internal.h"
 
+/**
+ * @brief qsort comparator for arrays of C-string pointers.
+ *
+ * @param a Pointer to first `char*` element.
+ * @param b Pointer to second `char*` element.
+ *
+ * @return int Negative/zero/positive according to lexical order.
+ */
 static int
 compare_string_ptrs(const void *a, const void *b)
 {
@@ -16,6 +24,15 @@ compare_string_ptrs(const void *a, const void *b)
     return strcmp(*left, *right);
 }
 
+/**
+ * @brief Select a usable path from `man -w` raw output.
+ *
+ * @param raw_output Heap buffer containing command output; consumed by this
+ * function.
+ *
+ * @return char* Newly allocated absolute path, or NULL when no valid path is
+ * found.
+ */
 static char *
 select_resolved_man_path(char *raw_output)
 {
@@ -51,6 +68,14 @@ select_resolved_man_path(char *raw_output)
     return resolved;
 }
 
+/**
+ * @brief Resolve a man page name/section to an absolute file path.
+ *
+ * @param name Manual page name (e.g. `ls`).
+ * @param section Section token (e.g. `1`, `3p`).
+ *
+ * @return char* Heap-allocated absolute path, or NULL when unresolved.
+ */
 char *
 man_resolve_path(const char *name, const char *section)
 {
@@ -69,6 +94,13 @@ man_resolve_path(const char *name, const char *section)
     return select_resolved_man_path(raw);
 }
 
+/**
+ * @brief Return JSON describing supported manual areas and sections.
+ *
+ * @details Produces a static catalog for system, X11, and package man trees.
+ *
+ * @return char* Heap-allocated JSON document.
+ */
 char *
 man_get_sections_json(void)
 {
@@ -115,6 +147,14 @@ man_get_sections_json(void)
         "]}}");
 }
 
+/**
+ * @brief Enumerate all pages within a specific area/section as JSON.
+ *
+ * @param area Area identifier (`system`, `x11`, or `packages`).
+ * @param section Section identifier to filter file names.
+ *
+ * @return char* Heap-allocated JSON object with a `pages` array.
+ */
 char *
 man_get_section_pages_json(const char *area, const char *section)
 {
@@ -203,6 +243,15 @@ man_get_section_pages_json(const char *area, const char *section)
     return json;
 }
 
+/**
+ * @brief Build metadata JSON for one manual page lookup.
+ *
+ * @param area Area name attached to the response payload.
+ * @param section Requested section.
+ * @param name Manual page name.
+ *
+ * @return char* Heap-allocated metadata JSON, or an error JSON string.
+ */
 char *
 man_get_page_metadata_json(const char *area, const char *section, const char *name)
 {
@@ -222,6 +271,13 @@ man_get_page_metadata_json(const char *area, const char *section, const char *na
     return json;
 }
 
+/**
+ * @brief Run apropos search for a validated query token.
+ *
+ * @param query Search term.
+ *
+ * @return char* Heap-allocated raw apropos output; empty string on failure.
+ */
 char *
 man_api_search(const char *query)
 {
@@ -239,6 +295,14 @@ man_api_search(const char *query)
     return output;
 }
 
+/**
+ * @brief Run apropos search and provide minimal fallback output.
+ *
+ * @param query Search term from API clients.
+ *
+ * @return char* Heap-allocated text body. Empty string when no results and no
+ * fallback page can be resolved.
+ */
 char *
 man_api_search_raw(const char *query)
 {

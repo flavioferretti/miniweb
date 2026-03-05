@@ -5,6 +5,15 @@
 
 #include "man_internal.h"
 
+/**
+ * @brief Check whether a URL path matches an API endpoint literal.
+ *
+ * @param path Request path (possibly including query string).
+ * @param endpoint Endpoint prefix to compare against.
+ *
+ * @return int Returns 1 when the path matches exactly (or is followed by `?`),
+ * otherwise 0.
+ */
 int
 man_path_matches_endpoint(const char *path, const char *endpoint)
 {
@@ -17,6 +26,15 @@ man_path_matches_endpoint(const char *path, const char *endpoint)
     return path[len] == '\0' || path[len] == '?';
 }
 
+/**
+ * @brief URL-decode a source buffer into a destination buffer.
+ *
+ * @param src Percent-encoded input string.
+ * @param dst Output buffer receiving decoded text.
+ * @param dst_size Capacity of @p dst in bytes.
+ *
+ * @return int Returns 0 on success, -1 on invalid arguments or overflow.
+ */
 static int
 url_decode_into(const char *src, char *dst, size_t dst_size)
 {
@@ -43,6 +61,16 @@ url_decode_into(const char *src, char *dst, size_t dst_size)
     return 0;
 }
 
+/**
+ * @brief Extract and decode a query parameter from a URL.
+ *
+ * @param url Full URL containing an optional query string.
+ * @param key Parameter name to find.
+ * @param out Output buffer receiving decoded parameter value.
+ * @param out_size Capacity of @p out in bytes.
+ *
+ * @return int Returns 1 when the key is present and decoded, otherwise 0.
+ */
 int
 man_get_query_value(const char *url, const char *key, char *out, size_t out_size)
 {
@@ -81,6 +109,13 @@ man_get_query_value(const char *url, const char *key, char *out, size_t out_size
     return 0;
 }
 
+/**
+ * @brief Validate user-provided manual page tokens.
+ *
+ * @param s Token string such as command/page name.
+ *
+ * @return int Returns 1 for valid tokens, 0 for invalid or empty tokens.
+ */
 int
 man_is_valid_token(const char *s)
 {
@@ -93,6 +128,13 @@ man_is_valid_token(const char *s)
     return 1;
 }
 
+/**
+ * @brief Validate a manual section identifier.
+ *
+ * @param section Section string (e.g. `1`, `3p`, `8`).
+ *
+ * @return int Returns 1 for valid section syntax, otherwise 0.
+ */
 int
 man_is_valid_section(const char *section)
 {
@@ -115,6 +157,15 @@ man_is_valid_section(const char *section)
     return 1;
 }
 
+/**
+ * @brief Parse section suffix from a man filename.
+ *
+ * @param filename Basename such as `ls.1`, optionally compressed.
+ * @param section_out Output buffer receiving parsed section token.
+ * @param section_out_len Capacity of @p section_out in bytes.
+ *
+ * @return int Returns 1 when a valid section is found, else 0.
+ */
 int
 man_parse_section_from_filename(const char *filename, char *section_out,
                                 size_t section_out_len)
@@ -142,6 +193,13 @@ man_parse_section_from_filename(const char *filename, char *section_out,
     return 1;
 }
 
+/**
+ * @brief Infer logical man area from an absolute file path.
+ *
+ * @param filepath Absolute path to a resolved manual page file.
+ *
+ * @return const char* Area identifier string: `x11`, `packages`, or `system`.
+ */
 const char *
 man_area_from_path(const char *filepath)
 {
