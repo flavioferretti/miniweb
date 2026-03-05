@@ -234,6 +234,78 @@ Supported keys:
 > Log file path.
 > Empty or absent means stderr.
 
+**enable\_views**
+
+> Enable or disable view/static route registration.
+> Accepted values:
+> **yes**, **no**, **true**, **false**, **1**, **0**.
+> Default:
+> **yes**.
+
+**enable\_metrics**
+
+> Enable or disable metrics view/API routes.
+> Default:
+> **yes**.
+
+**enable\_networking**
+
+> Enable or disable networking view/API routes.
+> Default:
+> **yes**.
+
+**enable\_man**
+
+> Enable or disable manual page routes.
+> Default:
+> **yes**.
+
+**enable\_packages**
+
+> Enable or disable package manager view/API routes.
+> Default:
+> **yes**.
+
+# ROUTE ENABLE/DISABLE
+
+At bootstrap, route groups are attached by module.
+Each module can be enabled/disabled from the configuration file using
+**enable\_views**,
+**enable\_metrics**,
+**enable\_networking**,
+**enable\_man**, **and**
+**enable\_packages**.
+
+When a module is disabled, its related routes are not registered and will
+return 404/405 according to router matching rules.
+This allows deploying the same binary with reduced surface area by profile.
+
+# ADD/REMOVE VIEWS
+
+Template-backed pages are declared in the static
+*view\_routes\[]*
+registry in
+*src/router/url\_registry\_init.c*.
+To add a view, append a new entry mapping method/path/title/template files.
+To remove a view, delete that entry.
+
+At runtime, all view routes can be disabled together via
+**enable\_views no**
+without editing code.
+
+# LAYOUT
+
+The project keeps a layered layout:
+
+-	*src/router*
+	for route declarations, registration and matching.
+-	*src/modules/\*&zwnj;*
+	for domain modules (metrics, networking, man, packages).
+-	*templates*
+	for HTML views and page-specific head/js fragments.
+-	*src/storage*
+	for DB facades and schema/statement helpers.
+
 # CACHING
 
 **miniweb**
