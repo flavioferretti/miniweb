@@ -118,3 +118,4 @@ benchmark_assets/
 callgraph/*
 static/callgraph
 static/callgraph/*
+static/pfstat

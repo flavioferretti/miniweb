@@ -88,8 +88,11 @@ for TLS termination.
 
 > Worker thread count.
 > Clamped to the range 1&#8211;32.
-> Default is
-> **4**.
+> Default is the number of online CPU cores, capped at
+> **32**
+> (with fallback to
+> **4**
+> if CPU detection fails).
 
 **-v**
 
@@ -146,8 +149,11 @@ Supported keys:
 
 > Worker thread count.
 > Clamped to 1&#8211;32.
-> Default:
-> **4**.
+> Default: number of online CPU cores, capped at
+> **32**
+> (with fallback to
+> **4**
+> if CPU detection fails).
 
 **max\_conns**
 
