@@ -16,6 +16,7 @@ typedef struct {
 
 static response_pool_t response_pools[RESPONSE_POOL_SHARDS];
 
+/** @brief thread_hash function. */
 static inline unsigned long
 thread_hash(void)
 {
@@ -25,12 +26,14 @@ thread_hash(void)
 	return (unsigned long)(tid ^ (tid >> 7) ^ (tid >> 13));
 }
 
+/** @brief response_pool_shard_index function. */
 static int
 response_pool_shard_index(void)
 {
 	return (int)(thread_hash() % RESPONSE_POOL_SHARDS);
 }
 
+/** @brief response_pool_init_locked function. */
 static void
 response_pool_init_locked(response_pool_t *pool)
 {
@@ -45,6 +48,7 @@ response_pool_init_locked(response_pool_t *pool)
 	pool->initialized = 1;
 }
 
+/** @brief http_response_pool_init_shards function. */
 void
 http_response_pool_init_shards(void)
 {
@@ -54,6 +58,7 @@ http_response_pool_init_shards(void)
 		pthread_mutex_init(&response_pools[i].lock, NULL);
 }
 
+/** @brief http_response_pool_acquire function. */
 http_response_t *
 http_response_pool_acquire(void)
 {
@@ -80,6 +85,7 @@ http_response_pool_acquire(void)
 	return resp;
 }
 
+/** @brief http_response_pool_release function. */
 int
 http_response_pool_release(http_response_t *resp)
 {

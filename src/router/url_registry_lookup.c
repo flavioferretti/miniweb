@@ -4,6 +4,7 @@
 
 #include "url_registry_internal.h"
 
+/** @brief route_match function. */
 route_handler_t
 route_match(const char *method, const char *path)
 {
@@ -21,6 +22,7 @@ route_match(const char *method, const char *path)
 	return NULL;
 }
 
+/** @brief route_path_known function. */
 int
 route_path_known(const char *path)
 {

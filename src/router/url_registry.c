@@ -11,6 +11,7 @@ size_t route_count = 0;
 struct prefix_route prefix_routes[MAX_PREFIX_ROUTES];
 size_t prefix_route_count = 0;
 
+/** @brief path_slash_count function. */
 int
 path_slash_count(const char *path)
 {
@@ -22,6 +23,7 @@ path_slash_count(const char *path)
 	return slashes;
 }
 
+/** @brief prefix_route_matches function. */
 int
 prefix_route_matches(const struct prefix_route *pr, const char *method,
 	const char *path)
@@ -36,6 +38,7 @@ prefix_route_matches(const struct prefix_route *pr, const char *method,
 	return path_slash_count(path + strlen(pr->prefix)) >= pr->min_slashes;
 }
 
+/** @brief prefix_route_path_matches function. */
 int
 prefix_route_path_matches(const struct prefix_route *pr, const char *path)
 {
@@ -47,6 +50,7 @@ prefix_route_path_matches(const struct prefix_route *pr, const char *path)
 	return path_slash_count(path + strlen(pr->prefix)) >= pr->min_slashes;
 }
 
+/** @brief route_method_seen_for_path function. */
 int
 route_method_seen_for_path(size_t route_index, const char *path)
 {
@@ -58,6 +62,7 @@ route_method_seen_for_path(size_t route_index, const char *path)
 	return 0;
 }
 
+/** @brief register_route function. */
 void
 register_route(const char *method, const char *path, route_handler_t handler)
 {
@@ -69,6 +74,7 @@ register_route(const char *method, const char *path, route_handler_t handler)
 	}
 }
 
+/** @brief register_prefix_route function. */
 void
 register_prefix_route(const char *method, const char *prefix, int min_slashes,
 	route_handler_t handler)

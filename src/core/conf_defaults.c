@@ -5,6 +5,7 @@
 #include <miniweb/core/conf.h>
 #include <miniweb/net/server.h>
 
+/** @brief conf_default_threads function. */
 static int
 conf_default_threads(void)
 {
@@ -16,6 +17,7 @@ conf_default_threads(void)
 	return (int)cores;
 }
 
+/** @brief conf_defaults function. */
 void
 conf_defaults(miniweb_conf_t *conf)
 {
@@ -48,6 +50,7 @@ conf_defaults(miniweb_conf_t *conf)
 	conf->enable_packages = 1;
 }
 
+/** @brief conf_apply_cli function. */
 void
 conf_apply_cli(miniweb_conf_t *conf,
 	int cli_port,
@@ -71,6 +74,7 @@ conf_apply_cli(miniweb_conf_t *conf,
 		conf->verbose = cli_verbose;
 }
 
+/** @brief conf_dump function. */
 void
 conf_dump(const miniweb_conf_t *conf)
 {

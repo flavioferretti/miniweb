@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+/** @brief json_escape_string function. */
 char *
 json_escape_string(const char *src)
 {
@@ -66,6 +67,7 @@ json_escape_string(const char *src)
 	return dest;
 }
 
+/** @brief sanitize_string function. */
 void
 sanitize_string(char *s)
 {
@@ -79,6 +81,7 @@ sanitize_string(char *s)
 	}
 }
 
+/** @brief hex_value function. */
 static int
 hex_value(char c)
 {
@@ -91,6 +94,7 @@ hex_value(char c)
 	return -1;
 }
 
+/** @brief url_decode function. */
 int
 url_decode(const char *src, char *dst, size_t dst_len)
 {
@@ -125,6 +129,7 @@ url_decode(const char *src, char *dst, size_t dst_len)
 	return 0;
 }
 
+/** @brief mime_type_for_path function. */
 const char *
 mime_type_for_path(const char *path)
 {

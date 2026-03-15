@@ -549,6 +549,7 @@ networking_ring_bootstrap(void)
 	}
 }
 
+/** @brief networking_json_append function. */
 static int
 networking_json_append(char *dst, size_t dst_size, size_t *offset,
 		       const char *fmt, ...)
@@ -574,6 +575,7 @@ networking_json_append(char *dst, size_t dst_size, size_t *offset,
 	return 0;
 }
 
+/** @brief networking_json_append_escaped function. */
 static int
 networking_json_append_escaped(char *dst, size_t dst_size, size_t *offset,
 			       const char *src)
@@ -776,6 +778,7 @@ fail:
 	return NULL;
 }
 
+/** @brief networking_get_json function. */
 char *
 networking_get_json(void)
 {
@@ -875,6 +878,7 @@ networking_module_attach_routes(struct router *r)
 			       networking_api_handler);
 }
 
+/** @brief networking_module_cleanup function. */
 void
 networking_module_cleanup(void)
 {

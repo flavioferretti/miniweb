@@ -3,6 +3,7 @@
 
 #include "heartbeat_internal.h"
 
+/** @brief hb_collect_due_tasks function. */
 void
 hb_collect_due_tasks(time_t now, time_t *wake_at, hb_task_batch_t *todo)
 {
@@ -34,6 +35,7 @@ hb_collect_due_tasks(time_t now, time_t *wake_at, hb_task_batch_t *todo)
 	}
 }
 
+/** @brief hb_collect_all_active function. */
 void
 hb_collect_all_active(time_t now, hb_task_batch_t *todo)
 {
@@ -47,6 +49,7 @@ hb_collect_all_active(time_t now, hb_task_batch_t *todo)
 	}
 }
 
+/** @brief hb_mark_stopped function. */
 void
 hb_mark_stopped(void)
 {
@@ -55,6 +58,7 @@ hb_mark_stopped(void)
 	g_hb_drain_on_stop = 0;
 }
 
+/** @brief hb_wait_for_next_tick function. */
 void
 hb_wait_for_next_tick(time_t now, time_t wake_at)
 {

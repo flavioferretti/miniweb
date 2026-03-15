@@ -12,6 +12,7 @@
 
 extern miniweb_conf_t config;
 
+/** @brief http_request_get_header function. */
 const char *
 http_request_get_header(http_request_t *req, const char *name)
 {
@@ -50,6 +51,7 @@ http_request_get_header(http_request_t *req, const char *name)
 	return req->hdr_scratch;
 }
 
+/** @brief http_request_get_client_ip function. */
 const char *
 http_request_get_client_ip(http_request_t *req)
 {
@@ -88,6 +90,7 @@ http_request_get_client_ip(http_request_t *req)
 	return req->ip_scratch;
 }
 
+/** @brief http_request_is_https function. */
 int
 http_request_is_https(http_request_t *req)
 {
@@ -106,6 +109,7 @@ http_request_is_https(http_request_t *req)
 	return proto && strcmp(proto, "https") == 0;
 }
 
+/** @brief http_send_error function. */
 int
 http_send_error(http_request_t *req, int status_code, const char *message)
 {
@@ -144,6 +148,7 @@ http_send_error(http_request_t *req, int status_code, const char *message)
 	return ret;
 }
 
+/** @brief http_send_json function. */
 int
 http_send_json(http_request_t *req, const char *json)
 {
@@ -160,6 +165,7 @@ http_send_json(http_request_t *req, const char *json)
 	return ret;
 }
 
+/** @brief http_send_html function. */
 int
 http_send_html(http_request_t *req, const char *html)
 {
@@ -175,6 +181,7 @@ http_send_html(http_request_t *req, const char *html)
 	return ret;
 }
 
+/** @brief http_render_template function. */
 int
 http_render_template(http_request_t *req, struct template_data *data,
     const char *fallback_template)

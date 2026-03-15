@@ -4,6 +4,7 @@
 #include <poll.h>
 #include <unistd.h>
 
+/** @brief http_response_wait_fd_writable function. */
 static int
 http_response_wait_fd_writable(int fd)
 {
@@ -30,6 +31,7 @@ http_response_wait_fd_writable(int fd)
 	}
 }
 
+/** @brief http_response_write_all function. */
 int
 http_response_write_all(int fd, const void *buf, size_t n)
 {
@@ -64,6 +66,7 @@ http_response_write_all(int fd, const void *buf, size_t n)
 	return 0;
 }
 
+/** @brief http_response_writev_all function. */
 int
 http_response_writev_all(int fd, struct iovec *iov, int iovcnt)
 {
@@ -106,6 +109,7 @@ http_response_writev_all(int fd, struct iovec *iov, int iovcnt)
 	return 0;
 }
 
+/** @brief http_response_status_text function. */
 const char *
 http_response_status_text(int status_code)
 {

@@ -10,6 +10,7 @@
 
 #include "conf_internal.h"
 
+/** @brief ltrim function. */
 static char *
 ltrim(char *s)
 {
@@ -18,6 +19,7 @@ ltrim(char *s)
 	return s;
 }
 
+/** @brief rtrim function. */
 static void
 rtrim(char *s)
 {
@@ -42,6 +44,7 @@ parse_bool(const char *val)
 	return atoi(val) != 0;
 }
 
+/** @brief conf_apply_kv function. */
 static int
 conf_apply_kv(miniweb_conf_t *conf, const char *key, const char *val)
 {
@@ -90,6 +93,7 @@ conf_apply_kv(miniweb_conf_t *conf, const char *key, const char *val)
 	return 0;
 }
 
+/** @brief conf_parse_line function. */
 static int
 conf_parse_line(miniweb_conf_t *conf, const char *path, int lineno, char *line)
 {
@@ -120,6 +124,7 @@ conf_parse_line(miniweb_conf_t *conf, const char *path, int lineno, char *line)
 	return 0;
 }
 
+/** @brief conf_parse_file function. */
 static int
 conf_parse_file(const char *path, miniweb_conf_t *conf)
 {
@@ -149,6 +154,7 @@ conf_parse_file(const char *path, miniweb_conf_t *conf)
 	return 0;
 }
 
+/** @brief conf_load function. */
 int
 conf_load(const char *path, miniweb_conf_t *conf)
 {

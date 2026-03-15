@@ -5,6 +5,7 @@
 
 #include "url_registry_internal.h"
 
+/** @brief route_allow_methods function. */
 int
 route_allow_methods(const char *path, char *buf, size_t buf_len)
 {

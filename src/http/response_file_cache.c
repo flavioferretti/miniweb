@@ -38,6 +38,7 @@ static pthread_once_t http_globals_once = PTHREAD_ONCE_INIT;
 static int g_http_globals_initialized;
 
 
+/** @brief file_cache_shard_index function. */
 static int
 file_cache_shard_index(const char *path)
 {
@@ -53,6 +54,7 @@ file_cache_shard_index(const char *path)
 	return (int)(hash % FILE_CACHE_SHARDS);
 }
 
+/** @brief file_cache_init_shards function. */
 static void
 file_cache_init_shards(void)
 {
@@ -64,6 +66,7 @@ file_cache_init_shards(void)
 	}
 }
 
+/** @brief http_handler_globals_init function. */
 static void
 http_handler_globals_init(void)
 {
@@ -72,12 +75,14 @@ http_handler_globals_init(void)
 	g_http_globals_initialized = 1;
 }
 
+/** @brief http_handler_globals_init_once function. */
 void
 http_handler_globals_init_once(void)
 {
 	pthread_once(&http_globals_once, http_handler_globals_init);
 }
 
+/** @brief file_cache_refill_budget_locked function. */
 static void
 file_cache_refill_budget_locked(file_cache_shard_t *shard, time_t now,
     int shard_idx)
@@ -100,6 +105,7 @@ file_cache_refill_budget_locked(file_cache_shard_t *shard, time_t now,
 	}
 }
 
+/** @brief file_cache_evict_stale_locked function. */
 static void
 file_cache_evict_stale_locked(file_cache_shard_t *shard, time_t now)
 {
@@ -122,6 +128,7 @@ file_cache_evict_stale_locked(file_cache_shard_t *shard, time_t now)
 	}
 }
 
+/** @brief file_cache_admit_locked function. */
 static int
 file_cache_admit_locked(file_cache_shard_t *shard, const char *path, time_t now)
 {
@@ -156,6 +163,7 @@ file_cache_admit_locked(file_cache_shard_t *shard, const char *path, time_t now)
 	return 0;
 }
 
+/** @brief http_file_cache_store function. */
 void
 http_file_cache_store(const char *path, const struct stat *st, const char *data,
     size_t len)
@@ -222,6 +230,7 @@ http_file_cache_store(const char *path, const struct stat *st, const char *data,
 	pthread_mutex_unlock(&shard->lock);
 }
 
+/** @brief http_file_cache_lookup function. */
 int
 http_file_cache_lookup(const char *path, const struct stat *st, char **out,
     size_t *out_len)
@@ -271,6 +280,7 @@ http_file_cache_lookup(const char *path, const struct stat *st, char **out,
 	return found;
 }
 
+/** @brief http_handler_globals_cleanup function. */
 void
 http_handler_globals_cleanup(void)
 {

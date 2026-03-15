@@ -60,6 +60,7 @@ if (config_verbose) \
  * Ring buffer operations
  * ========================================================================= */
 
+/** @brief pkg_ring_init function. */
 static int
 pkg_ring_init(PkgRing *r)
 {
@@ -79,6 +80,7 @@ pkg_ring_init(PkgRing *r)
 	return 0;
 }
 
+/** @brief pkg_ring_push function. */
 static void
 pkg_ring_push(PkgRing *r, const char *endpoint, const char *key,
 			  const char *json, size_t json_len)
@@ -182,6 +184,7 @@ pkg_ring_find(PkgRing *r, const char *endpoint, const char *key, int max_age_sec
 		return result;
 }
 
+/** @brief pkg_ring_free function. */
 static void
 pkg_ring_free(PkgRing *r)
 {
@@ -204,6 +207,7 @@ pkg_ring_free(PkgRing *r)
  * Package query functions with ring buffer integration
  * ========================================================================= */
 
+/** @brief is_safe_pkg_name function. */
 static int
 is_safe_pkg_name(const char *name)
 {
@@ -217,6 +221,7 @@ is_safe_pkg_name(const char *name)
 	return 1;
 }
 
+/** @brief url_decode_into function. */
 static int
 url_decode_into(const char *src, char *dst, size_t dst_size)
 {
@@ -249,6 +254,7 @@ url_decode_into(const char *src, char *dst, size_t dst_size)
 	return 0;
 }
 
+/** @brief get_query_value function. */
 static int
 get_query_value(const char *url, const char *key, char *out, size_t out_size)
 {
@@ -302,6 +308,7 @@ get_query_value(const char *url, const char *key, char *out, size_t out_size)
 	return 0;
 }
 
+/** @brief path_matches_endpoint function. */
 static int
 path_matches_endpoint(const char *path, const char *prefix)
 {
@@ -317,6 +324,7 @@ path_matches_endpoint(const char *path, const char *prefix)
 	return path[len] == '\0' || path[len] == '?';
 }
 
+/** @brief is_safe_path function. */
 static int
 is_safe_path(const char *path)
 {
@@ -333,6 +341,7 @@ is_safe_path(const char *path)
 	return 1;
 }
 
+/** @brief trim_ascii_whitespace function. */
 static void
 trim_ascii_whitespace(char **start)
 {
@@ -353,6 +362,7 @@ trim_ascii_whitespace(char **start)
 	*start = s;
 }
 
+/** @brief make_raw_json function. */
 static char *
 make_raw_json(const char *output)
 {
@@ -386,6 +396,7 @@ make_raw_json(const char *output)
 }
 
 /* Bootstrap function called via pthread_once */
+/** @brief packages_cache_bootstrap function. */
 static void
 packages_cache_bootstrap(void)
 {
@@ -406,6 +417,7 @@ packages_cache_bootstrap(void)
  * Public API functions with ring buffer caching
  * ========================================================================= */
 
+/** @brief pkg_search_json function. */
 char *
 pkg_search_json(const char *query)
 {
@@ -561,6 +573,7 @@ pkg_search_json(const char *query)
 	return json;
 }
 
+/** @brief pkg_info_json function. */
 char *
 pkg_info_json(const char *package_name)
 {
@@ -593,6 +606,7 @@ pkg_info_json(const char *package_name)
 	return json ? json : strdup("{\"found\":false,\"raw\":\"\"}");
 }
 
+/** @brief pkg_files_json function. */
 char *
 pkg_files_json(const char *package_name)
 {
@@ -670,6 +684,7 @@ pkg_files_json(const char *package_name)
 	return json;
 }
 
+/** @brief pkg_list_json function. */
 char *
 pkg_list_json(void)
 {
@@ -729,6 +744,7 @@ pkg_list_json(void)
 	return json;
 }
 
+/** @brief pkg_which_json function. */
 char *
 pkg_which_json(const char *file_path)
 {
@@ -768,6 +784,7 @@ pkg_which_json(const char *file_path)
 	return json ? json : strdup("{\"found\":false,\"raw\":\"\"}");
 }
 
+/** @brief pkg_api_handler function. */
 int
 pkg_api_handler(http_request_t *req)
 {
@@ -831,6 +848,7 @@ pkg_api_handler(http_request_t *req)
 	return ret;
 }
 
+/** @brief packages_module_attach_routes function. */
 int
 packages_module_attach_routes(struct router *r)
 {
@@ -843,6 +861,7 @@ packages_module_attach_routes(struct router *r)
 }
 
 /* Optional cleanup function */
+/** @brief packages_cache_cleanup function. */
 void
 packages_cache_cleanup(void)
 {

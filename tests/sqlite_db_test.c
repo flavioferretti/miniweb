@@ -3,6 +3,7 @@
 
 #include <miniweb/storage/sqlite_db.h>
 
+/** @brief main function. */
 int
 main(void)
 {

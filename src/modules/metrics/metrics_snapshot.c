@@ -417,6 +417,7 @@ get_system_metrics_json(void)
 	return fallback;
 }
 
+/** @brief metrics_module_cleanup function. */
 void
 metrics_module_cleanup(void)
 {

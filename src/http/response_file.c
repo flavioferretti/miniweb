@@ -6,6 +6,7 @@
 #include <string.h>
 #include <unistd.h>
 
+/** @brief read_entire_file function. */
 static int
 read_entire_file(int fd, char *buf, size_t len)
 {
@@ -28,6 +29,7 @@ read_entire_file(int fd, char *buf, size_t len)
 	return (total > 0) ? (int)total : -1;
 }
 
+/** @brief http_send_file function. */
 int
 http_send_file(http_request_t *req, const char *path, const char *mime)
 {

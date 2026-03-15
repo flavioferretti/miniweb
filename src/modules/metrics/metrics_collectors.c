@@ -21,6 +21,7 @@
 
 #define MB (1024 * 1024)
 
+/** @brief metrics_get_cpu_stats function. */
 int
 metrics_get_cpu_stats(CpuStats *stats)
 {
@@ -57,6 +58,7 @@ metrics_get_cpu_stats(CpuStats *stats)
 #endif
 }
 
+/** @brief metrics_get_memory_stats function. */
 int
 metrics_get_memory_stats(MemoryStats *stats)
 {
@@ -111,6 +113,7 @@ metrics_get_memory_stats(MemoryStats *stats)
 #endif
 }
 
+/** @brief metrics_get_load_average function. */
 int
 metrics_get_load_average(LoadAverage *load)
 {
@@ -125,6 +128,7 @@ metrics_get_load_average(LoadAverage *load)
 	return 0;
 }
 
+/** @brief metrics_get_os_info function. */
 int
 metrics_get_os_info(char *type, char *release, char *machine, size_t size)
 {
@@ -139,6 +143,7 @@ metrics_get_os_info(char *type, char *release, char *machine, size_t size)
 	return 0;
 }
 
+/** @brief metrics_get_uptime function. */
 int
 metrics_get_uptime(char *uptime_str, size_t size)
 {
@@ -171,12 +176,14 @@ metrics_get_uptime(char *uptime_str, size_t size)
 #endif
 }
 
+/** @brief metrics_get_hostname function. */
 int
 metrics_get_hostname(char *hostname, size_t size)
 {
 	return gethostname(hostname, size);
 }
 
+/** @brief metrics_get_disk_usage function. */
 int
 metrics_get_disk_usage(DiskInfo *disks, int max_disks)
 {
@@ -215,6 +222,7 @@ metrics_get_disk_usage(DiskInfo *disks, int max_disks)
 #endif
 }
 
+/** @brief metrics_get_top_ports function. */
 int
 metrics_get_top_ports(PortInfo *ports, int max_ports)
 {
@@ -223,6 +231,7 @@ metrics_get_top_ports(PortInfo *ports, int max_ports)
 	return 0;
 }
 
+/** @brief metrics_get_network_interfaces function. */
 int
 metrics_get_network_interfaces(NetworkInterface *interfaces, int max_interfaces)
 {
@@ -240,6 +249,7 @@ static int g_cpu_freq_mhz = -1;
  * Da chiamare UNA VOLTA durante l'init, prima di miniweb_apply_openbsd_security().
  * Legge CTL_HW/HW_CPUSPEED (non coperto da vminfo pledge).
  */
+/** @brief metrics_init_cpu_freq function. */
 void
 metrics_init_cpu_freq(void)
 {
@@ -254,6 +264,7 @@ metrics_init_cpu_freq(void)
 }
 
 /* Callable in qualsiasi momento dopo l'init. Non tocca sysctl. */
+/** @brief metrics_get_cpu_freq_mhz function. */
 int
 metrics_get_cpu_freq_mhz(void)
 {

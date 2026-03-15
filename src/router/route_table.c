@@ -35,6 +35,7 @@ static hot_view_cache_entry_t g_hot_view_cache[HOT_VIEW_CACHE_MAX] = {
 };
 static pthread_mutex_t g_hot_view_cache_lock = PTHREAD_MUTEX_INITIALIZER;
 
+/** @brief html_escape function. */
 static char *
 html_escape(const char *s)
 {
@@ -74,6 +75,7 @@ html_escape(const char *s)
 	return out;
 }
 
+/** @brief append_str function. */
 static int
 append_str(char **buf, size_t *cap, size_t *len, const char *s)
 {
@@ -99,6 +101,7 @@ append_str(char **buf, size_t *cap, size_t *len, const char *s)
 	return 0;
 }
 
+/** @brief send_autoindex function. */
 static int
 send_autoindex(http_request_t *req, const char *req_path, const char *fullpath)
 {
@@ -194,6 +197,7 @@ send_autoindex(http_request_t *req, const char *req_path, const char *fullpath)
 	return ret;
 }
 
+/** @brief send_redirect function. */
 static int
 send_redirect(http_request_t *req, int status_code, const char *location)
 {

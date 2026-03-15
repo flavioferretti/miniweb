@@ -11,6 +11,7 @@
 #include <time.h>
 #include <unistd.h>
 
+/** @brief safe_popen_read_argv function. */
 char *
 safe_popen_read_argv(const char *path, char *const argv[],
 	size_t max_size, int timeout_seconds, size_t *out_len)
@@ -120,6 +121,7 @@ safe_popen_read_argv(const char *path, char *const argv[],
 	return buffer;
 }
 
+/** @brief safe_popen_read function. */
 char *
 safe_popen_read(const char *cmd, size_t max_size)
 {

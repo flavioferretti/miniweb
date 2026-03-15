@@ -1,5 +1,6 @@
 #include <miniweb/core/conf.h>
 
+/** @brief conf_validate function. */
 int
 conf_validate(miniweb_conf_t *conf)
 {

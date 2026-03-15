@@ -12,6 +12,7 @@ struct hb_counter_ctx {
 	int runs;
 };
 
+/** @brief count_cb function. */
 static void
 count_cb(void *ctx)
 {
@@ -21,6 +22,7 @@ count_cb(void *ctx)
 	pthread_mutex_unlock(&counter->lock);
 }
 
+/** @brief counter_value function. */
 static int
 counter_value(struct hb_counter_ctx *counter)
 {
@@ -31,6 +33,7 @@ counter_value(struct hb_counter_ctx *counter)
 	return v;
 }
 
+/** @brief register_worker function. */
 static void *
 register_worker(void *arg)
 {
@@ -42,6 +45,7 @@ register_worker(void *arg)
 	return NULL;
 }
 
+/** @brief start_stop_worker function. */
 static void *
 start_stop_worker(void *arg)
 {
@@ -54,6 +58,7 @@ start_stop_worker(void *arg)
 	return NULL;
 }
 
+/** @brief main function. */
 int
 main(void)
 {

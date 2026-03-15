@@ -292,6 +292,7 @@ read_template_file(const char *filename, char **content)
 	return ret;
 }
 
+/** @brief load_template_component function. */
 static int
 load_template_component(const char *filename, char **content)
 {
@@ -315,6 +316,7 @@ struct placeholder_pair {
 	const char *value;
 };
 
+/** @brief replace_placeholders function. */
 static char *
 replace_placeholders(const char *template_str,
 	const struct placeholder_pair *pairs, size_t pair_count)
@@ -371,6 +373,7 @@ replace_all(const char *template_str, const char *title,
 		sizeof(pairs) / sizeof(pairs[0]));
 }
 
+/** @brief load_layout_fragments function. */
 static int
 load_layout_fragments(const struct template_data *data,
 	char **base_template, char **page_content, char **extra_head,
@@ -385,6 +388,7 @@ load_layout_fragments(const struct template_data *data,
 	return 0;
 }
 
+/** @brief compose_layout function. */
 static char *
 compose_layout(const struct template_data *data, const char *base_template,
 	const char *page_content, const char *extra_head, const char *extra_js)

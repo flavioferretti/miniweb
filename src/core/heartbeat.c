@@ -18,6 +18,7 @@ pthread_cond_t g_hb_cond;
 
 static void *heartbeat_thread(void *arg);
 
+/** @brief heartbeat_init function. */
 int
 heartbeat_init(void)
 {
@@ -37,6 +38,7 @@ heartbeat_init(void)
 	return 0;
 }
 
+/** @brief heartbeat_register function. */
 int
 heartbeat_register(const struct hb_task *task)
 {
@@ -73,6 +75,7 @@ heartbeat_register(const struct hb_task *task)
 	return HB_REGISTER_ERROR;
 }
 
+/** @brief heartbeat_unregister function. */
 int
 heartbeat_unregister(const char *name)
 {
@@ -95,6 +98,7 @@ heartbeat_unregister(const char *name)
 	return -1;
 }
 
+/** @brief heartbeat_update function. */
 int
 heartbeat_update(const char *name,
 	unsigned int period_sec,
@@ -126,6 +130,7 @@ heartbeat_update(const char *name,
 	return -1;
 }
 
+/** @brief heartbeat_get_stats function. */
 int
 heartbeat_get_stats(const char *name, struct hb_task_stats *stats_out)
 {
@@ -147,6 +152,7 @@ heartbeat_get_stats(const char *name, struct hb_task_stats *stats_out)
 	return -1;
 }
 
+/** @brief heartbeat_start function. */
 int
 heartbeat_start(void)
 {
@@ -167,12 +173,14 @@ heartbeat_start(void)
 	return 0;
 }
 
+/** @brief heartbeat_stop function. */
 int
 heartbeat_stop(void)
 {
 	return heartbeat_shutdown(0);
 }
 
+/** @brief heartbeat_shutdown function. */
 int
 heartbeat_shutdown(int drain)
 {
@@ -194,6 +202,7 @@ heartbeat_shutdown(int drain)
 	return 0;
 }
 
+/** @brief heartbeat_thread function. */
 static void *
 heartbeat_thread(void *arg)
 {

@@ -24,6 +24,7 @@ static const struct view_route view_routes[] = {
 		"packages_extra_head.html", "packages_extra_js.html"},
 };
 
+/** @brief url_registry_register function. */
 static int
 url_registry_register(void *ctx, const char *method, const char *path,
 	route_handler_t handler)
@@ -33,6 +34,7 @@ url_registry_register(void *ctx, const char *method, const char *path,
 	return 0;
 }
 
+/** @brief url_registry_register_prefix function. */
 static int
 url_registry_register_prefix(void *ctx, const char *method, const char *prefix,
 	int min_slashes, route_handler_t handler)
@@ -42,6 +44,7 @@ url_registry_register_prefix(void *ctx, const char *method, const char *prefix,
 	return 0;
 }
 
+/** @brief views_module_attach_routes function. */
 int
 views_module_attach_routes(struct router *r)
 {
@@ -57,6 +60,7 @@ views_module_attach_routes(struct router *r)
 	return 0;
 }
 
+/** @brief find_view_route function. */
 const struct view_route *
 find_view_route(const char *method, const char *path)
 {
@@ -77,6 +81,7 @@ struct module_attach_config {
 	int enable_packages;
 };
 
+/** @brief init_routes function. */
 void
 init_routes(void *module_cfg)
 {
