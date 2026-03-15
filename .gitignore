@@ -83,6 +83,7 @@ config.local
 static/.cache/
 static/man
 static/doxygen
+static/pfstat
 
 # Coverage reports
 *.gcov
