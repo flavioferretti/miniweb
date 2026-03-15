@@ -58,7 +58,9 @@ log_init(const char *path, int verbose)
 }
 
 /**
- * @brief Flush and close the log file opened by log_init().
+ * @brief log_close operation.
+ *
+ * @details Performs the core log_close routine for this module.
  */
 void
 log_close(void)

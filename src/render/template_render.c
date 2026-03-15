@@ -91,7 +91,9 @@ read_file_content(const char *path, char **content)
  * @brief Free all cached template entries and release associated resources.
  */
 /**
- * @brief Free all cached templates.
+ * @brief template_cache_cleanup operation.
+ *
+ * @details Performs the core template_cache_cleanup routine for this module.
  */
 void
 template_cache_cleanup(void)
@@ -111,7 +113,9 @@ template_cache_cleanup(void)
 }
 
 /**
- * @brief Free all cached template entries while the cache mutex is held.
+ * @brief template_cache_cleanup_locked operation.
+ *
+ * @details Performs the core template_cache_cleanup_locked routine for this module.
  */
 static void
 template_cache_cleanup_locked(void)
@@ -292,7 +296,16 @@ read_template_file(const char *filename, char **content)
 	return ret;
 }
 
-/** @brief load_template_component function. */
+/**
+ * @brief load_template_component operation.
+ *
+ * @details Performs the core load_template_component routine for this module.
+ *
+ * @param filename Input parameter for load_template_component.
+ * @param content Input parameter for load_template_component.
+ *
+ * @return Return value produced by load_template_component.
+ */
 static int
 load_template_component(const char *filename, char **content)
 {
@@ -316,7 +329,17 @@ struct placeholder_pair {
 	const char *value;
 };
 
-/** @brief replace_placeholders function. */
+/**
+ * @brief replace_placeholders operation.
+ *
+ * @details Performs the core replace_placeholders routine for this module.
+ *
+ * @param template_str Input parameter for replace_placeholders.
+ * @param pairs Input parameter for replace_placeholders.
+ * @param pair_count Input parameter for replace_placeholders.
+ *
+ * @return Return value produced by replace_placeholders.
+ */
 static char *
 replace_placeholders(const char *template_str,
 	const struct placeholder_pair *pairs, size_t pair_count)
@@ -373,7 +396,19 @@ replace_all(const char *template_str, const char *title,
 		sizeof(pairs) / sizeof(pairs[0]));
 }
 
-/** @brief load_layout_fragments function. */
+/**
+ * @brief load_layout_fragments operation.
+ *
+ * @details Performs the core load_layout_fragments routine for this module.
+ *
+ * @param data Input parameter for load_layout_fragments.
+ * @param base_template Input parameter for load_layout_fragments.
+ * @param page_content Input parameter for load_layout_fragments.
+ * @param extra_head Input parameter for load_layout_fragments.
+ * @param extra_js Input parameter for load_layout_fragments.
+ *
+ * @return Return value produced by load_layout_fragments.
+ */
 static int
 load_layout_fragments(const struct template_data *data,
 	char **base_template, char **page_content, char **extra_head,
@@ -388,7 +423,19 @@ load_layout_fragments(const struct template_data *data,
 	return 0;
 }
 
-/** @brief compose_layout function. */
+/**
+ * @brief compose_layout operation.
+ *
+ * @details Performs the core compose_layout routine for this module.
+ *
+ * @param data Input parameter for compose_layout.
+ * @param base_template Input parameter for compose_layout.
+ * @param page_content Input parameter for compose_layout.
+ * @param extra_head Input parameter for compose_layout.
+ * @param extra_js Input parameter for compose_layout.
+ *
+ * @return Return value produced by compose_layout.
+ */
 static char *
 compose_layout(const struct template_data *data, const char *base_template,
 	const char *page_content, const char *extra_head, const char *extra_js)

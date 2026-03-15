@@ -18,7 +18,13 @@ pthread_cond_t g_hb_cond;
 
 static void *heartbeat_thread(void *arg);
 
-/** @brief heartbeat_init function. */
+/**
+ * @brief heartbeat_init operation.
+ *
+ * @details Performs the core heartbeat_init routine for this module.
+ *
+ * @return Return value produced by heartbeat_init.
+ */
 int
 heartbeat_init(void)
 {
@@ -38,7 +44,15 @@ heartbeat_init(void)
 	return 0;
 }
 
-/** @brief heartbeat_register function. */
+/**
+ * @brief heartbeat_register operation.
+ *
+ * @details Performs the core heartbeat_register routine for this module.
+ *
+ * @param task Input parameter for heartbeat_register.
+ *
+ * @return Return value produced by heartbeat_register.
+ */
 int
 heartbeat_register(const struct hb_task *task)
 {
@@ -75,7 +89,15 @@ heartbeat_register(const struct hb_task *task)
 	return HB_REGISTER_ERROR;
 }
 
-/** @brief heartbeat_unregister function. */
+/**
+ * @brief heartbeat_unregister operation.
+ *
+ * @details Performs the core heartbeat_unregister routine for this module.
+ *
+ * @param name Input parameter for heartbeat_unregister.
+ *
+ * @return Return value produced by heartbeat_unregister.
+ */
 int
 heartbeat_unregister(const char *name)
 {
@@ -98,7 +120,18 @@ heartbeat_unregister(const char *name)
 	return -1;
 }
 
-/** @brief heartbeat_update function. */
+/**
+ * @brief heartbeat_update operation.
+ *
+ * @details Performs the core heartbeat_update routine for this module.
+ *
+ * @param name Input parameter for heartbeat_update.
+ * @param period_sec Input parameter for heartbeat_update.
+ * @param initial_delay_sec Input parameter for heartbeat_update.
+ * @param ctx Input parameter for heartbeat_update.
+ *
+ * @return Return value produced by heartbeat_update.
+ */
 int
 heartbeat_update(const char *name,
 	unsigned int period_sec,
@@ -130,7 +163,16 @@ heartbeat_update(const char *name,
 	return -1;
 }
 
-/** @brief heartbeat_get_stats function. */
+/**
+ * @brief heartbeat_get_stats operation.
+ *
+ * @details Performs the core heartbeat_get_stats routine for this module.
+ *
+ * @param name Input parameter for heartbeat_get_stats.
+ * @param stats_out Input parameter for heartbeat_get_stats.
+ *
+ * @return Return value produced by heartbeat_get_stats.
+ */
 int
 heartbeat_get_stats(const char *name, struct hb_task_stats *stats_out)
 {
@@ -152,7 +194,13 @@ heartbeat_get_stats(const char *name, struct hb_task_stats *stats_out)
 	return -1;
 }
 
-/** @brief heartbeat_start function. */
+/**
+ * @brief heartbeat_start operation.
+ *
+ * @details Performs the core heartbeat_start routine for this module.
+ *
+ * @return Return value produced by heartbeat_start.
+ */
 int
 heartbeat_start(void)
 {
@@ -173,14 +221,28 @@ heartbeat_start(void)
 	return 0;
 }
 
-/** @brief heartbeat_stop function. */
+/**
+ * @brief heartbeat_stop operation.
+ *
+ * @details Performs the core heartbeat_stop routine for this module.
+ *
+ * @return Return value produced by heartbeat_stop.
+ */
 int
 heartbeat_stop(void)
 {
 	return heartbeat_shutdown(0);
 }
 
-/** @brief heartbeat_shutdown function. */
+/**
+ * @brief heartbeat_shutdown operation.
+ *
+ * @details Performs the core heartbeat_shutdown routine for this module.
+ *
+ * @param drain Input parameter for heartbeat_shutdown.
+ *
+ * @return Return value produced by heartbeat_shutdown.
+ */
 int
 heartbeat_shutdown(int drain)
 {
@@ -202,7 +264,15 @@ heartbeat_shutdown(int drain)
 	return 0;
 }
 
-/** @brief heartbeat_thread function. */
+/**
+ * @brief heartbeat_thread operation.
+ *
+ * @details Performs the core heartbeat_thread routine for this module.
+ *
+ * @param arg Input parameter for heartbeat_thread.
+ *
+ * @return Return value produced by heartbeat_thread.
+ */
 static void *
 heartbeat_thread(void *arg)
 {

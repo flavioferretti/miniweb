@@ -12,7 +12,16 @@
 
 extern miniweb_conf_t config;
 
-/** @brief http_request_get_header function. */
+/**
+ * @brief http_request_get_header operation.
+ *
+ * @details Performs the core http_request_get_header routine for this module.
+ *
+ * @param req Input parameter for http_request_get_header.
+ * @param name Input parameter for http_request_get_header.
+ *
+ * @return Return value produced by http_request_get_header.
+ */
 const char *
 http_request_get_header(http_request_t *req, const char *name)
 {
@@ -51,7 +60,15 @@ http_request_get_header(http_request_t *req, const char *name)
 	return req->hdr_scratch;
 }
 
-/** @brief http_request_get_client_ip function. */
+/**
+ * @brief http_request_get_client_ip operation.
+ *
+ * @details Performs the core http_request_get_client_ip routine for this module.
+ *
+ * @param req Input parameter for http_request_get_client_ip.
+ *
+ * @return Return value produced by http_request_get_client_ip.
+ */
 const char *
 http_request_get_client_ip(http_request_t *req)
 {
@@ -90,7 +107,15 @@ http_request_get_client_ip(http_request_t *req)
 	return req->ip_scratch;
 }
 
-/** @brief http_request_is_https function. */
+/**
+ * @brief http_request_is_https operation.
+ *
+ * @details Performs the core http_request_is_https routine for this module.
+ *
+ * @param req Input parameter for http_request_is_https.
+ *
+ * @return Return value produced by http_request_is_https.
+ */
 int
 http_request_is_https(http_request_t *req)
 {
@@ -109,7 +134,17 @@ http_request_is_https(http_request_t *req)
 	return proto && strcmp(proto, "https") == 0;
 }
 
-/** @brief http_send_error function. */
+/**
+ * @brief http_send_error operation.
+ *
+ * @details Performs the core http_send_error routine for this module.
+ *
+ * @param req Input parameter for http_send_error.
+ * @param status_code Input parameter for http_send_error.
+ * @param message Input parameter for http_send_error.
+ *
+ * @return Return value produced by http_send_error.
+ */
 int
 http_send_error(http_request_t *req, int status_code, const char *message)
 {
@@ -148,7 +183,16 @@ http_send_error(http_request_t *req, int status_code, const char *message)
 	return ret;
 }
 
-/** @brief http_send_json function. */
+/**
+ * @brief http_send_json operation.
+ *
+ * @details Performs the core http_send_json routine for this module.
+ *
+ * @param req Input parameter for http_send_json.
+ * @param json Input parameter for http_send_json.
+ *
+ * @return Return value produced by http_send_json.
+ */
 int
 http_send_json(http_request_t *req, const char *json)
 {
@@ -165,7 +209,16 @@ http_send_json(http_request_t *req, const char *json)
 	return ret;
 }
 
-/** @brief http_send_html function. */
+/**
+ * @brief http_send_html operation.
+ *
+ * @details Performs the core http_send_html routine for this module.
+ *
+ * @param req Input parameter for http_send_html.
+ * @param html Input parameter for http_send_html.
+ *
+ * @return Return value produced by http_send_html.
+ */
 int
 http_send_html(http_request_t *req, const char *html)
 {
@@ -181,7 +234,17 @@ http_send_html(http_request_t *req, const char *html)
 	return ret;
 }
 
-/** @brief http_render_template function. */
+/**
+ * @brief http_render_template operation.
+ *
+ * @details Performs the core http_render_template routine for this module.
+ *
+ * @param req Input parameter for http_render_template.
+ * @param data Input parameter for http_render_template.
+ * @param fallback_template Input parameter for http_render_template.
+ *
+ * @return Return value produced by http_render_template.
+ */
 int
 http_render_template(http_request_t *req, struct template_data *data,
     const char *fallback_template)

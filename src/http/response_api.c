@@ -6,7 +6,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-/** @brief http_response_create function. */
+/**
+ * @brief http_response_create operation.
+ *
+ * @details Performs the core http_response_create routine for this module.
+ *
+ * @return Return value produced by http_response_create.
+ */
 http_response_t *
 http_response_create(void)
 {
@@ -26,14 +32,30 @@ http_response_create(void)
 	return resp;
 }
 
-/** @brief http_response_set_status function. */
+/**
+ * @brief http_response_set_status operation.
+ *
+ * @details Performs the core http_response_set_status routine for this module.
+ *
+ * @param resp Input parameter for http_response_set_status.
+ * @param code Input parameter for http_response_set_status.
+ */
 void
 http_response_set_status(http_response_t *resp, int code)
 {
 	resp->status_code = code;
 }
 
-/** @brief http_response_set_body function. */
+/**
+ * @brief http_response_set_body operation.
+ *
+ * @details Performs the core http_response_set_body routine for this module.
+ *
+ * @param resp Input parameter for http_response_set_body.
+ * @param body Input parameter for http_response_set_body.
+ * @param len Input parameter for http_response_set_body.
+ * @param must_free Input parameter for http_response_set_body.
+ */
 void
 http_response_set_body(http_response_t *resp, char *body, size_t len,
     int must_free)
@@ -43,7 +65,15 @@ http_response_set_body(http_response_t *resp, char *body, size_t len,
 	resp->free_body = must_free;
 }
 
-/** @brief http_response_add_header function. */
+/**
+ * @brief http_response_add_header operation.
+ *
+ * @details Performs the core http_response_add_header routine for this module.
+ *
+ * @param resp Input parameter for http_response_add_header.
+ * @param name Input parameter for http_response_add_header.
+ * @param value Input parameter for http_response_add_header.
+ */
 void
 http_response_add_header(http_response_t *resp, const char *name,
     const char *value)
@@ -62,7 +92,16 @@ http_response_add_header(http_response_t *resp, const char *name,
 		resp->headers_len = sizeof(resp->headers) - 1;
 }
 
-/** @brief http_response_send function. */
+/**
+ * @brief http_response_send operation.
+ *
+ * @details Performs the core http_response_send routine for this module.
+ *
+ * @param req Input parameter for http_response_send.
+ * @param resp Input parameter for http_response_send.
+ *
+ * @return Return value produced by http_response_send.
+ */
 int
 http_response_send(http_request_t *req, http_response_t *resp)
 {
@@ -116,7 +155,13 @@ http_response_send(http_request_t *req, http_response_t *resp)
 	return 0;
 }
 
-/** @brief http_response_free function. */
+/**
+ * @brief http_response_free operation.
+ *
+ * @details Performs the core http_response_free routine for this module.
+ *
+ * @param resp Input parameter for http_response_free.
+ */
 void
 http_response_free(http_response_t *resp)
 {

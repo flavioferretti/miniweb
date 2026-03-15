@@ -7,7 +7,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-/** @brief json_escape_string function. */
+/**
+ * @brief json_escape_string operation.
+ *
+ * @details Performs the core json_escape_string routine for this module.
+ *
+ * @param src Input parameter for json_escape_string.
+ *
+ * @return Return value produced by json_escape_string.
+ */
 char *
 json_escape_string(const char *src)
 {
@@ -67,7 +75,13 @@ json_escape_string(const char *src)
 	return dest;
 }
 
-/** @brief sanitize_string function. */
+/**
+ * @brief sanitize_string operation.
+ *
+ * @details Performs the core sanitize_string routine for this module.
+ *
+ * @param s Input parameter for sanitize_string.
+ */
 void
 sanitize_string(char *s)
 {
@@ -81,7 +95,15 @@ sanitize_string(char *s)
 	}
 }
 
-/** @brief hex_value function. */
+/**
+ * @brief hex_value operation.
+ *
+ * @details Performs the core hex_value routine for this module.
+ *
+ * @param c Input parameter for hex_value.
+ *
+ * @return Return value produced by hex_value.
+ */
 static int
 hex_value(char c)
 {
@@ -94,7 +116,17 @@ hex_value(char c)
 	return -1;
 }
 
-/** @brief url_decode function. */
+/**
+ * @brief url_decode operation.
+ *
+ * @details Performs the core url_decode routine for this module.
+ *
+ * @param src Input parameter for url_decode.
+ * @param dst Input parameter for url_decode.
+ * @param dst_len Input parameter for url_decode.
+ *
+ * @return Return value produced by url_decode.
+ */
 int
 url_decode(const char *src, char *dst, size_t dst_len)
 {
@@ -129,7 +161,15 @@ url_decode(const char *src, char *dst, size_t dst_len)
 	return 0;
 }
 
-/** @brief mime_type_for_path function. */
+/**
+ * @brief mime_type_for_path operation.
+ *
+ * @details Performs the core mime_type_for_path routine for this module.
+ *
+ * @param path Input parameter for mime_type_for_path.
+ *
+ * @return Return value produced by mime_type_for_path.
+ */
 const char *
 mime_type_for_path(const char *path)
 {

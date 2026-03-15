@@ -24,7 +24,18 @@ static const struct view_route view_routes[] = {
 		"packages_extra_head.html", "packages_extra_js.html"},
 };
 
-/** @brief url_registry_register function. */
+/**
+ * @brief url_registry_register operation.
+ *
+ * @details Performs the core url_registry_register routine for this module.
+ *
+ * @param ctx Input parameter for url_registry_register.
+ * @param method Input parameter for url_registry_register.
+ * @param path Input parameter for url_registry_register.
+ * @param handler Input parameter for url_registry_register.
+ *
+ * @return Return value produced by url_registry_register.
+ */
 static int
 url_registry_register(void *ctx, const char *method, const char *path,
 	route_handler_t handler)
@@ -34,7 +45,19 @@ url_registry_register(void *ctx, const char *method, const char *path,
 	return 0;
 }
 
-/** @brief url_registry_register_prefix function. */
+/**
+ * @brief url_registry_register_prefix operation.
+ *
+ * @details Performs the core url_registry_register_prefix routine for this module.
+ *
+ * @param ctx Input parameter for url_registry_register_prefix.
+ * @param method Input parameter for url_registry_register_prefix.
+ * @param prefix Input parameter for url_registry_register_prefix.
+ * @param min_slashes Input parameter for url_registry_register_prefix.
+ * @param handler Input parameter for url_registry_register_prefix.
+ *
+ * @return Return value produced by url_registry_register_prefix.
+ */
 static int
 url_registry_register_prefix(void *ctx, const char *method, const char *prefix,
 	int min_slashes, route_handler_t handler)
@@ -44,7 +67,15 @@ url_registry_register_prefix(void *ctx, const char *method, const char *prefix,
 	return 0;
 }
 
-/** @brief views_module_attach_routes function. */
+/**
+ * @brief views_module_attach_routes operation.
+ *
+ * @details Performs the core views_module_attach_routes routine for this module.
+ *
+ * @param r Input parameter for views_module_attach_routes.
+ *
+ * @return Return value produced by views_module_attach_routes.
+ */
 int
 views_module_attach_routes(struct router *r)
 {
@@ -60,7 +91,16 @@ views_module_attach_routes(struct router *r)
 	return 0;
 }
 
-/** @brief find_view_route function. */
+/**
+ * @brief find_view_route operation.
+ *
+ * @details Performs the core find_view_route routine for this module.
+ *
+ * @param method Input parameter for find_view_route.
+ * @param path Input parameter for find_view_route.
+ *
+ * @return Return value produced by find_view_route.
+ */
 const struct view_route *
 find_view_route(const char *method, const char *path)
 {
@@ -81,7 +121,13 @@ struct module_attach_config {
 	int enable_packages;
 };
 
-/** @brief init_routes function. */
+/**
+ * @brief init_routes operation.
+ *
+ * @details Performs the core init_routes routine for this module.
+ *
+ * @param module_cfg Input parameter for init_routes.
+ */
 void
 init_routes(void *module_cfg)
 {

@@ -16,7 +16,13 @@ typedef struct {
 
 static response_pool_t response_pools[RESPONSE_POOL_SHARDS];
 
-/** @brief thread_hash function. */
+/**
+ * @brief thread_hash operation.
+ *
+ * @details Performs the core thread_hash routine for this module.
+ *
+ * @return Return value produced by thread_hash.
+ */
 static inline unsigned long
 thread_hash(void)
 {
@@ -26,14 +32,26 @@ thread_hash(void)
 	return (unsigned long)(tid ^ (tid >> 7) ^ (tid >> 13));
 }
 
-/** @brief response_pool_shard_index function. */
+/**
+ * @brief response_pool_shard_index operation.
+ *
+ * @details Performs the core response_pool_shard_index routine for this module.
+ *
+ * @return Return value produced by response_pool_shard_index.
+ */
 static int
 response_pool_shard_index(void)
 {
 	return (int)(thread_hash() % RESPONSE_POOL_SHARDS);
 }
 
-/** @brief response_pool_init_locked function. */
+/**
+ * @brief response_pool_init_locked operation.
+ *
+ * @details Performs the core response_pool_init_locked routine for this module.
+ *
+ * @param pool Input parameter for response_pool_init_locked.
+ */
 static void
 response_pool_init_locked(response_pool_t *pool)
 {
@@ -48,7 +66,11 @@ response_pool_init_locked(response_pool_t *pool)
 	pool->initialized = 1;
 }
 
-/** @brief http_response_pool_init_shards function. */
+/**
+ * @brief http_response_pool_init_shards operation.
+ *
+ * @details Performs the core http_response_pool_init_shards routine for this module.
+ */
 void
 http_response_pool_init_shards(void)
 {
@@ -58,7 +80,13 @@ http_response_pool_init_shards(void)
 		pthread_mutex_init(&response_pools[i].lock, NULL);
 }
 
-/** @brief http_response_pool_acquire function. */
+/**
+ * @brief http_response_pool_acquire operation.
+ *
+ * @details Performs the core http_response_pool_acquire routine for this module.
+ *
+ * @return Return value produced by http_response_pool_acquire.
+ */
 http_response_t *
 http_response_pool_acquire(void)
 {
@@ -85,7 +113,15 @@ http_response_pool_acquire(void)
 	return resp;
 }
 
-/** @brief http_response_pool_release function. */
+/**
+ * @brief http_response_pool_release operation.
+ *
+ * @details Performs the core http_response_pool_release routine for this module.
+ *
+ * @param resp Input parameter for http_response_pool_release.
+ *
+ * @return Return value produced by http_response_pool_release.
+ */
 int
 http_response_pool_release(http_response_t *resp)
 {

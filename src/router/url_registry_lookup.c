@@ -4,7 +4,16 @@
 
 #include "url_registry_internal.h"
 
-/** @brief route_match function. */
+/**
+ * @brief route_match operation.
+ *
+ * @details Performs the core route_match routine for this module.
+ *
+ * @param method Input parameter for route_match.
+ * @param path Input parameter for route_match.
+ *
+ * @return Return value produced by route_match.
+ */
 route_handler_t
 route_match(const char *method, const char *path)
 {
@@ -22,7 +31,15 @@ route_match(const char *method, const char *path)
 	return NULL;
 }
 
-/** @brief route_path_known function. */
+/**
+ * @brief route_path_known operation.
+ *
+ * @details Performs the core route_path_known routine for this module.
+ *
+ * @param path Input parameter for route_path_known.
+ *
+ * @return Return value produced by route_path_known.
+ */
 int
 route_path_known(const char *path)
 {

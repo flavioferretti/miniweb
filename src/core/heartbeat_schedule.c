@@ -3,7 +3,15 @@
 
 #include "heartbeat_internal.h"
 
-/** @brief hb_collect_due_tasks function. */
+/**
+ * @brief hb_collect_due_tasks operation.
+ *
+ * @details Performs the core hb_collect_due_tasks routine for this module.
+ *
+ * @param now Input parameter for hb_collect_due_tasks.
+ * @param wake_at Input parameter for hb_collect_due_tasks.
+ * @param todo Input parameter for hb_collect_due_tasks.
+ */
 void
 hb_collect_due_tasks(time_t now, time_t *wake_at, hb_task_batch_t *todo)
 {
@@ -35,7 +43,14 @@ hb_collect_due_tasks(time_t now, time_t *wake_at, hb_task_batch_t *todo)
 	}
 }
 
-/** @brief hb_collect_all_active function. */
+/**
+ * @brief hb_collect_all_active operation.
+ *
+ * @details Performs the core hb_collect_all_active routine for this module.
+ *
+ * @param now Input parameter for hb_collect_all_active.
+ * @param todo Input parameter for hb_collect_all_active.
+ */
 void
 hb_collect_all_active(time_t now, hb_task_batch_t *todo)
 {
@@ -49,7 +64,11 @@ hb_collect_all_active(time_t now, hb_task_batch_t *todo)
 	}
 }
 
-/** @brief hb_mark_stopped function. */
+/**
+ * @brief hb_mark_stopped operation.
+ *
+ * @details Performs the core hb_mark_stopped routine for this module.
+ */
 void
 hb_mark_stopped(void)
 {
@@ -58,7 +77,14 @@ hb_mark_stopped(void)
 	g_hb_drain_on_stop = 0;
 }
 
-/** @brief hb_wait_for_next_tick function. */
+/**
+ * @brief hb_wait_for_next_tick operation.
+ *
+ * @details Performs the core hb_wait_for_next_tick routine for this module.
+ *
+ * @param now Input parameter for hb_wait_for_next_tick.
+ * @param wake_at Input parameter for hb_wait_for_next_tick.
+ */
 void
 hb_wait_for_next_tick(time_t now, time_t wake_at)
 {

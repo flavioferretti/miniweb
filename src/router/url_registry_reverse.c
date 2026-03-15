@@ -5,7 +5,17 @@
 
 #include "url_registry_internal.h"
 
-/** @brief route_allow_methods function. */
+/**
+ * @brief route_allow_methods operation.
+ *
+ * @details Performs the core route_allow_methods routine for this module.
+ *
+ * @param path Input parameter for route_allow_methods.
+ * @param buf Input parameter for route_allow_methods.
+ * @param buf_len Input parameter for route_allow_methods.
+ *
+ * @return Return value produced by route_allow_methods.
+ */
 int
 route_allow_methods(const char *path, char *buf, size_t buf_len)
 {

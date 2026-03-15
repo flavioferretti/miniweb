@@ -21,7 +21,15 @@
 
 #define MB (1024 * 1024)
 
-/** @brief metrics_get_cpu_stats function. */
+/**
+ * @brief metrics_get_cpu_stats operation.
+ *
+ * @details Performs the core metrics_get_cpu_stats routine for this module.
+ *
+ * @param stats Input parameter for metrics_get_cpu_stats.
+ *
+ * @return Return value produced by metrics_get_cpu_stats.
+ */
 int
 metrics_get_cpu_stats(CpuStats *stats)
 {
@@ -58,7 +66,15 @@ metrics_get_cpu_stats(CpuStats *stats)
 #endif
 }
 
-/** @brief metrics_get_memory_stats function. */
+/**
+ * @brief metrics_get_memory_stats operation.
+ *
+ * @details Performs the core metrics_get_memory_stats routine for this module.
+ *
+ * @param stats Input parameter for metrics_get_memory_stats.
+ *
+ * @return Return value produced by metrics_get_memory_stats.
+ */
 int
 metrics_get_memory_stats(MemoryStats *stats)
 {
@@ -113,7 +129,15 @@ metrics_get_memory_stats(MemoryStats *stats)
 #endif
 }
 
-/** @brief metrics_get_load_average function. */
+/**
+ * @brief metrics_get_load_average operation.
+ *
+ * @details Performs the core metrics_get_load_average routine for this module.
+ *
+ * @param load Input parameter for metrics_get_load_average.
+ *
+ * @return Return value produced by metrics_get_load_average.
+ */
 int
 metrics_get_load_average(LoadAverage *load)
 {
@@ -128,7 +152,18 @@ metrics_get_load_average(LoadAverage *load)
 	return 0;
 }
 
-/** @brief metrics_get_os_info function. */
+/**
+ * @brief metrics_get_os_info operation.
+ *
+ * @details Performs the core metrics_get_os_info routine for this module.
+ *
+ * @param type Input parameter for metrics_get_os_info.
+ * @param release Input parameter for metrics_get_os_info.
+ * @param machine Input parameter for metrics_get_os_info.
+ * @param size Input parameter for metrics_get_os_info.
+ *
+ * @return Return value produced by metrics_get_os_info.
+ */
 int
 metrics_get_os_info(char *type, char *release, char *machine, size_t size)
 {
@@ -143,7 +178,16 @@ metrics_get_os_info(char *type, char *release, char *machine, size_t size)
 	return 0;
 }
 
-/** @brief metrics_get_uptime function. */
+/**
+ * @brief metrics_get_uptime operation.
+ *
+ * @details Performs the core metrics_get_uptime routine for this module.
+ *
+ * @param uptime_str Input parameter for metrics_get_uptime.
+ * @param size Input parameter for metrics_get_uptime.
+ *
+ * @return Return value produced by metrics_get_uptime.
+ */
 int
 metrics_get_uptime(char *uptime_str, size_t size)
 {
@@ -176,14 +220,32 @@ metrics_get_uptime(char *uptime_str, size_t size)
 #endif
 }
 
-/** @brief metrics_get_hostname function. */
+/**
+ * @brief metrics_get_hostname operation.
+ *
+ * @details Performs the core metrics_get_hostname routine for this module.
+ *
+ * @param hostname Input parameter for metrics_get_hostname.
+ * @param size Input parameter for metrics_get_hostname.
+ *
+ * @return Return value produced by metrics_get_hostname.
+ */
 int
 metrics_get_hostname(char *hostname, size_t size)
 {
 	return gethostname(hostname, size);
 }
 
-/** @brief metrics_get_disk_usage function. */
+/**
+ * @brief metrics_get_disk_usage operation.
+ *
+ * @details Performs the core metrics_get_disk_usage routine for this module.
+ *
+ * @param disks Input parameter for metrics_get_disk_usage.
+ * @param max_disks Input parameter for metrics_get_disk_usage.
+ *
+ * @return Return value produced by metrics_get_disk_usage.
+ */
 int
 metrics_get_disk_usage(DiskInfo *disks, int max_disks)
 {
@@ -222,7 +284,16 @@ metrics_get_disk_usage(DiskInfo *disks, int max_disks)
 #endif
 }
 
-/** @brief metrics_get_top_ports function. */
+/**
+ * @brief metrics_get_top_ports operation.
+ *
+ * @details Performs the core metrics_get_top_ports routine for this module.
+ *
+ * @param ports Input parameter for metrics_get_top_ports.
+ * @param max_ports Input parameter for metrics_get_top_ports.
+ *
+ * @return Return value produced by metrics_get_top_ports.
+ */
 int
 metrics_get_top_ports(PortInfo *ports, int max_ports)
 {
@@ -231,7 +302,16 @@ metrics_get_top_ports(PortInfo *ports, int max_ports)
 	return 0;
 }
 
-/** @brief metrics_get_network_interfaces function. */
+/**
+ * @brief metrics_get_network_interfaces operation.
+ *
+ * @details Performs the core metrics_get_network_interfaces routine for this module.
+ *
+ * @param interfaces Input parameter for metrics_get_network_interfaces.
+ * @param max_interfaces Input parameter for metrics_get_network_interfaces.
+ *
+ * @return Return value produced by metrics_get_network_interfaces.
+ */
 int
 metrics_get_network_interfaces(NetworkInterface *interfaces, int max_interfaces)
 {
@@ -249,7 +329,11 @@ static int g_cpu_freq_mhz = -1;
  * Da chiamare UNA VOLTA durante l'init, prima di miniweb_apply_openbsd_security().
  * Legge CTL_HW/HW_CPUSPEED (non coperto da vminfo pledge).
  */
-/** @brief metrics_init_cpu_freq function. */
+/**
+ * @brief metrics_init_cpu_freq operation.
+ *
+ * @details Performs the core metrics_init_cpu_freq routine for this module.
+ */
 void
 metrics_init_cpu_freq(void)
 {
@@ -264,7 +348,13 @@ metrics_init_cpu_freq(void)
 }
 
 /* Callable in qualsiasi momento dopo l'init. Non tocca sysctl. */
-/** @brief metrics_get_cpu_freq_mhz function. */
+/**
+ * @brief metrics_get_cpu_freq_mhz operation.
+ *
+ * @details Performs the core metrics_get_cpu_freq_mhz routine for this module.
+ *
+ * @return Return value produced by metrics_get_cpu_freq_mhz.
+ */
 int
 metrics_get_cpu_freq_mhz(void)
 {

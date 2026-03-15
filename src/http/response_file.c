@@ -6,7 +6,17 @@
 #include <string.h>
 #include <unistd.h>
 
-/** @brief read_entire_file function. */
+/**
+ * @brief read_entire_file operation.
+ *
+ * @details Performs the core read_entire_file routine for this module.
+ *
+ * @param fd Input parameter for read_entire_file.
+ * @param buf Input parameter for read_entire_file.
+ * @param len Input parameter for read_entire_file.
+ *
+ * @return Return value produced by read_entire_file.
+ */
 static int
 read_entire_file(int fd, char *buf, size_t len)
 {
@@ -29,7 +39,17 @@ read_entire_file(int fd, char *buf, size_t len)
 	return (total > 0) ? (int)total : -1;
 }
 
-/** @brief http_send_file function. */
+/**
+ * @brief http_send_file operation.
+ *
+ * @details Performs the core http_send_file routine for this module.
+ *
+ * @param req Input parameter for http_send_file.
+ * @param path Input parameter for http_send_file.
+ * @param mime Input parameter for http_send_file.
+ *
+ * @return Return value produced by http_send_file.
+ */
 int
 http_send_file(http_request_t *req, const char *path, const char *mime)
 {

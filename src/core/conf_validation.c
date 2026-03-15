@@ -1,6 +1,14 @@
 #include <miniweb/core/conf.h>
 
-/** @brief conf_validate function. */
+/**
+ * @brief conf_validate operation.
+ *
+ * @details Performs the core conf_validate routine for this module.
+ *
+ * @param conf Input parameter for conf_validate.
+ *
+ * @return Return value produced by conf_validate.
+ */
 int
 conf_validate(miniweb_conf_t *conf)
 {
