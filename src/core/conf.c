@@ -10,6 +10,15 @@
 
 #include "conf_internal.h"
 
+/**
+ * @brief ltrim operation.
+ *
+ * @details Performs the core ltrim routine for this module.
+ *
+ * @param s Input parameter for ltrim.
+ *
+ * @return Return value produced by ltrim.
+ */
 static char *
 ltrim(char *s)
 {
@@ -18,6 +27,13 @@ ltrim(char *s)
 	return s;
 }
 
+/**
+ * @brief rtrim operation.
+ *
+ * @details Performs the core rtrim routine for this module.
+ *
+ * @param s Input parameter for rtrim.
+ */
 static void
 rtrim(char *s)
 {
@@ -42,6 +58,17 @@ parse_bool(const char *val)
 	return atoi(val) != 0;
 }
 
+/**
+ * @brief conf_apply_kv operation.
+ *
+ * @details Performs the core conf_apply_kv routine for this module.
+ *
+ * @param conf Input parameter for conf_apply_kv.
+ * @param key Input parameter for conf_apply_kv.
+ * @param val Input parameter for conf_apply_kv.
+ *
+ * @return Return value produced by conf_apply_kv.
+ */
 static int
 conf_apply_kv(miniweb_conf_t *conf, const char *key, const char *val)
 {
@@ -90,6 +117,18 @@ conf_apply_kv(miniweb_conf_t *conf, const char *key, const char *val)
 	return 0;
 }
 
+/**
+ * @brief conf_parse_line operation.
+ *
+ * @details Performs the core conf_parse_line routine for this module.
+ *
+ * @param conf Input parameter for conf_parse_line.
+ * @param path Input parameter for conf_parse_line.
+ * @param lineno Input parameter for conf_parse_line.
+ * @param line Input parameter for conf_parse_line.
+ *
+ * @return Return value produced by conf_parse_line.
+ */
 static int
 conf_parse_line(miniweb_conf_t *conf, const char *path, int lineno, char *line)
 {
@@ -120,6 +159,16 @@ conf_parse_line(miniweb_conf_t *conf, const char *path, int lineno, char *line)
 	return 0;
 }
 
+/**
+ * @brief conf_parse_file operation.
+ *
+ * @details Performs the core conf_parse_file routine for this module.
+ *
+ * @param path Input parameter for conf_parse_file.
+ * @param conf Input parameter for conf_parse_file.
+ *
+ * @return Return value produced by conf_parse_file.
+ */
 static int
 conf_parse_file(const char *path, miniweb_conf_t *conf)
 {
@@ -149,6 +198,16 @@ conf_parse_file(const char *path, miniweb_conf_t *conf)
 	return 0;
 }
 
+/**
+ * @brief conf_load operation.
+ *
+ * @details Performs the core conf_load routine for this module.
+ *
+ * @param path Input parameter for conf_load.
+ * @param conf Input parameter for conf_load.
+ *
+ * @return Return value produced by conf_load.
+ */
 int
 conf_load(const char *path, miniweb_conf_t *conf)
 {

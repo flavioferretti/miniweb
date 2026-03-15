@@ -4,6 +4,15 @@
 #include <poll.h>
 #include <unistd.h>
 
+/**
+ * @brief http_response_wait_fd_writable operation.
+ *
+ * @details Performs the core http_response_wait_fd_writable routine for this module.
+ *
+ * @param fd Input parameter for http_response_wait_fd_writable.
+ *
+ * @return Return value produced by http_response_wait_fd_writable.
+ */
 static int
 http_response_wait_fd_writable(int fd)
 {
@@ -30,6 +39,17 @@ http_response_wait_fd_writable(int fd)
 	}
 }
 
+/**
+ * @brief http_response_write_all operation.
+ *
+ * @details Performs the core http_response_write_all routine for this module.
+ *
+ * @param fd Input parameter for http_response_write_all.
+ * @param buf Input parameter for http_response_write_all.
+ * @param n Input parameter for http_response_write_all.
+ *
+ * @return Return value produced by http_response_write_all.
+ */
 int
 http_response_write_all(int fd, const void *buf, size_t n)
 {
@@ -64,6 +84,17 @@ http_response_write_all(int fd, const void *buf, size_t n)
 	return 0;
 }
 
+/**
+ * @brief http_response_writev_all operation.
+ *
+ * @details Performs the core http_response_writev_all routine for this module.
+ *
+ * @param fd Input parameter for http_response_writev_all.
+ * @param iov Input parameter for http_response_writev_all.
+ * @param iovcnt Input parameter for http_response_writev_all.
+ *
+ * @return Return value produced by http_response_writev_all.
+ */
 int
 http_response_writev_all(int fd, struct iovec *iov, int iovcnt)
 {
@@ -106,6 +137,15 @@ http_response_writev_all(int fd, struct iovec *iov, int iovcnt)
 	return 0;
 }
 
+/**
+ * @brief http_response_status_text operation.
+ *
+ * @details Performs the core http_response_status_text routine for this module.
+ *
+ * @param status_code Input parameter for http_response_status_text.
+ *
+ * @return Return value produced by http_response_status_text.
+ */
 const char *
 http_response_status_text(int status_code)
 {

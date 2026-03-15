@@ -35,6 +35,15 @@ static hot_view_cache_entry_t g_hot_view_cache[HOT_VIEW_CACHE_MAX] = {
 };
 static pthread_mutex_t g_hot_view_cache_lock = PTHREAD_MUTEX_INITIALIZER;
 
+/**
+ * @brief html_escape operation.
+ *
+ * @details Performs the core html_escape routine for this module.
+ *
+ * @param s Input parameter for html_escape.
+ *
+ * @return Return value produced by html_escape.
+ */
 static char *
 html_escape(const char *s)
 {
@@ -74,6 +83,18 @@ html_escape(const char *s)
 	return out;
 }
 
+/**
+ * @brief append_str operation.
+ *
+ * @details Performs the core append_str routine for this module.
+ *
+ * @param buf Input parameter for append_str.
+ * @param cap Input parameter for append_str.
+ * @param len Input parameter for append_str.
+ * @param s Input parameter for append_str.
+ *
+ * @return Return value produced by append_str.
+ */
 static int
 append_str(char **buf, size_t *cap, size_t *len, const char *s)
 {
@@ -99,6 +120,17 @@ append_str(char **buf, size_t *cap, size_t *len, const char *s)
 	return 0;
 }
 
+/**
+ * @brief send_autoindex operation.
+ *
+ * @details Performs the core send_autoindex routine for this module.
+ *
+ * @param req Input parameter for send_autoindex.
+ * @param req_path Input parameter for send_autoindex.
+ * @param fullpath Input parameter for send_autoindex.
+ *
+ * @return Return value produced by send_autoindex.
+ */
 static int
 send_autoindex(http_request_t *req, const char *req_path, const char *fullpath)
 {
@@ -194,6 +226,17 @@ send_autoindex(http_request_t *req, const char *req_path, const char *fullpath)
 	return ret;
 }
 
+/**
+ * @brief send_redirect operation.
+ *
+ * @details Performs the core send_redirect routine for this module.
+ *
+ * @param req Input parameter for send_redirect.
+ * @param status_code Input parameter for send_redirect.
+ * @param location Input parameter for send_redirect.
+ *
+ * @return Return value produced by send_redirect.
+ */
 static int
 send_redirect(http_request_t *req, int status_code, const char *location)
 {

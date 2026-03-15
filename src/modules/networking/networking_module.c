@@ -518,8 +518,9 @@ networking_heartbeat_cb(void *ctx)
 }
 
 /**
- * @brief One-time initialisation of the networking ring, called via
- * pthread_once.
+ * @brief networking_ring_bootstrap operation.
+ *
+ * @details Performs the core networking_ring_bootstrap routine for this module.
  */
 static void
 networking_ring_bootstrap(void)
@@ -549,6 +550,19 @@ networking_ring_bootstrap(void)
 	}
 }
 
+/**
+ * @brief networking_json_append operation.
+ *
+ * @details Performs the core networking_json_append routine for this module.
+ *
+ * @param dst Input parameter for networking_json_append.
+ * @param dst_size Input parameter for networking_json_append.
+ * @param offset Input parameter for networking_json_append.
+ * @param fmt Input parameter for networking_json_append.
+ * @param ... Input parameter for networking_json_append.
+ *
+ * @return Return value produced by networking_json_append.
+ */
 static int
 networking_json_append(char *dst, size_t dst_size, size_t *offset,
 		       const char *fmt, ...)
@@ -574,6 +588,18 @@ networking_json_append(char *dst, size_t dst_size, size_t *offset,
 	return 0;
 }
 
+/**
+ * @brief networking_json_append_escaped operation.
+ *
+ * @details Performs the core networking_json_append_escaped routine for this module.
+ *
+ * @param dst Input parameter for networking_json_append_escaped.
+ * @param dst_size Input parameter for networking_json_append_escaped.
+ * @param offset Input parameter for networking_json_append_escaped.
+ * @param src Input parameter for networking_json_append_escaped.
+ *
+ * @return Return value produced by networking_json_append_escaped.
+ */
 static int
 networking_json_append_escaped(char *dst, size_t dst_size, size_t *offset,
 			       const char *src)
@@ -776,6 +802,13 @@ fail:
 	return NULL;
 }
 
+/**
+ * @brief networking_get_json operation.
+ *
+ * @details Performs the core networking_get_json routine for this module.
+ *
+ * @return Return value produced by networking_get_json.
+ */
 char *
 networking_get_json(void)
 {
@@ -875,6 +908,11 @@ networking_module_attach_routes(struct router *r)
 			       networking_api_handler);
 }
 
+/**
+ * @brief networking_module_cleanup operation.
+ *
+ * @details Performs the core networking_module_cleanup routine for this module.
+ */
 void
 networking_module_cleanup(void)
 {

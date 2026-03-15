@@ -11,6 +11,15 @@ size_t route_count = 0;
 struct prefix_route prefix_routes[MAX_PREFIX_ROUTES];
 size_t prefix_route_count = 0;
 
+/**
+ * @brief path_slash_count operation.
+ *
+ * @details Performs the core path_slash_count routine for this module.
+ *
+ * @param path Input parameter for path_slash_count.
+ *
+ * @return Return value produced by path_slash_count.
+ */
 int
 path_slash_count(const char *path)
 {
@@ -22,6 +31,17 @@ path_slash_count(const char *path)
 	return slashes;
 }
 
+/**
+ * @brief prefix_route_matches operation.
+ *
+ * @details Performs the core prefix_route_matches routine for this module.
+ *
+ * @param pr Input parameter for prefix_route_matches.
+ * @param method Input parameter for prefix_route_matches.
+ * @param path Input parameter for prefix_route_matches.
+ *
+ * @return Return value produced by prefix_route_matches.
+ */
 int
 prefix_route_matches(const struct prefix_route *pr, const char *method,
 	const char *path)
@@ -36,6 +56,16 @@ prefix_route_matches(const struct prefix_route *pr, const char *method,
 	return path_slash_count(path + strlen(pr->prefix)) >= pr->min_slashes;
 }
 
+/**
+ * @brief prefix_route_path_matches operation.
+ *
+ * @details Performs the core prefix_route_path_matches routine for this module.
+ *
+ * @param pr Input parameter for prefix_route_path_matches.
+ * @param path Input parameter for prefix_route_path_matches.
+ *
+ * @return Return value produced by prefix_route_path_matches.
+ */
 int
 prefix_route_path_matches(const struct prefix_route *pr, const char *path)
 {
@@ -47,6 +77,16 @@ prefix_route_path_matches(const struct prefix_route *pr, const char *path)
 	return path_slash_count(path + strlen(pr->prefix)) >= pr->min_slashes;
 }
 
+/**
+ * @brief route_method_seen_for_path operation.
+ *
+ * @details Performs the core route_method_seen_for_path routine for this module.
+ *
+ * @param route_index Input parameter for route_method_seen_for_path.
+ * @param path Input parameter for route_method_seen_for_path.
+ *
+ * @return Return value produced by route_method_seen_for_path.
+ */
 int
 route_method_seen_for_path(size_t route_index, const char *path)
 {
@@ -58,6 +98,15 @@ route_method_seen_for_path(size_t route_index, const char *path)
 	return 0;
 }
 
+/**
+ * @brief register_route operation.
+ *
+ * @details Performs the core register_route routine for this module.
+ *
+ * @param method Input parameter for register_route.
+ * @param path Input parameter for register_route.
+ * @param handler Input parameter for register_route.
+ */
 void
 register_route(const char *method, const char *path, route_handler_t handler)
 {
@@ -69,6 +118,16 @@ register_route(const char *method, const char *path, route_handler_t handler)
 	}
 }
 
+/**
+ * @brief register_prefix_route operation.
+ *
+ * @details Performs the core register_prefix_route routine for this module.
+ *
+ * @param method Input parameter for register_prefix_route.
+ * @param prefix Input parameter for register_prefix_route.
+ * @param min_slashes Input parameter for register_prefix_route.
+ * @param handler Input parameter for register_prefix_route.
+ */
 void
 register_prefix_route(const char *method, const char *prefix, int min_slashes,
 	route_handler_t handler)

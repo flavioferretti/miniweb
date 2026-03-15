@@ -12,6 +12,13 @@ struct hb_counter_ctx {
 	int runs;
 };
 
+/**
+ * @brief count_cb operation.
+ *
+ * @details Performs the core count_cb routine for this module.
+ *
+ * @param ctx Input parameter for count_cb.
+ */
 static void
 count_cb(void *ctx)
 {
@@ -21,6 +28,15 @@ count_cb(void *ctx)
 	pthread_mutex_unlock(&counter->lock);
 }
 
+/**
+ * @brief counter_value operation.
+ *
+ * @details Performs the core counter_value routine for this module.
+ *
+ * @param counter Input parameter for counter_value.
+ *
+ * @return Return value produced by counter_value.
+ */
 static int
 counter_value(struct hb_counter_ctx *counter)
 {
@@ -31,6 +47,15 @@ counter_value(struct hb_counter_ctx *counter)
 	return v;
 }
 
+/**
+ * @brief register_worker operation.
+ *
+ * @details Performs the core register_worker routine for this module.
+ *
+ * @param arg Input parameter for register_worker.
+ *
+ * @return Return value produced by register_worker.
+ */
 static void *
 register_worker(void *arg)
 {
@@ -42,6 +67,15 @@ register_worker(void *arg)
 	return NULL;
 }
 
+/**
+ * @brief start_stop_worker operation.
+ *
+ * @details Performs the core start_stop_worker routine for this module.
+ *
+ * @param arg Input parameter for start_stop_worker.
+ *
+ * @return Return value produced by start_stop_worker.
+ */
 static void *
 start_stop_worker(void *arg)
 {
@@ -54,6 +88,13 @@ start_stop_worker(void *arg)
 	return NULL;
 }
 
+/**
+ * @brief main operation.
+ *
+ * @details Performs the core main routine for this module.
+ *
+ * @return Return value produced by main.
+ */
 int
 main(void)
 {

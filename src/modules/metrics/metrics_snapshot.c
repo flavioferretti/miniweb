@@ -237,7 +237,9 @@ metrics_heartbeat_cb(void *ctx)
 }
 
 /**
- * @brief Initialize and start the background metrics sampler.
+ * @brief metrics_ring_bootstrap operation.
+ *
+ * @details Performs the core metrics_ring_bootstrap routine for this module.
  */
 static void
 metrics_ring_bootstrap(void)
@@ -356,7 +358,9 @@ build_system_metrics_json(MetricSample *history, size_t history_count)
 }
 
 /**
- * @brief Refresh the cached metrics JSON snapshot from ring history.
+ * @brief metrics_snapshot_update operation.
+ *
+ * @details Performs the core metrics_snapshot_update routine for this module.
  */
 static void
 metrics_snapshot_update(void)
@@ -417,6 +421,11 @@ get_system_metrics_json(void)
 	return fallback;
 }
 
+/**
+ * @brief metrics_module_cleanup operation.
+ *
+ * @details Performs the core metrics_module_cleanup routine for this module.
+ */
 void
 metrics_module_cleanup(void)
 {

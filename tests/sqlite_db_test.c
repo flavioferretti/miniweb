@@ -3,6 +3,13 @@
 
 #include <miniweb/storage/sqlite_db.h>
 
+/**
+ * @brief main operation.
+ *
+ * @details Performs the core main routine for this module.
+ *
+ * @return Return value produced by main.
+ */
 int
 main(void)
 {

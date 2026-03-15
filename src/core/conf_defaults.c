@@ -5,6 +5,13 @@
 #include <miniweb/core/conf.h>
 #include <miniweb/net/server.h>
 
+/**
+ * @brief conf_default_threads operation.
+ *
+ * @details Performs the core conf_default_threads routine for this module.
+ *
+ * @return Return value produced by conf_default_threads.
+ */
 static int
 conf_default_threads(void)
 {
@@ -16,6 +23,13 @@ conf_default_threads(void)
 	return (int)cores;
 }
 
+/**
+ * @brief conf_defaults operation.
+ *
+ * @details Performs the core conf_defaults routine for this module.
+ *
+ * @param conf Input parameter for conf_defaults.
+ */
 void
 conf_defaults(miniweb_conf_t *conf)
 {
@@ -48,6 +62,19 @@ conf_defaults(miniweb_conf_t *conf)
 	conf->enable_packages = 1;
 }
 
+/**
+ * @brief conf_apply_cli operation.
+ *
+ * @details Performs the core conf_apply_cli routine for this module.
+ *
+ * @param conf Input parameter for conf_apply_cli.
+ * @param cli_port Input parameter for conf_apply_cli.
+ * @param cli_bind Input parameter for conf_apply_cli.
+ * @param cli_threads Input parameter for conf_apply_cli.
+ * @param cli_max_conns Input parameter for conf_apply_cli.
+ * @param cli_log_file Input parameter for conf_apply_cli.
+ * @param cli_verbose Input parameter for conf_apply_cli.
+ */
 void
 conf_apply_cli(miniweb_conf_t *conf,
 	int cli_port,
@@ -71,6 +98,13 @@ conf_apply_cli(miniweb_conf_t *conf,
 		conf->verbose = cli_verbose;
 }
 
+/**
+ * @brief conf_dump operation.
+ *
+ * @details Performs the core conf_dump routine for this module.
+ *
+ * @param conf Input parameter for conf_dump.
+ */
 void
 conf_dump(const miniweb_conf_t *conf)
 {

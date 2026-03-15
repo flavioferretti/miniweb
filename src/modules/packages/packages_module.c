@@ -60,6 +60,15 @@ if (config_verbose) \
  * Ring buffer operations
  * ========================================================================= */
 
+/**
+ * @brief pkg_ring_init operation.
+ *
+ * @details Performs the core pkg_ring_init routine for this module.
+ *
+ * @param r Input parameter for pkg_ring_init.
+ *
+ * @return Return value produced by pkg_ring_init.
+ */
 static int
 pkg_ring_init(PkgRing *r)
 {
@@ -79,6 +88,17 @@ pkg_ring_init(PkgRing *r)
 	return 0;
 }
 
+/**
+ * @brief pkg_ring_push operation.
+ *
+ * @details Performs the core pkg_ring_push routine for this module.
+ *
+ * @param r Input parameter for pkg_ring_push.
+ * @param endpoint Input parameter for pkg_ring_push.
+ * @param key Input parameter for pkg_ring_push.
+ * @param json Input parameter for pkg_ring_push.
+ * @param json_len Input parameter for pkg_ring_push.
+ */
 static void
 pkg_ring_push(PkgRing *r, const char *endpoint, const char *key,
 			  const char *json, size_t json_len)
@@ -182,6 +202,13 @@ pkg_ring_find(PkgRing *r, const char *endpoint, const char *key, int max_age_sec
 		return result;
 }
 
+/**
+ * @brief pkg_ring_free operation.
+ *
+ * @details Performs the core pkg_ring_free routine for this module.
+ *
+ * @param r Input parameter for pkg_ring_free.
+ */
 static void
 pkg_ring_free(PkgRing *r)
 {
@@ -204,6 +231,15 @@ pkg_ring_free(PkgRing *r)
  * Package query functions with ring buffer integration
  * ========================================================================= */
 
+/**
+ * @brief is_safe_pkg_name operation.
+ *
+ * @details Performs the core is_safe_pkg_name routine for this module.
+ *
+ * @param name Input parameter for is_safe_pkg_name.
+ *
+ * @return Return value produced by is_safe_pkg_name.
+ */
 static int
 is_safe_pkg_name(const char *name)
 {
@@ -217,6 +253,17 @@ is_safe_pkg_name(const char *name)
 	return 1;
 }
 
+/**
+ * @brief url_decode_into operation.
+ *
+ * @details Performs the core url_decode_into routine for this module.
+ *
+ * @param src Input parameter for url_decode_into.
+ * @param dst Input parameter for url_decode_into.
+ * @param dst_size Input parameter for url_decode_into.
+ *
+ * @return Return value produced by url_decode_into.
+ */
 static int
 url_decode_into(const char *src, char *dst, size_t dst_size)
 {
@@ -249,6 +296,18 @@ url_decode_into(const char *src, char *dst, size_t dst_size)
 	return 0;
 }
 
+/**
+ * @brief get_query_value operation.
+ *
+ * @details Performs the core get_query_value routine for this module.
+ *
+ * @param url Input parameter for get_query_value.
+ * @param key Input parameter for get_query_value.
+ * @param out Input parameter for get_query_value.
+ * @param out_size Input parameter for get_query_value.
+ *
+ * @return Return value produced by get_query_value.
+ */
 static int
 get_query_value(const char *url, const char *key, char *out, size_t out_size)
 {
@@ -302,6 +361,16 @@ get_query_value(const char *url, const char *key, char *out, size_t out_size)
 	return 0;
 }
 
+/**
+ * @brief path_matches_endpoint operation.
+ *
+ * @details Performs the core path_matches_endpoint routine for this module.
+ *
+ * @param path Input parameter for path_matches_endpoint.
+ * @param prefix Input parameter for path_matches_endpoint.
+ *
+ * @return Return value produced by path_matches_endpoint.
+ */
 static int
 path_matches_endpoint(const char *path, const char *prefix)
 {
@@ -317,6 +386,15 @@ path_matches_endpoint(const char *path, const char *prefix)
 	return path[len] == '\0' || path[len] == '?';
 }
 
+/**
+ * @brief is_safe_path operation.
+ *
+ * @details Performs the core is_safe_path routine for this module.
+ *
+ * @param path Input parameter for is_safe_path.
+ *
+ * @return Return value produced by is_safe_path.
+ */
 static int
 is_safe_path(const char *path)
 {
@@ -333,6 +411,13 @@ is_safe_path(const char *path)
 	return 1;
 }
 
+/**
+ * @brief trim_ascii_whitespace operation.
+ *
+ * @details Performs the core trim_ascii_whitespace routine for this module.
+ *
+ * @param start Input parameter for trim_ascii_whitespace.
+ */
 static void
 trim_ascii_whitespace(char **start)
 {
@@ -353,6 +438,15 @@ trim_ascii_whitespace(char **start)
 	*start = s;
 }
 
+/**
+ * @brief make_raw_json operation.
+ *
+ * @details Performs the core make_raw_json routine for this module.
+ *
+ * @param output Input parameter for make_raw_json.
+ *
+ * @return Return value produced by make_raw_json.
+ */
 static char *
 make_raw_json(const char *output)
 {
@@ -386,6 +480,11 @@ make_raw_json(const char *output)
 }
 
 /* Bootstrap function called via pthread_once */
+/**
+ * @brief packages_cache_bootstrap operation.
+ *
+ * @details Performs the core packages_cache_bootstrap routine for this module.
+ */
 static void
 packages_cache_bootstrap(void)
 {
@@ -406,6 +505,15 @@ packages_cache_bootstrap(void)
  * Public API functions with ring buffer caching
  * ========================================================================= */
 
+/**
+ * @brief pkg_search_json operation.
+ *
+ * @details Performs the core pkg_search_json routine for this module.
+ *
+ * @param query Input parameter for pkg_search_json.
+ *
+ * @return Return value produced by pkg_search_json.
+ */
 char *
 pkg_search_json(const char *query)
 {
@@ -561,6 +669,15 @@ pkg_search_json(const char *query)
 	return json;
 }
 
+/**
+ * @brief pkg_info_json operation.
+ *
+ * @details Performs the core pkg_info_json routine for this module.
+ *
+ * @param package_name Input parameter for pkg_info_json.
+ *
+ * @return Return value produced by pkg_info_json.
+ */
 char *
 pkg_info_json(const char *package_name)
 {
@@ -593,6 +710,15 @@ pkg_info_json(const char *package_name)
 	return json ? json : strdup("{\"found\":false,\"raw\":\"\"}");
 }
 
+/**
+ * @brief pkg_files_json operation.
+ *
+ * @details Performs the core pkg_files_json routine for this module.
+ *
+ * @param package_name Input parameter for pkg_files_json.
+ *
+ * @return Return value produced by pkg_files_json.
+ */
 char *
 pkg_files_json(const char *package_name)
 {
@@ -670,6 +796,13 @@ pkg_files_json(const char *package_name)
 	return json;
 }
 
+/**
+ * @brief pkg_list_json operation.
+ *
+ * @details Performs the core pkg_list_json routine for this module.
+ *
+ * @return Return value produced by pkg_list_json.
+ */
 char *
 pkg_list_json(void)
 {
@@ -729,6 +862,15 @@ pkg_list_json(void)
 	return json;
 }
 
+/**
+ * @brief pkg_which_json operation.
+ *
+ * @details Performs the core pkg_which_json routine for this module.
+ *
+ * @param file_path Input parameter for pkg_which_json.
+ *
+ * @return Return value produced by pkg_which_json.
+ */
 char *
 pkg_which_json(const char *file_path)
 {
@@ -768,6 +910,15 @@ pkg_which_json(const char *file_path)
 	return json ? json : strdup("{\"found\":false,\"raw\":\"\"}");
 }
 
+/**
+ * @brief pkg_api_handler operation.
+ *
+ * @details Performs the core pkg_api_handler routine for this module.
+ *
+ * @param req Input parameter for pkg_api_handler.
+ *
+ * @return Return value produced by pkg_api_handler.
+ */
 int
 pkg_api_handler(http_request_t *req)
 {
@@ -831,6 +982,15 @@ pkg_api_handler(http_request_t *req)
 	return ret;
 }
 
+/**
+ * @brief packages_module_attach_routes operation.
+ *
+ * @details Performs the core packages_module_attach_routes routine for this module.
+ *
+ * @param r Input parameter for packages_module_attach_routes.
+ *
+ * @return Return value produced by packages_module_attach_routes.
+ */
 int
 packages_module_attach_routes(struct router *r)
 {
@@ -843,6 +1003,11 @@ packages_module_attach_routes(struct router *r)
 }
 
 /* Optional cleanup function */
+/**
+ * @brief packages_cache_cleanup operation.
+ *
+ * @details Performs the core packages_cache_cleanup routine for this module.
+ */
 void
 packages_cache_cleanup(void)
 {
