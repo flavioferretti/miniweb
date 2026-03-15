@@ -70,8 +70,11 @@ Default is
 .It Fl t Ar threads
 Worker thread count.
 Clamped to the range 1\(en32.
-Default is
-.Cm 4 .
+Default is the number of online CPU cores, capped at
+.Cm 32
+(with fallback to
+.Cm 4
+if CPU detection fails).
 .It Fl v
 Enable verbose logging.
 Equivalent to setting
@@ -126,8 +129,11 @@ to listen on all interfaces.
 .It Cm threads
 Worker thread count.
 Clamped to 1\(en32.
-Default:
-.Cm 4 .
+Default: number of online CPU cores, capped at
+.Cm 32
+(with fallback to
+.Cm 4
+if CPU detection fails).
 .It Cm max_conns
 Maximum concurrent connections.
 Default:
@@ -1247,6 +1253,7 @@ Compatibility-first refactor: feature parity required at every phase.
 .An Flavio Ferretti Aq Mt flavio@flvbox.org
 .It
 .%U https://github.com/flavioferretti/miniweb
+.El
 .Sh REFACTOR STATUS
 As of 2026-03-02, server runtime decomposition is complete for the
 networking layer, HTTP response layer, and routing layer; documentation

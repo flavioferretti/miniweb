@@ -1,7 +1,20 @@
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <miniweb/core/conf.h>
+#include <miniweb/net/server.h>
+
+static int
+conf_default_threads(void)
+{
+	long cores = sysconf(_SC_NPROCESSORS_ONLN);
+	if (cores < 1)
+		return 4;
+	if (cores > MINIWEB_THREAD_POOL_SIZE)
+		return MINIWEB_THREAD_POOL_SIZE;
+	return (int)cores;
+}
 
 void
 conf_defaults(miniweb_conf_t *conf)
@@ -11,7 +24,7 @@ conf_defaults(miniweb_conf_t *conf)
 	conf->port = 9001;
 	strlcpy(conf->bind_addr, "127.0.0.1", sizeof(conf->bind_addr));
 
-	conf->threads = 4;
+	conf->threads = conf_default_threads();
 	conf->max_conns = 1280;
 
 	conf->conn_timeout = 30;

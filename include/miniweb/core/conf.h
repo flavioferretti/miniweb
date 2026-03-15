@@ -24,7 +24,7 @@ typedef struct miniweb_conf {
     char bind_addr[CONF_STR_MAX];   /* -b  default: "127.0.0.1"   */
 
     /* Worker pool */
-    int  threads;                   /* -t  default: 4              */
+    int  threads;                   /* -t  default: online CPU cores (max 32) */
     int  max_conns;                 /* -c  default: 1280           */
 
     /* Timeouts / limits */
